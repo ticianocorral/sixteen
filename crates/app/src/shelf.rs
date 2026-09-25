@@ -1646,7 +1646,7 @@ pub fn run(
             }
         }
         if ra_worker.is_none() {
-            if let (Some((user, _web_key, connect)), Some(e)) = (&opts.ra, focused.as_ref()) {
+            if let (Some((user, web_key, connect)), Some(e)) = (&opts.ra, focused.as_ref()) {
                 let sha1 = e.rom.sha1.clone();
                 if !ra_tried.contains(&sha1) {
                     ra_tried.insert(sha1.clone());
@@ -1663,9 +1663,12 @@ pub fn run(
                                 ra_games.insert(sha1, None);
                             } else {
                                 let (tx, rx) = mpsc::channel();
-                                let (user, connect) = (user.clone(), connect.clone());
+                                let (user, web_key, connect) =
+                                    (user.clone(), web_key.clone(), connect.clone());
                                 std::thread::spawn(move || {
-                                    let _ = tx.send(crate::ra::fetch_game(&user, &connect, &hash));
+                                    let _ = tx.send(crate::ra::fetch_game(
+                                        &user, &web_key, &connect, &hash,
+                                    ));
                                 });
                                 ra_worker = Some(rx);
                                 ra_pending = sha1;

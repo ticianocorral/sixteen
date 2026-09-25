@@ -215,7 +215,12 @@ fn achievements_json(body: &serde_json::Value) -> Vec<&serde_json::Value> {
 /// Ok(None) = the server doesn't know this hash (cached as an empty file
 /// so it's never asked twice). Meant for a worker thread; the shelf
 /// calls it throttled to one in flight.
-pub fn fetch_game(user: &str, connect: &str, hash: &str) -> Result<Option<RaGame>, String> {
+pub fn fetch_game(
+    user: &str,
+    web_key: &str,
+    connect: &str,
+    hash: &str,
+) -> Result<Option<RaGame>, String> {
     if connect.is_empty() {
         return Err("conecte a conta (senha) em configurações > conquistas".to_string());
     }
@@ -245,6 +250,33 @@ pub fn fetch_game(user: &str, connect: &str, hash: &str) -> Result<Option<RaGame
     };
     let text = serde_json::to_string(&body).unwrap_or_default();
     write_cache(hash, &text)?;
+
+    // A rota Connect não traz lançamento/editora (campos que o painel
+    // mostra): completa com a rota de metadados (web key) quando existe —
+    // gravados por cima do cache, `release_and_extras` lê dos dois shapes.
+    if !web_key.is_empty() {
+        let game_id = cached_game_id(hash);
+        if let Some(game_id) = game_id {
+            if let Ok(meta) = agent()
+                .get(&format!(
+                    "{API_BASE}/API/API_GetGameExtended.php?i={game_id}&u={}&y={}",
+                    encode(user),
+                    encode(web_key)
+                ))
+                .set("User-Agent", USER_AGENT)
+                .call()
+            {
+                if let Ok(meta) = meta.into_json::<serde_json::Value>() {
+                    let mut cached: serde_json::Value =
+                        serde_json::from_str(&text).unwrap_or_else(|_| body.clone());
+                    cached["Released"] = meta.get("Released").cloned().unwrap_or_default();
+                    cached["Publisher"] = meta.get("Publisher").cloned().unwrap_or_default();
+                    write_cache(hash, &serde_json::to_string(&cached).unwrap_or_default())?;
+                }
+            }
+        }
+    }
+
     Ok(Some(game))
 }
 
@@ -724,10 +756,19 @@ pub fn shelf_achievements(rom_path: &std::path::Path) -> Option<ShelfAchievement
 fn cached_game_id(hash: &str) -> Option<u64> {
     let text = std::fs::read_to_string(cache_path(hash)).ok()?;
     let body: serde_json::Value = serde_json::from_str(&text).ok()?;
-    // Connect cache keeps `GameID`; the legacy Extended cache kept `ID`.
+    // Connect: `GameId` no topo (ou dentro do primeiro set — a resposta
+    // multiset não repete no topo); legacy Extended: `ID`.
     body.get("GameID")
+        .or_else(|| body.get("GameId"))
         .or_else(|| body.get("ID"))
         .and_then(|v| v.as_u64())
+        .or_else(|| {
+            body.get("Sets")
+                .and_then(|s| s.as_array())
+                .and_then(|s| s.first())
+                .and_then(|s| s.get("GameId"))
+                .and_then(|v| v.as_u64())
+        })
 }
 
 /// O progresso do usuário num jogo, pelo completion progress: conquistadas,
