@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use xperience_domain::{Catalog, CatalogEntry, Order};
 use xperience_platform::{
-    Cabinet, MenuMode, MenuNav, Platform, Screen, ShelfButton, ShelfPanelInfo,
+    Cabinet, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton, ShelfPanelInfo,
 };
 
 use crate::idle;
@@ -162,10 +162,11 @@ pub struct ShelfOpts {
     /// verifies the filtered view (plan revision).
     pub preset_filter: Option<String>,
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
-    /// fase 2) — `Some((user, token))` enables the per-game identification
+    /// fase 2) — `Some((user, web_key, connect_token))` enables the per-game
+    /// identification
     /// that shows "conquistas: N" in the panel; `None` keeps the shelf
     /// entirely RA-free.
-    pub ra: Option<(String, String)>,
+    pub ra: Option<(String, String, String)>,
 }
 
 impl Default for ShelfOpts {
@@ -506,20 +507,48 @@ impl GridLayout {
     /// `top_y` is where the grid itself starts, below the header row and any
     /// "jogados recentemente" strip above it (plan revision — the panel used
     /// to eat into this width; now the grid gets the whole shelf screen).
+    ///
+    /// Steam Deck (e qualquer tela onde 260px de tile rendem só 2 colunas):
+    /// a grade nunca mostra menos que 3 colunas × 2 linhas — o tile encolhe,
+    /// mantendo o 4:3, antes de perder uma coluna ou uma linha.
     fn new(scr_w: u32, scr_h: u32, list_mode: bool, top_y: i32) -> Self {
         let grid_w = scr_w.saturating_sub(MARGIN as u32 * 2 + SCROLLBAR_RESERVE);
-        let (cell_w, cell_h, item_w, item_h, cols) = if list_mode {
+        let (cell_w, cell_h, item_w, item_h, cols, x0) = if list_mode {
             let cell_h = (LIST_ROW_H + LIST_GAP) as i32;
-            (grid_w as i32, cell_h, grid_w as i32, LIST_ROW_H as i32, 1)
+            (
+                grid_w as i32,
+                cell_h,
+                grid_w as i32,
+                LIST_ROW_H as i32,
+                1,
+                MARGIN,
+            )
         } else {
-            let cell_w = (TILE_W + GAP) as i32;
-            let cell_h = (TILE_H + GAP) as i32;
-            let cols = (grid_w / (TILE_W + GAP)).max(1) as usize;
-            (cell_w, cell_h, TILE_W as i32, TILE_H as i32, cols)
+            let gap = GAP as i32;
+            let cols = ((grid_w as i32 + gap) / (TILE_W as i32 + gap)).max(3);
+            // Encolhe o tile até a fileira caber `cols` colunas com gap.
+            let item_w = (TILE_W as i32)
+                .min((grid_w as i32 - gap * (cols - 1)) / cols)
+                .max(48);
+            let mut item_h = item_w * TILE_H as i32 / TILE_W as i32;
+            // E até 2 linhas couberem na altura (se a tela for baixa demais
+            // para os tiles já encolhidos pela largura).
+            let avail_h = scr_h as i32 - top_y - MARGIN;
+            let two_rows_h = (avail_h / 2 - gap).max(36);
+            if item_h > two_rows_h {
+                item_h = two_rows_h;
+            }
+            let item_w = item_h * TILE_W as i32 / TILE_H as i32;
+            let cell_w = item_w + gap;
+            let cell_h = item_h + gap;
+            // Sobrou largura? A grade fica centrada na área dela.
+            let used = cols * cell_w - gap;
+            let x0 = MARGIN + (grid_w as i32 - used) / 2;
+            (cell_w, cell_h, item_w, item_h, cols as usize, x0)
         };
         let vis_rows = ((scr_h as i32 - top_y - MARGIN) / cell_h).max(1) as usize;
         Self {
-            x0: MARGIN,
+            x0,
             y0: top_y,
             cell_w,
             cell_h,
@@ -638,11 +667,10 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
             match cab.hit_shelf_button(ox, oy) {
                 Some(ShelfButton::Back) => return Ok(Pick::Back),
                 Some(ShelfButton::Settings) => return Ok(Pick::Settings),
-                // No game focused on this screen, so nothing to scroll (and
+                // No game focused on this screen, so nothing to jump to (and
                 // no back cover to enlarge) — "Atualizar" lives in the
                 // header now, handled above.
-                Some(ShelfButton::PanelScrollUp)
-                | Some(ShelfButton::PanelScrollDown)
+                Some(ShelfButton::PanelJump(_))
                 | Some(ShelfButton::Backcover)
                 | Some(ShelfButton::ToggleFavorite)
                 | Some(ShelfButton::Refresh)
@@ -720,6 +748,10 @@ pub fn run(
     // currently-focused game's content actually needs, so letting it run
     // free on repeated "v Baixo" clicks past the end is harmless.
     let mut panel_scroll: usize = 0;
+    // O conteúdo do painel do último frame — os hits de clique chegam com um
+    // frame de atraso (são os rects desenhados antes), então os alvos dos
+    // saltos de seção usam o mesmo painel que o jogador estava vendo.
+    let mut panel_info = empty_shelf_panel();
     let mut last_focus: Option<(u8, usize)> = None;
     // The title filter (plan revision) — `filter_query` is what's actually
     // applied; `filter_draft`/`editing_filter` are live only while typing,
@@ -1156,7 +1188,7 @@ pub fn run(
                                     }
                                     // A lista aberta é deste jogo: o earned do
                                     // servidor (quando chegar) só vale para ela.
-                                    if let Some((user, token)) = &opts.ra {
+                                    if let Some((user, web_key, _connect)) = &opts.ra {
                                         let hash = match ra_hashes.get(&e.rom.sha1) {
                                             Some(h) => Some(h.clone()),
                                             None => crate::ra::hash_rom(std::path::Path::new(
@@ -1169,7 +1201,7 @@ pub fn run(
                                             if ra_earned_tried.insert(hash.clone()) {
                                                 ra_earned_worker =
                                                     Some(crate::ra::fetch_game_earned_worker(
-                                                        user, token, &hash,
+                                                        user, web_key, &hash,
                                                     ));
                                             }
                                         }
@@ -1180,10 +1212,16 @@ pub fn run(
                             // "Atualizar" moved to the header row (plan
                             // revision: "colocar botão de atualizar estante
                             // do lado do histórico").
-                            ShelfButton::PanelScrollUp => {
-                                panel_scroll = panel_scroll.saturating_sub(1)
+                            // Salto de seção do painel (plan revision: no
+                            // lugar das setas de rolar, capa traseira /
+                            // cartucho / informações).
+                            ShelfButton::PanelJump(section) => {
+                                if let Some(i) =
+                                    panel_jump_target(&panel_info, section, panel_scroll)
+                                {
+                                    panel_scroll = i;
+                                }
                             }
-                            ShelfButton::PanelScrollDown => panel_scroll += 1,
                             ShelfButton::ToggleFavorite => {
                                 // Flip the focused game's marker in the
                                 // sidecar, then update this visit's own
@@ -1515,9 +1553,9 @@ pub fn run(
         if !ra_completion_tried && opts.ra.is_some() {
             ra_completion_tried = true;
             let (tx, rx) = mpsc::channel();
-            let (user, token) = opts.ra.clone().unwrap();
+            let (user, web_key, _connect) = opts.ra.clone().unwrap();
             std::thread::spawn(move || {
-                let _ = tx.send(crate::ra::fetch_completion(&user, &token));
+                let _ = tx.send(crate::ra::fetch_completion(&user, &web_key));
             });
             ra_completion_worker = Some(rx);
         }
@@ -1567,7 +1605,7 @@ pub fn run(
             }
         }
         if ra_worker.is_none() {
-            if let (Some((user, token)), Some(e)) = (&opts.ra, focused.as_ref()) {
+            if let (Some((user, _web_key, connect)), Some(e)) = (&opts.ra, focused.as_ref()) {
                 let sha1 = e.rom.sha1.clone();
                 if !ra_tried.contains(&sha1) {
                     ra_tried.insert(sha1.clone());
@@ -1584,9 +1622,9 @@ pub fn run(
                                 ra_games.insert(sha1, None);
                             } else {
                                 let (tx, rx) = mpsc::channel();
-                                let (user, token) = (user.clone(), token.clone());
+                                let (user, connect) = (user.clone(), connect.clone());
                                 std::thread::spawn(move || {
-                                    let _ = tx.send(crate::ra::fetch_game(&user, &token, &hash));
+                                    let _ = tx.send(crate::ra::fetch_game(&user, &connect, &hash));
                                 });
                                 ra_worker = Some(rx);
                                 ra_pending = sha1;
@@ -1698,7 +1736,8 @@ pub fn run(
                 award_img: None,
             },
         };
-        cab.set_shelf_panel(shelf_panel);
+        cab.set_shelf_panel(shelf_panel.clone());
+        panel_info = shelf_panel;
 
         // --- draw (into a screen-sized buffer, then warped through the tube) --
         let render = |d: &mut Screen| {
@@ -1986,7 +2025,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
                     ShelfButton::Backcover => {}
                     ShelfButton::ToggleFavorite => {}
                     ShelfButton::ShelfAchievements => {}
-                    ShelfButton::PanelScrollUp | ShelfButton::PanelScrollDown => {}
+                    ShelfButton::PanelJump(_) => {}
                 }
             } else if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
                 if let Some(i) = history_row_at(lx, ly, top, ranked.len()) {
@@ -2042,6 +2081,43 @@ fn ranked_by_playtime(catalog: &Catalog) -> Result<Vec<(CatalogEntry, u64)>> {
 /// A blank flat panel — just the Voltar/Configuracoes buttons, no game
 /// focused (the history list isn't a "selection" the way the shelf's grid
 /// is; clicking a row launches straight away instead of just selecting it).
+/// Índice do primeiro bloco da seção no corpo do painel — o destino do salto
+/// dos botões (plan revision: capa traseira / cartucho / informações no
+/// lugar das setas). `informações` já visível avança um campo por clique:
+/// é a única seção com vários blocos, e sem as setas é o jeito de
+/// percorrê-la; voltar é apertar capa ou cartucho.
+fn panel_jump_target(panel: &ShelfPanelInfo, section: PanelSection, cur: usize) -> Option<usize> {
+    let mut i = 0;
+    if panel.backcover_img.is_some() {
+        if section == PanelSection::CapaTraseira {
+            return Some(0);
+        }
+        i += 1;
+    }
+    if panel.cartridge_img.is_some() {
+        if section == PanelSection::Cartucho {
+            return Some(i);
+        }
+        i += 1;
+    }
+    if section != PanelSection::Informacoes || (panel.release.is_none() && panel.info.is_empty()) {
+        return None;
+    }
+    if cur < i {
+        return Some(i);
+    }
+    Some((cur + 1).min(panel_block_count(panel).saturating_sub(1)))
+}
+
+/// Quantos blocos o corpo do painel tem — a mesma ordem que
+/// `draw_shelf_panel` monta (capa traseira, cartucho, lançamento, campos).
+fn panel_block_count(panel: &ShelfPanelInfo) -> usize {
+    panel.backcover_img.is_some() as usize
+        + panel.cartridge_img.is_some() as usize
+        + panel.release.is_some() as usize
+        + panel.info.len()
+}
+
 fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
         title: String::new(),
