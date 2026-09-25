@@ -261,6 +261,15 @@ pub(crate) fn pace_frame(next: &mut Instant, frame_time: Duration) {
     *next += frame_time;
     let now = Instant::now();
     if *next <= now {
+        if xperience_platform::trace_enabled() {
+            let late = now - *next;
+            if late > Duration::from_millis(2) {
+                log::warn!(
+                    "trace: frame atrasado {:.1} ms (loop não fechou o budget)",
+                    late.as_secs_f64() * 1e3
+                );
+            }
+        }
         *next = now; // fell behind; resync so we don't spiral
         return;
     }
@@ -1148,7 +1157,9 @@ pub fn run_game(
     let cheat_path = cheat_state_path(&spec.save_dir, &title);
     let mut cheat_state = load_cheat_state(&cheat_path, cheat_defs.len());
     // RetroAchievements hardcore (plan fase 3): cheats stay off entirely.
-    let ra_on = !cfg.ra_user.is_empty() && !cfg.ra_token.is_empty();
+    // A sessão exige a conta conectada (token Connect): sem ela não há
+    // lógica de conquista para ativar nem envio para o servidor.
+    let ra_on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
     let ra_hardcore_active = ra_on && cfg.ra_hardcore;
     if ra_hardcore_active && !cheat_defs.is_empty() {
         log::info!("ra hardcore: cheats disabled for this session");
@@ -1167,7 +1178,12 @@ pub fn run_game(
     // fase 3) — armed only when the account is configured; identification
     // and cache reads happen here, on cart insert.
     let mut ra_session = if ra_on {
-        match crate::ra::Active::start(&spec.rom, &cfg.ra_user, &cfg.ra_token, cfg.ra_hardcore) {
+        match crate::ra::Active::start(
+            &spec.rom,
+            &cfg.ra_user,
+            cfg.ra_connect.as_deref().unwrap_or(""),
+            cfg.ra_hardcore,
+        ) {
             Ok(Some(a)) => {
                 log::info!(
                     "ra: {} — {} conquista(s), hardcore {}",
@@ -2101,6 +2117,10 @@ pub fn run_game(
                         unlock.title,
                         unlock.points
                     );
+                    // O "plim" da conquista (plan revision: "coloque uma
+                    // notificação sonora ao ganhar uma conquista") — sobre o
+                    // áudio do jogo, pelo stream de foley.
+                    crate::sfx::play(cab, crate::sfx::Sfx::Achievement);
                     ra_session
                         .as_ref()
                         .expect("checked above")

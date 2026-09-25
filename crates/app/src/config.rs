@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use xperience_platform::{KeyMap, PadButton};
+use xperience_platform::{KeyMap, PadButton, PadMap};
 
 pub struct Config {
     pub runahead: u32,
@@ -40,7 +40,18 @@ pub struct Config {
     /// cheats/savestates/run-ahead lock during play. Meaningful from fase 3
     /// on; persisted now so the setting doesn't move later.
     pub ra_hardcore: bool,
+    /// Connect login token (plan revision — a web API key não serve mais a
+    /// lógica das conquistas: o campo `MemAddr` da rota velha chega
+    /// hashado). Nasce do `r=login2` com usuário+senha na tela de
+    /// configurações; a senha em si nunca é gravada. `None` = conta ainda
+    /// não conectada — a estante não identifica nada até conectar.
+    pub ra_connect: Option<String>,
     pub keymap: KeyMap,
+    /// Gamepad-button layout (`[gamepad]`): which SDL gamepad button drives
+    /// each SNES button. Rebindable in the settings screen alongside the
+    /// keyboard — clones and native-driver paths can land a press in the
+    /// wrong slot, so the layout is the user's to fix.
+    pub padmap: PadMap,
     /// Where it was read from (or freshly written), for logging and for
     /// `save()`.
     pub source: Option<PathBuf>,
@@ -63,7 +74,11 @@ struct Raw {
     #[serde(default)]
     ra_hardcore: Option<bool>,
     #[serde(default)]
+    ra_connect: Option<String>,
+    #[serde(default)]
     keyboard: BTreeMap<String, String>,
+    #[serde(default)]
+    gamepad: BTreeMap<String, String>,
 }
 
 impl Config {
@@ -87,7 +102,9 @@ impl Config {
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
+            ra_connect: None,
             keymap: KeyMap::defaults(),
+            padmap: PadMap::defaults(),
             source: path.clone(),
         };
 
@@ -139,6 +156,11 @@ impl Config {
         if let Some(h) = raw.ra_hardcore {
             self.ra_hardcore = h;
         }
+        // Connect token só chega pelo login da tela de configurações — mas
+        // respeita um que tenha sido colado à mão no arquivo.
+        if let Some(c) = raw.ra_connect {
+            self.ra_connect = (!c.is_empty()).then_some(c);
+        }
         for (action, key) in &raw.keyboard {
             let Ok(b) = action.parse::<PadButton>() else {
                 // Not a gameplay button — either a typo, or (most likely for
@@ -154,6 +176,22 @@ impl Config {
                 .bind_pad(key, b)
                 .map_err(anyhow::Error::msg)
                 .with_context(|| format!("[keyboard] {action}"))?;
+        }
+        for (action, button) in &raw.gamepad {
+            let Ok(b) = action.parse::<PadButton>() else {
+                log::warn!("[gamepad] {action}: not a bindable action, ignoring");
+                continue;
+            };
+            if button.is_empty() {
+                // Written for an action whose button another action took —
+                // nothing to bind here (the empty state re-emerges from the
+                // other action's bind dropping the default).
+                continue;
+            }
+            self.padmap
+                .bind(button, b)
+                .map_err(anyhow::Error::msg)
+                .with_context(|| format!("[gamepad] {action}"))?;
         }
         Ok(())
     }
@@ -171,7 +209,9 @@ impl Config {
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
-             # [keyboard]: action = \"SDL key name\" (e.g. \"Left Shift\", \"F2\", \"]\").\n\n",
+             # [keyboard]: action = \"SDL key name\" (e.g. \"Left Shift\", \"F2\", \"]\").\n\
+             # [gamepad]: action = \"SDL gamepad button name\" (e.g. \"south\",\n\
+             # \"dpup\", \"leftshoulder\") — which pad button drives each action.\n\n",
         );
         s.push_str(&format!("runahead = {}\n", self.runahead));
         s.push_str(&format!("fullscreen = {}\n", self.fullscreen));
@@ -184,9 +224,16 @@ impl Config {
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
         s.push_str(&format!("ra_token = {:?}\n", self.ra_token));
         s.push_str(&format!("ra_hardcore = {}\n\n", self.ra_hardcore));
+        if let Some(connect) = &self.ra_connect {
+            s.push_str(&format!("ra_connect = {connect:?}\n\n"));
+        }
         s.push_str("[keyboard]\n");
         for (action, key) in self.keymap.describe() {
             s.push_str(&format!("{action} = {key:?}\n"));
+        }
+        s.push_str("\n[gamepad]\n");
+        for (action, button) in self.padmap.describe() {
+            s.push_str(&format!("{action} = {button:?}\n"));
         }
         s
     }
@@ -218,7 +265,9 @@ mod tests {
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
+            ra_connect: None,
             keymap: KeyMap::defaults(),
+            padmap: PadMap::defaults(),
             source: None,
         }
     }
@@ -302,5 +351,30 @@ mod tests {
         assert!(round.fullscreen);
         assert!(!round.check_updates_on_start);
         assert_eq!(round.keymap.describe(), cfg.keymap.describe());
+        assert_eq!(round.padmap.describe(), cfg.padmap.describe());
+    }
+
+    #[test]
+    fn gamepad_rebind_applies_and_round_trips() {
+        let mut cfg = defaults();
+        let raw: Raw = toml::from_str("[gamepad]\nb = \"dpup\"").unwrap();
+        cfg.apply(raw).unwrap();
+        let d = cfg.padmap.describe();
+        // B now lives on dpup; Up lost its button to it (one action per
+        // button, one button per action — same rule as the keyboard side).
+        assert!(d.contains(&("b".to_string(), "dpup".to_string())));
+        assert!(d.contains(&("up".to_string(), String::new())));
+        // And the text form survives a save/load round trip.
+        let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
+        let mut round = defaults();
+        round.apply(raw).unwrap();
+        assert_eq!(round.padmap.describe(), cfg.padmap.describe());
+    }
+
+    #[test]
+    fn unknown_gamepad_button_is_an_error() {
+        let mut cfg = defaults();
+        let raw: Raw = toml::from_str("[gamepad]\nb = \"not_a_button\"").unwrap();
+        assert!(cfg.apply(raw).is_err());
     }
 }

@@ -121,12 +121,19 @@ pub fn hash_rom(path: &std::path::Path) -> Result<String, String> {
 }
 
 /// The cached identification for `hash`, if a previous fetch left one.
+/// A legacy cache (from the old Extended route — hashed `MemAddr`, no
+/// `GameID`/`Sets`) reads as absent so the shelf refetches it through the
+/// Connect route.
 pub fn cached_game(hash: &str) -> Option<RaGame> {
     let text = std::fs::read_to_string(cache_path(hash)).ok()?;
     if text.trim().is_empty() {
         return None; // known-unknown
     }
-    game_from_json(&serde_json::from_str(&text).ok()?)
+    let body: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if body.get("GameID").is_none() && body.get("Sets").is_none() {
+        return None; // legacy shape — stale, refetch
+    }
+    game_from_json(&body)
 }
 
 /// Whether a previous fetch concluded "the server doesn't know this hash"
@@ -137,76 +144,88 @@ pub fn is_cached_unknown(hash: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Parse the (already cached) `API_GetGameExtended` reply into the phase-2
-/// summary. `None` when the shape isn't what we expect — treated as
-/// not-identified rather than an error.
+/// Parse the cached JSON into the phase-2 summary. Handles both shapes the
+/// Connect `achievementsets` route serves: the flat legacy patch
+/// (`Title` + `Achievements` map) and the multiset one (`Sets` array).
+/// `None` when the shape isn't what we expect — treated as not-identified
+/// rather than an error.
 fn game_from_json(body: &serde_json::Value) -> Option<RaGame> {
-    let title = body.get("Title")?.as_str()?.to_string();
-    let achievements = body
-        .get("Achievements")
-        .and_then(|a| a.as_object())
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let title = body
+        .get("Title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            body.get("Sets")
+                .and_then(|s| s.as_array())
+                .and_then(|s| s.first())
+                .and_then(|s| s.get("Title"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })?;
+    let achievements = achievements_json(body).len();
     Some(RaGame {
         title,
         achievements,
     })
 }
 
-/// Ask the server which game `hash` is, and cache the reply next to the
-/// saves. Ok(None) = the server doesn't know this hash (cached as an empty
-/// file so it's never asked twice). Meant for a worker thread; the shelf
+/// The achievement objects of either response shape: the flat patch keeps
+/// them in a top-level map, the multiset one nests arrays under `Sets`.
+fn achievements_json(body: &serde_json::Value) -> Vec<&serde_json::Value> {
+    if let Some(map) = body.get("Achievements").and_then(|a| a.as_object()) {
+        return map.values().collect();
+    }
+    body.get("Sets")
+        .and_then(|s| s.as_array())
+        .map(|sets| {
+            sets.iter()
+                .filter_map(|s| s.get("Achievements").and_then(|a| a.as_array()))
+                .flatten()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Ask the server which game `hash` is and arm the runtime: the Connect
+/// route `r=achievementsets` resolves the hash straight to the set AND
+/// returns the real `MemAddr` logic (plan revision — the old
+/// `API_GetGameExtended` now serves a hashed MemAddr to every client, so
+/// the definitions only come from here, authenticated with the login
+/// token from `connect_login`). Cached verbatim next to the saves.
+/// Ok(None) = the server doesn't know this hash (cached as an empty file
+/// so it's never asked twice). Meant for a worker thread; the shelf
 /// calls it throttled to one in flight.
-pub fn fetch_game(user: &str, token: &str, hash: &str) -> Result<Option<RaGame>, String> {
-    // Hash → game id: the Extended endpoint only takes the numeric id, so
-    // the resolve goes through the older dorequest (r=gameid) — which wants
-    // the username in the query AND the app's own User-Agent; without both
-    // it answers 403 "unsupported_client".
+pub fn fetch_game(user: &str, connect: &str, hash: &str) -> Result<Option<RaGame>, String> {
+    if connect.is_empty() {
+        return Err("conecte a conta (senha) em configurações > conquistas".to_string());
+    }
     let resp = agent()
-        .get(&format!(
-            "{API_BASE}/dorequest.php?r=gameid&m={}&u={}",
-            encode(hash),
-            encode(user)
-        ))
-        .set("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| format!("rede: {e}"))?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
-    let Some(game_id) = game_id_from_dorequest(&body) else {
-        // Not registered on RA — remember that so we don't re-ask.
-        let _ = write_cache(hash, "");
-        return Ok(None);
-    };
-    let resp = agent()
-        .get(&format!(
-            "{API_BASE}/API/API_GetGameExtended.php?i={game_id}&u={}&y={}",
+        .post(&format!(
+            "{API_BASE}/dorequest.php?r=achievementsets&u={}&t={}&m={}",
             encode(user),
-            encode(token)
+            encode(connect),
+            encode(hash)
         ))
         .set("User-Agent", USER_AGENT)
         .call()
         .map_err(|e| format!("rede: {e}"))?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
-        return Err("recusado".to_string());
+        let err = body
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("recusado");
+        return Err(err.to_string());
     }
     let Some(game) = game_from_json(&body) else {
-        return Err("resposta inesperada".to_string());
+        // Server answered but the shape holds no game: treat as
+        // not-registered (cached empty) rather than retrying forever.
+        let _ = write_cache(hash, "");
+        return Ok(None);
     };
     let text = serde_json::to_string(&body).unwrap_or_default();
     write_cache(hash, &text)?;
     Ok(Some(game))
-}
-
-/// The numeric game id out of the dorequest reply — `"GameID"` arrives as a
-/// number or a string, and 0/absent means the hash isn't registered. Pure,
-/// so the tests can pin the two shapes.
-fn game_id_from_dorequest(body: &serde_json::Value) -> Option<u64> {
-    match body.get("GameID") {
-        Some(serde_json::Value::Number(n)) => n.as_u64().filter(|id| *id > 0),
-        Some(serde_json::Value::String(s)) => s.parse::<u64>().ok().filter(|id| *id > 0),
-        _ => None,
-    }
 }
 
 fn write_cache(hash: &str, text: &str) -> Result<(), String> {
@@ -221,14 +240,14 @@ fn write_cache(hash: &str, text: &str) -> Result<(), String> {
 
 use xperience_ra::runtime::{Achievement, Session};
 
-/// Parse the cached `API_GetGameExtended` JSON into the runtime's
-/// achievement list (id, texts, points, badge, `MemAddr` definition).
+/// Parse the cached Connect JSON into the runtime's achievement list (id,
+/// texts, points, badge, `MemAddr` definition). Both response shapes (flat
+/// and multiset); achievements whose `MemAddr` is a bare 32-hex digest have
+/// no logic behind them (legacy redacted cache) and are skipped — a cache
+/// like that is stale and gets refetched anyway.
 pub fn parse_achievements(body: &serde_json::Value) -> Vec<Achievement> {
-    let Some(map) = body.get("Achievements").and_then(|a| a.as_object()) else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    for (_k, a) in map {
+    for a in achievements_json(body) {
         let (Some(id), Some(title), Some(memaddr)) = (
             a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32),
             a.get("Title").and_then(|v| v.as_str()),
@@ -236,6 +255,15 @@ pub fn parse_achievements(body: &serde_json::Value) -> Vec<Achievement> {
         ) else {
             continue;
         };
+        // A real definition starts with an address ("0xH0042=…", "d0xH…=…");
+        // a bare 32-hex string is the redacted hash of one (pre-Connect
+        // cache) — nothing to activate.
+        let has_logic = !(memaddr.len() == 32
+            && !memaddr.starts_with("0x")
+            && memaddr.bytes().all(|b| b.is_ascii_hexdigit()));
+        if !has_logic {
+            continue;
+        }
         out.push(Achievement {
             id,
             title: title.to_string(),
@@ -266,8 +294,10 @@ fn points_from_json(a: &serde_json::Value) -> u32 {
     }
 }
 
-/// Award one unlocked achievement. `hardcore` maps straight to the API's
-/// `h` flag. Returns the server message on success.
+/// Award one unlocked achievement through the Connect route —
+/// authenticated with the login token (`connect_login`), not the web key.
+/// `hardcore` maps straight to the API's `h` flag. Returns the server
+/// message on success.
 pub fn award(
     user: &str,
     token: &str,
@@ -277,7 +307,7 @@ pub fn award(
 ) -> Result<String, String> {
     let resp = agent()
         .post(&format!(
-            "{API_BASE}/API/API_AwardAchievement.php?u={}&y={}&a={}&h={}&m={}",
+            "{API_BASE}/dorequest.php?r=awardachievement&u={}&t={}&a={}&h={}&m={}",
             encode(user),
             encode(token),
             achievement_id,
@@ -299,6 +329,33 @@ pub fn award(
         .get("Score")
         .map(|s| s.to_string())
         .unwrap_or_else(|| "ok".into()))
+}
+
+/// Exchange the account password for a long-lived Connect login token —
+/// what the logic (`achievementsets`) and submission (`awardachievement`)
+/// routes authenticate with. The password itself is never stored.
+pub fn connect_login(user: &str, password: &str) -> Result<String, String> {
+    let resp = agent()
+        .post(&format!(
+            "{API_BASE}/dorequest.php?r=login2&u={}&p={}",
+            encode(user),
+            encode(password)
+        ))
+        .set("User-Agent", USER_AGENT)
+        .call()
+        .map_err(|e| format!("rede: {e}"))?;
+    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+    if body.get("Success").is_some_and(|s| s == false) {
+        let err = body
+            .get("Error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("login recusado");
+        return Err(err.to_string());
+    }
+    body.get("Token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "resposta sem token".to_string())
 }
 
 /// Where a game's "already earned" ids live — `saves/ra-earned/<hash>.json`.
@@ -592,7 +649,10 @@ pub fn shelf_achievements(rom_path: &std::path::Path) -> Option<ShelfAchievement
 fn cached_game_id(hash: &str) -> Option<u64> {
     let text = std::fs::read_to_string(cache_path(hash)).ok()?;
     let body: serde_json::Value = serde_json::from_str(&text).ok()?;
-    body.get("ID").and_then(|v| v.as_u64())
+    // Connect cache keeps `GameID`; the legacy Extended cache kept `ID`.
+    body.get("GameID")
+        .or_else(|| body.get("ID"))
+        .and_then(|v| v.as_u64())
 }
 
 /// O progresso do usuário num jogo, pelo completion progress: conquistadas,
@@ -1041,25 +1101,36 @@ mod tests {
     }
 
     #[test]
-    fn game_id_out_of_dorequest_number_string_or_zero() {
-        // Resposta real do dorequest (r=gameid) para um hash registrado.
-        assert_eq!(
-            game_id_from_dorequest(&serde_json::json!({"Success": true, "GameID": 379})),
-            Some(379)
-        );
-        // O mesmo id pode chegar como string.
-        assert_eq!(
-            game_id_from_dorequest(&serde_json::json!({"GameID": "379"})),
-            Some(379)
-        );
-        // Hash desconhecido: 0 (e Success:false) — "não é jogo do RA".
-        assert_eq!(
-            game_id_from_dorequest(
-                &serde_json::json!({"Success": false, "Status": 403, "GameID": 0})
-            ),
-            None
-        );
-        assert_eq!(game_id_from_dorequest(&serde_json::json!({})), None);
+    fn parse_skips_hashed_memaddr_and_reads_both_shapes() {
+        // Cache legado (rota Extended): MemAddr chega como hash sem lógica —
+        // nenhuma conquista é ativada a partir disso.
+        let legacy = serde_json::json!({
+            "ID": 373, "Title": "Aero the Acro-Bat",
+            "Achievements": { "10807": { "ID": 10807, "Title": "High Score",
+                "MemAddr": "717146003ab7995fa293769ad320ee6e", "Points": 25 } }
+        });
+        assert!(parse_achievements(&legacy).is_empty());
+        // Connect, shape plano: MemAddr com a lógica de verdade.
+        let flat = serde_json::json!({
+            "GameID": 373, "Title": "Aero the Acro-Bat",
+            "Achievements": { "10807": { "ID": 10807, "Title": "High Score",
+                "MemAddr": "0xH0042=10", "Points": 25, "BadgeName": "199825" } }
+        });
+        let parsed = parse_achievements(&flat);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].memaddr, "0xH0042=10");
+        assert_eq!(game_from_json(&flat).unwrap().achievements, 1);
+        // Connect, shape multiset: sets com arrays de conquistas.
+        let multi = serde_json::json!({
+            "Success": true, "Sets": [ {
+                "AchievementSetId": 1, "GameId": 373, "Title": "Aero the Acro-Bat",
+                "Achievements": [ { "ID": 10807, "Title": "High Score",
+                    "MemAddr": "0xH0042=10", "Points": 25 } ] } ]
+        });
+        assert_eq!(parse_achievements(&multi).len(), 1);
+        let g = game_from_json(&multi).unwrap();
+        assert_eq!(g.title, "Aero the Acro-Bat");
+        assert_eq!(g.achievements, 1);
     }
 
     #[test]

@@ -201,6 +201,7 @@ fn main() -> Result<()> {
     log::info!("{} rom(s) in roms/", catalog.counts()?);
 
     let mut plat = Platform::new().map_err(|e| anyhow!(e.to_string()))?;
+    plat.set_pad_map(cfg.padmap.clone());
     // One window for the whole session — shelf and game both draw into it.
     let mut cab = plat
         .create_cabinet("SNES Xperience", 1280, 800, cfg.fullscreen)
@@ -220,7 +221,9 @@ fn main() -> Result<()> {
             icon.as_raw(),
         );
     }
-    let ra_on = !cfg.ra_user.is_empty() && !cfg.ra_token.is_empty();
+    // O RA exige a conta conectada (senha na tela de configurações): sem o
+    // token Connect não há lógica das conquistas nem envio — só metadados.
+    let ra_on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
     if ra_on {
         cab.set_ra_status(Some(RaStatus {
             hardcore: cfg.ra_hardcore,
@@ -253,8 +256,13 @@ fn main() -> Result<()> {
         shot: None,
         fade_in: None,
         preset_filter: None,
-        ra: (!cfg.ra_user.is_empty() && !cfg.ra_token.is_empty())
-            .then(|| (cfg.ra_user.clone(), cfg.ra_token.clone())),
+        ra: (!cfg.ra_user.is_empty() && cfg.ra_connect.is_some()).then(|| {
+            (
+                cfg.ra_user.clone(),
+                cfg.ra_token.clone(),
+                cfg.ra_connect.clone().unwrap_or_default(),
+            )
+        }),
     };
     let mut idle_static = idle::RESTING_STATIC;
     let mut core_path = args.core.clone().or_else(default_core_path);

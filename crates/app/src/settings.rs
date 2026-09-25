@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use xperience_platform::{
-    Cabinet, MenuMode, MenuNav, PadButton, Platform, Screen, SettingsButton, SettingsPanelInfo,
+    Cabinet, GamepadBtn, MenuMode, MenuNav, PadButton, Platform, Screen, SettingsButton,
+    SettingsPanelInfo,
 };
 
 use crate::config::Config;
@@ -50,14 +51,15 @@ const SEC_CONTROLES: usize = 4;
 /// Which "conquistas" row the text-entry editor is attached to.
 const RA_ROW_USER: usize = 0;
 const RA_ROW_TOKEN: usize = 1;
+const RA_ROW_SENHA: usize = 2;
 
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
         SEC_JOGO => 2,
         SEC_VIDEO => 2,
         SEC_SISTEMA => 3,
-        // usuário / token / testar login / hardcore
-        SEC_CONQUISTAS => 4,
+        // usuário / token / senha / testar login / hardcore
+        SEC_CONQUISTAS => 5,
         SEC_CONTROLES => cfg.keymap.describe().len(),
         _ => 0,
     }
@@ -115,6 +117,9 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
     let mut ra_draft = String::new();
     let mut login_status = LoginStatus::Idle;
     let mut login_worker: Option<Receiver<Result<String, String>>> = None;
+    // O worker em andamento é o login Connect (senha → token)? Se sim, o
+    // `Ok` guarda o token no cfg em vez de só exibir.
+    let mut login_connect = false;
     let frame_time = Duration::from_millis(16);
     let mut next = Instant::now();
     cab.set_close_button(true);
@@ -122,13 +127,22 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
     loop {
         if let Some(rx) = &login_worker {
             match rx.try_recv() {
-                Ok(Ok(label)) => {
-                    login_status = LoginStatus::Ok(label);
+                Ok(Ok(token)) => {
+                    if login_connect {
+                        cfg.ra_connect = Some(token);
+                        let _ = cfg.save();
+                        login_status =
+                            LoginStatus::Ok("conta conectada — conquistas liberadas".to_string());
+                        login_connect = false;
+                    } else {
+                        login_status = LoginStatus::Ok(token);
+                    }
                     login_worker = None;
                 }
                 Ok(Err(e)) => {
                     login_status = LoginStatus::Failed(e);
                     login_worker = None;
+                    login_connect = false;
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => login_worker = None,
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -186,11 +200,29 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
             if te.commit {
                 if row == RA_ROW_USER {
                     cfg.ra_user = ra_draft.trim().to_string();
+                } else if row == RA_ROW_SENHA {
+                    // A senha nunca é gravada: vira token Connect por
+                    // login2 — ele que autentica a lógica das conquistas e
+                    // a submissão (plan revision: a web key ficou readonly).
+                    let (user, senha) = (cfg.ra_user.clone(), ra_draft.trim().to_string());
+                    if user.is_empty() || senha.is_empty() {
+                        login_status = LoginStatus::Failed("preencha usuário e senha".to_string());
+                    } else {
+                        login_status = LoginStatus::Checking;
+                        let (tx, rx) = mpsc::channel();
+                        std::thread::spawn(move || {
+                            let _ = tx.send(crate::ra::connect_login(&user, &senha));
+                        });
+                        login_worker = Some(rx);
+                        login_connect = true;
+                    }
                 } else {
                     cfg.ra_token = ra_draft.trim().to_string();
                 }
                 let _ = cfg.save();
-                login_status = LoginStatus::Idle;
+                if !matches!(login_status, LoginStatus::Checking) {
+                    login_status = LoginStatus::Idle;
+                }
                 ra_editing = None;
                 plat.stop_text_input(cab);
             } else if te.cancel {
@@ -229,8 +261,14 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
         }
 
         if let Some(row) = awaiting_key {
+            // Whichever arrives first binds: a keyboard key on the left side
+            // of each row, a gamepad button on the right ("controle:").
             if let Some(name) = m.captured_key {
                 bind_row(cfg, row, &name);
+                let _ = cfg.save();
+                awaiting_key = None;
+            } else if let Some(btn) = m.captured_pad {
+                bind_pad_row(plat, cfg, row, btn);
                 let _ = cfg.save();
                 awaiting_key = None;
             } else if m.capture_cancelled {
@@ -292,7 +330,9 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                 let (ox, oy) = cab.window_to_output(cx, cy);
                 if let Some((_, ly)) = cab.hit_screen_point(ox, oy) {
                     if let Some(i) = row_at(ly, row_count(sec, cfg)) {
-                        if sec == SEC_CONQUISTAS && matches!(i, RA_ROW_USER | RA_ROW_TOKEN) {
+                        if sec == SEC_CONQUISTAS
+                            && matches!(i, RA_ROW_USER | RA_ROW_TOKEN | RA_ROW_SENHA)
+                        {
                             sel = i;
                             ra_editing = Some(i);
                             ra_draft = String::new();
@@ -439,8 +479,8 @@ fn activate_row(
             _ => *rename_status = Some(run_rom_rename()),
         },
         SEC_CONQUISTAS => match i {
-            RA_ROW_USER | RA_ROW_TOKEN => *ra_editing = Some(i),
-            2 => start_login_test(cfg, login_status, login_worker),
+            RA_ROW_USER | RA_ROW_TOKEN | RA_ROW_SENHA => *ra_editing = Some(i),
+            3 => start_login_test(cfg, login_status, login_worker),
             _ => {
                 cfg.ra_hardcore = !cfg.ra_hardcore;
                 let _ = cfg.save();
@@ -501,7 +541,7 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, right
             cfg.check_updates_on_start = !cfg.check_updates_on_start;
             let _ = cfg.save();
         }
-        (SEC_CONQUISTAS, 3) => {
+        (SEC_CONQUISTAS, 4) => {
             cfg.ra_hardcore = !cfg.ra_hardcore;
             let _ = cfg.save();
         }
@@ -607,6 +647,24 @@ fn bind_row(cfg: &mut Config, row: usize, key_name: &str) {
     }
 }
 
+/// The gamepad half of a captured row: `btn` (the physical pad button the
+/// player pressed) becomes the driver of that row's SNES action, and the
+/// live platform map is swapped so it takes effect without leaving settings.
+fn bind_pad_row(plat: &mut Platform, cfg: &mut Config, row: usize, btn: GamepadBtn) {
+    let Some((action, _)) = cfg.padmap.describe().into_iter().nth(row) else {
+        return;
+    };
+    let Ok(b) = action.parse::<PadButton>() else {
+        return;
+    };
+    let name = btn.string();
+    if let Err(e) = cfg.padmap.bind(&name, b) {
+        log::warn!("rebind {action} -> {name}: {e}");
+        return;
+    }
+    plat.set_pad_map(cfg.padmap.clone());
+}
+
 fn draw_jogo(d: &mut Screen, cfg: &Config, sel: usize) {
     let x = MARGIN;
     d.text(x, MARGIN, 2, TEXT, "jogo");
@@ -704,14 +762,19 @@ fn draw_conquistas(
         } else if value.is_empty() {
             format!("{label}: (vazio)")
         } else {
-            // The token is a secret that outlives the screen — never echo
-            // it back, not even masked, beyond "it's there".
+            // Segredos (token, senha) não voltam para a tela, nem
+            // mascarados — só a certeza de que estão lá.
             if row == RA_ROW_TOKEN {
                 format!("{label}: (configurado)")
             } else {
                 format!("{label}: {value}")
             }
         }
+    };
+    let senha_label = if cfg.ra_connect.is_some() {
+        "Senha: (conectado)".to_string()
+    } else {
+        "Senha: (vazio — conecta a lógica das conquistas)".to_string()
     };
     let login_label = match login {
         LoginStatus::Idle => {
@@ -728,6 +791,11 @@ fn draw_conquistas(
     let rows = [
         field(RA_ROW_USER, "Usuário", &cfg.ra_user),
         field(RA_ROW_TOKEN, "Token da web API", &cfg.ra_token),
+        if editing == Some(RA_ROW_SENHA) {
+            format!("Senha: {draft}_")
+        } else {
+            senha_label
+        },
         login_label,
         format!(
             "Modo hardcore: {}",
@@ -750,6 +818,13 @@ fn draw_conquistas(
         DIM,
         "token: retroachievements.org -> settings -> web api",
     );
+    d.text(
+        x,
+        y + 8 + 20,
+        1,
+        DIM,
+        "senha: a mesma do site — libera a lógica e o envio das conquistas",
+    );
     draw_hint(
         d,
         "clique edita, botão direito cola, cmd+c copia -- enter confirma, esc cancela",
@@ -762,13 +837,16 @@ fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting:
     let mut y = LIST_TOP;
 
     let binds = cfg.keymap.describe();
+    let pads = cfg.padmap.describe();
     let (_, sh) = d.size();
     let visible = ((sh as i32 - MARGIN * 2 - 60) / ROW_H).max(1) as usize;
     for (i, (action, key)) in binds.iter().enumerate().skip(top).take(visible) {
+        let pad = pads.get(i).map(|(_, b)| b.as_str()).unwrap_or("-");
+        let pad = if pad.is_empty() { "-" } else { pad };
         let label = if awaiting == Some(i) {
-            format!("{action}: aperte uma tecla... (esc cancela)")
+            format!("{action}: aperte uma tecla ou botão do controle... (esc cancela)")
         } else {
-            format!("{action}: {key}")
+            format!("{action}: {key} | controle: {pad}")
         };
         draw_row(d, x, y, &label, i == sel);
         y += ROW_H;
@@ -776,7 +854,7 @@ fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting:
 
     draw_hint(
         d,
-        "clique numa ação pra trocar a tecla -- esc volta pro jogo",
+        "clique numa ação pra trocar a tecla ou o botão do controle -- esc volta pro jogo",
     );
 }
 

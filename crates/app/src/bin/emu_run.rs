@@ -225,6 +225,7 @@ fn main() -> Result<()> {
     }
 
     let mut platform = xperience_platform::Platform::new().map_err(|e| anyhow!(e.to_string()))?;
+    platform.set_pad_map(cfg.padmap.clone());
     let mut cabinet = platform
         .create_cabinet("SNES Xperience", 1024, 768, false)
         .map_err(|e| anyhow!(e.to_string()))?;

@@ -26,6 +26,10 @@ pub enum Sfx {
     PowerOff,
     /// Reset button press.
     Reset,
+    /// Achievement unlocked (plan revision: "coloque uma notificação sonora
+    /// ao ganhar uma conquista") — a synthesized ascending chime, made
+    /// in-repo (no Pixabay credit due), same fixed format as the foley set.
+    Achievement,
 }
 
 struct Embedded(&'static [u8]);
@@ -37,6 +41,7 @@ fn embedded(name: Sfx) -> Embedded {
         Sfx::PowerOn => Embedded(include_bytes!("sfx/power_on.wav")),
         Sfx::PowerOff => Embedded(include_bytes!("sfx/power_off.wav")),
         Sfx::Reset => Embedded(include_bytes!("sfx/reset.wav")),
+        Sfx::Achievement => Embedded(include_bytes!("sfx/achievement.wav")),
     }
 }
 
@@ -50,6 +55,7 @@ struct Bank {
     power_on: Option<Vec<i16>>,
     power_off: Option<Vec<i16>>,
     reset: Option<Vec<i16>>,
+    achievement: Option<Vec<i16>>,
 }
 
 static BANK: OnceLock<Bank> = OnceLock::new();
@@ -61,6 +67,7 @@ fn bank() -> &'static Bank {
         power_on: decode(embedded(Sfx::PowerOn).0),
         power_off: decode(embedded(Sfx::PowerOff).0),
         reset: decode(embedded(Sfx::Reset).0),
+        achievement: decode(embedded(Sfx::Achievement).0),
     })
 }
 
@@ -76,6 +83,7 @@ pub fn play(cab: &mut Cabinet, name: Sfx) -> bool {
         Sfx::PowerOn => &b.power_on,
         Sfx::PowerOff => &b.power_off,
         Sfx::Reset => &b.reset,
+        Sfx::Achievement => &b.achievement,
     };
     let Some(samples) = bank_match else {
         return false;
@@ -132,6 +140,7 @@ mod tests {
             (Sfx::PowerOn, 1100, 1300),
             (Sfx::PowerOff, 650, 850),
             (Sfx::Reset, 800, 1000),
+            (Sfx::Achievement, 800, 1000),
         ] {
             let d = decode(embedded(name).0).unwrap_or_else(|| panic!("falhou o parse"));
             let ms = d.len() as u64 * 1000 / RATE as u64;
