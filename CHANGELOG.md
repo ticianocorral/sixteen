@@ -9,6 +9,14 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
 ## [Não lançado]
 
+## [1.0.1-beta] - 2026-09-25
+
+A retrocompatibilidade do dia a dia: controles USB clones sem travar a
+interface, RetroAchievements funcionando de ponta a ponta pela rota
+Connect (login por senha), estante adaptada para telas pequenas (Steam
+Deck), cadastro de botões do controle, chime de conquista e abertura
+direto em tela cheia.
+
 ### Corrigido
 - Ao abrir em tela cheia, a janela não aparece mais no tamanho bruto
   1280×800 antes de dar o zoom do fullscreen (o macOS aplicava o
