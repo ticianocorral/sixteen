@@ -9,6 +9,68 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
 ## [Não lançado]
 
+### Corrigido
+- Ao abrir em tela cheia, a janela não aparece mais no tamanho bruto
+  1280×800 antes de dar o zoom do fullscreen (o macOS aplicava o
+  fullscreen depois de mostrar a janela): agora ela nasce oculta e só
+  aparece quando já está no formato final.
+- RetroAchievements: as conquistas voltam a funcionar de ponta a ponta. A
+  RetroAchievements mudou a web API — a rota que o app usava
+  (`API_GetGameExtended`) passou a entregar o campo `MemAddr` **hashado**
+  (MD5 sem a lógica), então o runtime não ativava condição nenhuma e nada
+  desbloqueava, em jogo nenhum. O app agora usa a rota Connect
+  autenticada: `r=login2` troca usuário+senha por um token de longa
+  duração, e `r=achievementsets` (que aceita o hash da ROM direto)
+  devolve identificação + lógica real das conquistas; o envio de unlock
+  passou para `r=awardachievement` (mesmo token). A senha não é gravada —
+  só o token. Configurações → conquistas → **Senha** faz o login.
+- Batman Forever (Rev 1) não mostrava conquistas: o hash dele é
+  registrado no RA (GameID 1100000418), mas a rota velha falhava no
+  game id de 11 dígitos e o cache ficava vazio. Pela rota Connect o
+  conjunto carrega direto pelo hash.
+- Controle USB clone de "Switch Pro Controller" (RetroFlag de SNES e
+  similares, VID/PID 057e:2009) não trava mais a interface: o driver hidapi
+  do SDL reivindicava o pad com handshake e um watchdog que envia um comando
+  ForceUSB **síncrono** na thread principal quando o pad fica 100 ms sem
+  mandar input — e cada write travava ~1 s até o timeout do USB, engasgando
+  a UI em ondas enquanto o controle estivesse plugado. O app agora desliga
+  o hidapi para pads Switch (`SDL_JOYSTICK_HIDAPI_SWITCH=0`) e o macOS os
+  atende pelo caminho nativo (GCController/IOKit), sem write síncrono;
+  medido com o pad plugado: stall máximo caiu de ~1,1 s para ~10 ms. Não
+  afeta rumble/giro, que o app não usa.
+- Conectar um controle USB não trava mais a interface em cascata de
+  reaberturas: cada evento de hotplug reabria **todos** os gamepads na
+  thread principal (`SDL_OpenGamepad` custa dezenas de ms via IOKit), então
+  um controle com conexão oscilante engasgava a UI a cada flap. Agora a
+  sincronização é incremental — só o controle que saiu/entrou é fechado ou
+  aberto, os estáveis preservam a porta — e um flap que devolve o mesmo
+  conjunto entre dois frames não mexe em nada; hotplug chegando durante a
+  digitação (editor de anotações) também não é mais engolido.
+
+### Adicionado
+- Notificação sonora ao ganhar uma conquista (plan revision): um chime
+  ascendente sintetizado no próprio repositório (arpejo C5-E5-G5-C6, 0,9 s,
+  mesmo formato dos foley), tocado sobre o áudio do jogo no momento do
+  desbloqueio, junto com o selo na tela.
+- Estante em telas pequenas (Steam Deck, 1280×800): a grade de "todos os
+  jogos" nunca mostra menos que **3 colunas × 2 linhas** — o tile encolhe
+  mantendo o 4:3 antes de perder coluna/linha, e a grade fica centrada na
+  área dela (antes: 2 tiles por fileira em 1280 de largura).
+- Painel da estante: no lugar das setas "^ Cima"/"v Baixo", três botões de
+  salto nomeados — **capa traseira**, **cartucho** e **informações** —
+  centrados, que levam o corpo do painel ao primeiro bloco da seção;
+  apertar "informações" de novo avança campo a campo (é a seção que pode
+  ter vários blocos).
+- Cadastro de botões do controle na tela de configurações ("controles"):
+  cada ação agora mostra `tecla | controle`, e clicar na linha aceita a
+  primeira entrada que chegar — tecla do teclado **ou** botão do controle
+  (antes o cadastro só ouvia o teclado). O layout do pad é persistido no
+  `[gamepad]` do `xperience.cfg` e vale na hora, sem sair das configurações.
+- Diagnóstico de engasgos: `XPERIENCE_TRACE=1` ao rodar acusa qual fase
+  estourou o budget do frame (`poll_*`, `present` ou frame atrasado no
+  `pace_frame`), e o log de startup passa a mostrar driver de vídeo e
+  renderer (cocoa/metal).
+
 ## [1.0.0-beta] - 2026-09-23
 
 Primeira versão beta: o RetroAchievements completo (conta, identificação,
