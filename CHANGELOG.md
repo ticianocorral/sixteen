@@ -64,11 +64,13 @@ direto em tela cheia.
   jogos" nunca mostra menos que **3 colunas × 2 linhas** — o tile encolhe
   mantendo o 4:3 antes de perder coluna/linha, e a grade fica centrada na
   área dela (antes: 2 tiles por fileira em 1280 de largura).
-- Painel da estante: no lugar das setas "^ Cima"/"v Baixo", três botões de
-  salto nomeados — **capa traseira**, **cartucho** e **informações** —
-  centrados, que levam o corpo do painel ao primeiro bloco da seção;
-  apertar "informações" de novo avança campo a campo (é a seção que pode
-  ter vários blocos).
+- Painel da estante em abas (plan revision: "a ideia é mostrar um info de
+  cada vez mesmo em resolução grande, mudar ao clicar"): no lugar das
+  setas "^ Cima"/"v Baixo", três botões fixos no topo do painel — **capa
+  traseira**, **cartucho** e **informações** — e o corpo mostra só a seção
+  ativa, em qualquer resolução (antes, em telas grandes tudo empilhava e
+  os botões nem apareciam). Clicar de novo em "informações" avança campo
+  a campo quando a lista transborda; aba sem conteúdo mostra aviso dim.
 - Cadastro de botões do controle na tela de configurações ("controles"):
   cada ação agora mostra `tecla | controle`, e clicar na linha aceita a
   primeira entrada que chegar — tecla do teclado **ou** botão do controle

@@ -748,10 +748,10 @@ pub fn run(
     // currently-focused game's content actually needs, so letting it run
     // free on repeated "v Baixo" clicks past the end is harmless.
     let mut panel_scroll: usize = 0;
-    // O conteúdo do painel do último frame — os hits de clique chegam com um
-    // frame de atraso (são os rects desenhados antes), então os alvos dos
-    // saltos de seção usam o mesmo painel que o jogador estava vendo.
-    let mut panel_info = empty_shelf_panel();
+    // A aba ativa do painel (plan revision: "mostrar um info de cada vez
+    // mesmo em resolução grande, mudar ao clicar") — persiste entre jogos
+    // de propósito: quem organizou por informações continua nelas.
+    let mut panel_section = PanelSection::CapaTraseira;
     let mut last_focus: Option<(u8, usize)> = None;
     // The title filter (plan revision) — `filter_query` is what's actually
     // applied; `filter_draft`/`editing_filter` are live only while typing,
@@ -1216,10 +1216,15 @@ pub fn run(
                             // lugar das setas de rolar, capa traseira /
                             // cartucho / informações).
                             ShelfButton::PanelJump(section) => {
-                                if let Some(i) =
-                                    panel_jump_target(&panel_info, section, panel_scroll)
-                                {
-                                    panel_scroll = i;
+                                // Abas (plan revision): clicar troca a seção
+                                // visível; clicar de novo em "informações"
+                                // avança campo a campo (a única aba que
+                                // transborda).
+                                if panel_section != section {
+                                    panel_section = section;
+                                    panel_scroll = 0;
+                                } else if section == PanelSection::Informacoes {
+                                    panel_scroll += 1;
                                 }
                             }
                             ShelfButton::ToggleFavorite => {
@@ -1717,6 +1722,7 @@ pub fn run(
                     backcover_img: cab.has_image(bid).then_some(bid),
                     release,
                     info,
+                    section: panel_section,
                     scroll: panel_scroll,
                     favorite: Some(e.rom.favorite),
                     achievements: ra_games.get(&e.rom.sha1).is_some_and(|g| g.is_some()),
@@ -1730,14 +1736,14 @@ pub fn run(
                 backcover_img: None,
                 release: None,
                 info: Vec::new(),
+                section: PanelSection::CapaTraseira,
                 scroll: 0,
                 favorite: None,
                 achievements: false,
                 award_img: None,
             },
         };
-        cab.set_shelf_panel(shelf_panel.clone());
-        panel_info = shelf_panel;
+        cab.set_shelf_panel(shelf_panel);
 
         // --- draw (into a screen-sized buffer, then warped through the tube) --
         let render = |d: &mut Screen| {
@@ -2081,45 +2087,9 @@ fn ranked_by_playtime(catalog: &Catalog) -> Result<Vec<(CatalogEntry, u64)>> {
 /// A blank flat panel — just the Voltar/Configuracoes buttons, no game
 /// focused (the history list isn't a "selection" the way the shelf's grid
 /// is; clicking a row launches straight away instead of just selecting it).
-/// Índice do primeiro bloco da seção no corpo do painel — o destino do salto
-/// dos botões (plan revision: capa traseira / cartucho / informações no
-/// lugar das setas). `informações` já visível avança um campo por clique:
-/// é a única seção com vários blocos, e sem as setas é o jeito de
-/// percorrê-la; voltar é apertar capa ou cartucho.
-fn panel_jump_target(panel: &ShelfPanelInfo, section: PanelSection, cur: usize) -> Option<usize> {
-    let mut i = 0;
-    if panel.backcover_img.is_some() {
-        if section == PanelSection::CapaTraseira {
-            return Some(0);
-        }
-        i += 1;
-    }
-    if panel.cartridge_img.is_some() {
-        if section == PanelSection::Cartucho {
-            return Some(i);
-        }
-        i += 1;
-    }
-    if section != PanelSection::Informacoes || (panel.release.is_none() && panel.info.is_empty()) {
-        return None;
-    }
-    if cur < i {
-        return Some(i);
-    }
-    Some((cur + 1).min(panel_block_count(panel).saturating_sub(1)))
-}
-
-/// Quantos blocos o corpo do painel tem — a mesma ordem que
-/// `draw_shelf_panel` monta (capa traseira, cartucho, lançamento, campos).
-fn panel_block_count(panel: &ShelfPanelInfo) -> usize {
-    panel.backcover_img.is_some() as usize
-        + panel.cartridge_img.is_some() as usize
-        + panel.release.is_some() as usize
-        + panel.info.len()
-}
-
 fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
+        section: PanelSection::CapaTraseira,
         title: String::new(),
         logo_img: None,
         cartridge_img: None,

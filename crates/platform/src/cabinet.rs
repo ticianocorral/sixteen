@@ -698,6 +698,11 @@ pub struct ShelfPanelInfo {
     pub backcover_img: Option<u64>,
     pub release: Option<String>,
     pub info: Vec<(String, String)>,
+    /// A seção ativa do corpo (plan revision: "a ideia é mostrar um info
+    /// de cada vez mesmo em resolução grande, mudar ao clicar") — o corpo
+    /// vira abas: só os blocos da seção escolhida são desenhados, e os três
+    /// botões do topo trocam a seção.
+    pub section: PanelSection,
     /// How many of the scrollable blocks below the logo/title header
     /// (back cover, cartridge, release, `info`) to skip before drawing —
     /// the caller's own running counter (plan revision: "criar rolagem no
@@ -4409,35 +4414,46 @@ fn draw_shelf_panel(
         )
     };
 
-    // Everything below the logo/title header is scrollable (plan revision:
-    // "criar rolagem no painel quando necessario") — back cover, cartridge,
-    // release and the DAT's extra fields, in that order, each a block of
-    // its own since they're wildly different heights (a 280px image next
-    // to a label/value pair that might wrap to 3 lines). `panel_block_
-    // height`/`draw_panel_block` share the exact same measurements so
-    // "does it fit" and "how tall did it draw" never disagree.
-    let mut blocks: Vec<PanelBlock> = Vec::new();
-    if let Some(id) = panel.backcover_img {
-        blocks.push(PanelBlock::Image(id, 280));
-    }
-    if let Some(id) = panel.cartridge_img {
-        blocks.push(PanelBlock::Image(id, 210));
-    }
+    // Abas (plan revision: "a ideia é mostrar um info de cada vez mesmo em
+    // resolução grande, mudar ao clicar") — o corpo mostra SÓ os blocos da
+    // seção ativa: capa traseira (imagem), cartucho (imagem) ou
+    // informações (lançamento + campos do DAT/RA). Os três botões do topo
+    // trocam a aba; a seção sem conteúdo mostra um aviso dim.
+    let capa_blocks: Vec<PanelBlock> = panel
+        .backcover_img
+        .map(|id| vec![PanelBlock::Image(id, 280)])
+        .unwrap_or_default();
+    let cart_blocks: Vec<PanelBlock> = panel
+        .cartridge_img
+        .map(|id| vec![PanelBlock::Image(id, 210)])
+        .unwrap_or_default();
+    let mut info_blocks: Vec<PanelBlock> = Vec::new();
     if let Some(release) = &panel.release {
-        blocks.push(PanelBlock::Release(release));
+        info_blocks.push(PanelBlock::Release(release));
     }
     for (label, value) in &panel.info {
         // A linha de conquistas ganha a medalha de prêmio do RA quando o
         // servidor concedeu um.
         match panel.award_img.filter(|_| label == "conquistas") {
-            Some(medal) => blocks.push(PanelBlock::RaField(label, value, medal)),
-            None => blocks.push(PanelBlock::Field(label, value)),
+            Some(medal) => info_blocks.push(PanelBlock::RaField(label, value, medal)),
+            None => info_blocks.push(PanelBlock::Field(label, value)),
         }
     }
+    let (blocks, empty_label): (Vec<PanelBlock>, &str) = match panel.section {
+        PanelSection::CapaTraseira => (capa_blocks, "sem capa traseira"),
+        PanelSection::Cartucho => (cart_blocks, "sem cartucho"),
+        PanelSection::Informacoes => (info_blocks, "sem informações"),
+    };
 
-    // Does everything fit without scrolling at all? Most games with little
-    // or no local art do — no point reserving room for scroll buttons
-    // nobody needs.
+    let has = |s: PanelSection| match s {
+        PanelSection::CapaTraseira => panel.backcover_img.is_some(),
+        PanelSection::Cartucho => panel.cartridge_img.is_some(),
+        PanelSection::Informacoes => panel.release.is_some() || !panel.info.is_empty(),
+    };
+
+    // A aba ativa transborda? (só "informações", com muitos campos,
+    // realisticamente) — se sim, o `scroll` do caller pula blocos dentro
+    // dela; as outras seções têm um bloco só.
     let total_h: i32 = blocks.iter().map(|b| panel_block_height(inner_w, b)).sum();
     let scrollable = cy + total_h > limit;
 
@@ -4456,16 +4472,17 @@ fn draw_shelf_panel(
     // sumiu, o corpo ganha o espaço dela de volta.
     let gap = 6i32;
     let half = (inner_w as i32 - gap) / 2;
+    let active = panel.section;
     let top_row = [
         (
             ShelfButton::PanelJump(PanelSection::CapaTraseira),
             "capa traseira",
-            panel.backcover_img.is_some(),
+            active == PanelSection::CapaTraseira || has(PanelSection::CapaTraseira),
         ),
         (
             ShelfButton::PanelJump(PanelSection::Cartucho),
             "cartucho",
-            panel.cartridge_img.is_some(),
+            active == PanelSection::Cartucho || has(PanelSection::Cartucho),
         ),
     ];
     let mut body_top = cy;
@@ -4486,12 +4503,25 @@ fn draw_shelf_panel(
             font,
             info_r,
             "informações",
-            panel.release.is_some() || !panel.info.is_empty(),
+            active == PanelSection::Informacoes || has(PanelSection::Informacoes),
         ),
     ));
     body_top += (scroll_btn_h + 8) * 2;
 
     let mut cy = body_top;
+    if blocks.is_empty() {
+        // Aba escolhida sem conteúdo (não tem a arte local, o DAT não
+        // trouxe campos) — aviso dim em vez de corpo vazio.
+        let _ = draw_text_wrapped_absolute(
+            canvas,
+            font,
+            x,
+            cy,
+            inner_w,
+            TextStyle::new(1, PANEL_DIM),
+            empty_label,
+        );
+    }
     for block in &blocks[start..] {
         let h = panel_block_height(inner_w, block);
         if cy + h > limit {
