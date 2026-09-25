@@ -478,15 +478,26 @@ pub enum PanelButton {
 /// sits flat next to the tube, like the in-game side panel, with its own
 /// tiny button set). Separate from `PanelButton`: the shelf isn't a loaded
 /// game, so none of that enum's meaning applies here.
+/// As seções do corpo rolável do painel da estante (plan revision: "o cima
+/// e baixo no painel faça assim os botões: capa traseira, cartucho e
+/// informações") — cada botão de salto leva o corpo ao primeiro bloco da
+/// seção.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PanelSection {
+    CapaTraseira,
+    Cartucho,
+    Informacoes,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShelfButton {
     Back,
     Settings,
-    /// The shelf panel's own scroll buttons (plan revision: "criar rolagem
-    /// no painel quando necessario") — drawn only while the focused game's
-    /// art/info overflows the panel; see `draw_shelf_panel`.
-    PanelScrollUp,
-    PanelScrollDown,
+    /// Pula o corpo do painel para uma seção (plan revision: no lugar das
+    /// antigas setas "^ Cima"/"v Baixo", três botões nomeados) — desenhados
+    /// só enquanto a arte/info do jogo focused transborda o painel; o índice
+    /// de destino o caller calcula (ele tem o [`ShelfPanelInfo`]).
+    PanelJump(PanelSection),
     /// The focused game's back cover, drawn in the panel — clicking it opens
     /// the enlarged view (plan revision: "ao clicar no back cover
     /// possibilitar mostrar em tamanho maior, com botão de fechar").
@@ -679,6 +690,7 @@ struct PanelInfo {
 /// title, plus the shelf's own file/play facts ("se o DAT tiver
 /// informacoes do jogo, preencher no painel") — label/value pairs, empty
 /// when the DAT has nothing extra or wasn't loaded at all.
+#[derive(Clone)]
 pub struct ShelfPanelInfo {
     pub title: String,
     pub logo_img: Option<u64>,
@@ -790,21 +802,35 @@ impl Cabinet {
         fullscreen: bool,
     ) -> Result<Self, PlatformError> {
         // Fullscreen from birth, when requested (plan revision: "tem como
-        // fazer abrir direto na forma correta?") — toggling right after the
-        // first frames let the raw windowed size flash on screen first.
+        // fazer abrir direto na forma correta?") — e nascendo **oculta**: o
+        // macOS ainda mostrava um frame do tamanho bruto 1280×800 antes de
+        // aplicar o fullscreen (com a transição nativa de zoom por cima), o
+        // que lia como "abre de um tamanho e dá uma aumentada". Oculta +
+        // fullscreen desde a criação, a janela só aparece quando já está no
+        // formato final.
         let mut builder = video.window(title, width, height);
         builder.position_centered().resizable();
         if fullscreen {
-            builder.fullscreen();
+            builder.fullscreen().hidden();
         }
         let window = builder
             .build()
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let mut canvas = window.into_canvas();
+        log::info!(
+            "video: {} | renderer: {}",
+            video.current_video_driver(),
+            canvas.renderer_name
+        );
         canvas.set_blend_mode(BlendMode::Blend);
         canvas.set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
         canvas.clear();
         canvas.present();
+        if fullscreen {
+            // Já preparada (fullscreen aplicado, primeiro frame pronto),
+            // aparece sem tamanho intermediário.
+            canvas.window_mut().show();
+        }
 
         let font = build_font_atlas(&mut canvas)?;
         let (w, h) = canvas.output_size().unwrap_or((width, height));
@@ -1403,6 +1429,14 @@ impl Cabinet {
             .map(|(b, _)| *b)
     }
 
+    /// Present of every frame, through the trace watchdog (`XPERIENCE_TRACE=
+    /// 1`): present is where a GPU/compositor/display stall shows up — telling
+    /// it apart from a slow app loop is the whole point of the trace.
+    fn present_and_time(&mut self) {
+        let _span = super::TraceSpan::new("present");
+        self.canvas.present();
+    }
+
     /// Draw the modal dialog to the window, replacing the whole window like
     /// the pause book does (plan revision).
     pub fn present_modal(&mut self) {
@@ -1421,7 +1455,7 @@ impl Cabinet {
             rect.height(),
         );
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::present_modal`] but composited into an offscreen
@@ -1474,7 +1508,7 @@ impl Cabinet {
             rect.height(),
         );
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::present_pause`] but composited into an offscreen
@@ -1614,7 +1648,7 @@ impl Cabinet {
             self.idle_core_prompt.as_deref(),
         );
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Render one frame into an offscreen target and save it as a BMP. Works
@@ -1775,7 +1809,7 @@ impl Cabinet {
     pub fn frame_2d<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
         self.paint_2d(bg, draw);
         self.composite_screen();
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::frame_2d`], but for the shelf specifically (plan
@@ -1785,7 +1819,7 @@ impl Cabinet {
     pub fn frame_shelf<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
         self.paint_shelf(bg, draw);
         self.composite_shelf();
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::frame_2d`] but composited into an offscreen target and
@@ -2056,7 +2090,7 @@ impl Cabinet {
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::present_static`] but composited into an offscreen
@@ -2200,7 +2234,7 @@ impl Cabinet {
         );
 
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::frame_2d_fade_in`], but for the shelf specifically
@@ -2266,7 +2300,7 @@ impl Cabinet {
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
 
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Fill the noise texture for the current window size at `level` (1.0 =
@@ -2354,7 +2388,7 @@ impl Cabinet {
             );
         });
         self.composite_shelf();
-        self.canvas.present();
+        self.present_and_time();
         btn
     }
 
@@ -2468,7 +2502,7 @@ impl Cabinet {
     pub fn frame_settings<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
         self.paint_shelf(bg, draw);
         self.composite_settings();
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::frame_2d`], but in the idle screen's own layout (plan
@@ -2493,7 +2527,7 @@ impl Cabinet {
             self.idle_core_prompt.as_deref(),
         );
         self.canvas.set_viewport(None);
-        self.canvas.present();
+        self.present_and_time();
     }
 
     /// Like [`Cabinet::capture_shelf`], but drawing the settings panel
@@ -4421,16 +4455,48 @@ fn draw_shelf_panel(
 
     let mut body_top = cy;
     if scrollable {
-        let up = Rect::new(x, body_top, inner_w, scroll_btn_h as u32);
+        // Plan revision: no lugar das setas "^ Cima"/"v Baixo", três saltos
+        // nomeados — capa traseira, cartucho e informações — centrados, na
+        // mesma reserva de altura das antigas setas. O destino de cada salto
+        // o caller calcula (ele tem o `ShelfPanelInfo` inteiro).
+        let gap = 6i32;
+        let half = (inner_w as i32 - gap) / 2;
+        let top_row = [
+            (
+                ShelfButton::PanelJump(PanelSection::CapaTraseira),
+                "capa traseira",
+                panel.backcover_img.is_some(),
+            ),
+            (
+                ShelfButton::PanelJump(PanelSection::Cartucho),
+                "cartucho",
+                panel.cartridge_img.is_some(),
+            ),
+        ];
+        for (n, (btn, label, lit)) in top_row.iter().enumerate() {
+            let r = Rect::new(
+                x + n as i32 * (half + gap),
+                body_top,
+                half as u32,
+                scroll_btn_h as u32,
+            );
+            buttons.push((*btn, draw_button(canvas, font, r, label, *lit)));
+        }
+        let info_r = Rect::new(x, body_top + scroll_btn_h + 8, inner_w, scroll_btn_h as u32);
         buttons.push((
-            ShelfButton::PanelScrollUp,
-            draw_button(canvas, font, up, "^ Cima", start > 0),
+            ShelfButton::PanelJump(PanelSection::Informacoes),
+            draw_button(
+                canvas,
+                font,
+                info_r,
+                "informações",
+                panel.release.is_some() || !panel.info.is_empty(),
+            ),
         ));
-        body_top += scroll_btn_h + 8;
+        body_top += (scroll_btn_h + 8) * 2;
     }
 
     let mut cy = body_top;
-    let mut shown = 0usize;
     for block in &blocks[start..] {
         let h = panel_block_height(inner_w, block);
         if cy + h > body_limit {
@@ -4438,7 +4504,6 @@ fn draw_shelf_panel(
         }
         let block_top = cy;
         cy = draw_panel_block(canvas, font, images, x, cy, inner_w, block);
-        shown += 1;
         // The back cover is clickable (plan revision: "ao clicar no back
         // cover possibilitar mostrar em tamanho maior, com botão de
         // fechar") — outline it as the affordance and hand the hit rect up.
@@ -4454,13 +4519,8 @@ fn draw_shelf_panel(
         }
     }
 
-    if scrollable {
-        let down = Rect::new(x, cy + 8, inner_w, scroll_btn_h as u32);
-        buttons.push((
-            ShelfButton::PanelScrollDown,
-            draw_button(canvas, font, down, "v Baixo", start + shown < blocks.len()),
-        ));
-    }
+    // (sem fileira de setas embaixo — os saltos nomeados acima cobrem a
+    // navegação do corpo)
 
     buttons
 }

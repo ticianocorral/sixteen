@@ -5,6 +5,7 @@
 
 use std::str::FromStr;
 
+use sdl3::gamepad::Button as PadBtn;
 use sdl3::keyboard::Keycode;
 
 /// SNES / libretro joypad buttons, in libretro id order.
@@ -251,6 +252,79 @@ impl KeyMap {
         self.pad.iter().find(|&&(kk, _)| kk == k).map(|&(_, b)| b)
     }
 }
+
+/// Gamepad-button layout: which SDL gamepad button drives each SNES button —
+/// the gamepad counterpart of [`KeyMap`]. SDL's controller DB normalizes the
+/// button *names* across devices, but clones (and the native macOS path this
+/// app steers clone "Switch" pads into) can still land a press in the wrong
+/// slot — so the layout is rebindable in the settings screen, same as the
+/// keyboard's, and persists in the config's `[gamepad]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PadMap {
+    pad: Vec<(PadBtn, PadButton)>,
+}
+
+impl PadMap {
+    /// The built-in layout (d-pad, B/A/Y/X on South/East/West/North, L/R on
+    /// the shoulders, select/start on back/start).
+    pub fn defaults() -> Self {
+        let mut m = PadMap::default();
+        for (btn, b) in DEFAULT_PAD_MAP {
+            m.pad.push((btn, b));
+        }
+        m
+    }
+
+    /// Rebind a SNES button to an SDL gamepad-button name (`"south"`,
+    /// `"dpad_up"`, …). One button per action and one action per button —
+    /// the previous pairs on either side are dropped, like [`KeyMap::bind_pad`].
+    pub fn bind(&mut self, button_name: &str, b: PadButton) -> Result<(), String> {
+        let Some(btn) = PadBtn::from_string(button_name) else {
+            return Err(format!("unknown gamepad button {button_name:?}"));
+        };
+        self.pad.retain(|&(bb, pb)| bb != btn && pb != b);
+        self.pad.push((btn, b));
+        Ok(())
+    }
+
+    /// `(action token, SDL gamepad button name)` for every SNES button, in
+    /// libretro order — the settings rows' and the config file's source.
+    /// An unbound action comes back with an empty name.
+    pub fn describe(&self) -> Vec<(String, String)> {
+        PadButton::ALL
+            .iter()
+            .map(|&b| {
+                let name = self
+                    .pad
+                    .iter()
+                    .find(|&&(_, pb)| pb == b)
+                    .map(|&(bb, _)| bb.string())
+                    .unwrap_or_default();
+                (b.token().to_string(), name)
+            })
+            .collect()
+    }
+
+    pub(crate) fn pairs(&self) -> &[(PadBtn, PadButton)] {
+        &self.pad
+    }
+}
+
+/// The factory layout every X-input-style pad ships with.
+const DEFAULT_PAD_MAP: [(PadBtn, PadButton); 12] = [
+    (PadBtn::DPadUp, PadButton::Up),
+    (PadBtn::DPadDown, PadButton::Down),
+    (PadBtn::DPadLeft, PadButton::Left),
+    (PadBtn::DPadRight, PadButton::Right),
+    (PadBtn::South, PadButton::B),
+    (PadBtn::East, PadButton::A),
+    (PadBtn::West, PadButton::Y),
+    (PadBtn::North, PadButton::X),
+    (PadBtn::LeftShoulder, PadButton::L),
+    (PadBtn::RightShoulder, PadButton::R),
+    (PadBtn::Back, PadButton::Select),
+    (PadBtn::Start, PadButton::Start),
+];
 
 /// Per-frame button state. Filled by `Platform::poll`. Keyboard drives port 0;
 /// gamepad *n* drives port *n*.
