@@ -174,13 +174,14 @@ fn game_from_json(body: &serde_json::Value) -> Option<RaGame> {
             a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) != Some(CLIENT_WARNING_ID)
         })
         .count();
-    // Set de aviso: ou contém o achievement fictício, ou o título do
-    // "jogo" já é a própria mensagem ("Unsupported Game Version (…)")
-    // — RAWeb marca hashes incompatíveis assim.
-    let unsupported = all
-        .iter()
-        .any(|a| a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) == Some(CLIENT_WARNING_ID))
-        || title.starts_with("Unsupported Game Version");
+    // Set de aviso — o RA marca hashes incompatíveis assim (caso Batman
+    // Forever Rev 1). IMPORTANTE: o achievement-aviso também é injetado em
+    // respostas NORMAIS para clientes fora do registro oficial, então só é
+    // "não suportado" quando NÃO sobra conquista real nenhuma.
+    let unsupported = achievements == 0
+        && (all.iter().any(|a| {
+            a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) == Some(CLIENT_WARNING_ID)
+        }) || title.starts_with("Unsupported Game Version"));
     Some(RaGame {
         title,
         achievements,
@@ -1236,6 +1237,23 @@ mod tests {
         assert_eq!(g.achievements, 0);
         // E nada do aviso vira conquista ativável.
         assert!(parse_achievements(&dummy).is_empty());
+    }
+
+    #[test]
+    fn client_warning_in_normal_set_is_not_unsupported() {
+        // Cliente fora do registro oficial: o aviso é INJETADO em respostas
+        // normais também — jogo com conquistas reais NÃO é "sem suporte".
+        let body = serde_json::json!({
+            "Success": true, "Title": "Aero the Acro-Bat",
+            "Sets": [ { "Achievements": [
+                { "ID": 101000001, "MemAddr": "1=1.300.", "Title": "Atenção",
+                    "Points": 0, "BadgeName": "00000" },
+                { "ID": 10807, "MemAddr": "0xH0042=10", "Title": "High Score",
+                    "Points": 25 } ] } ]
+        });
+        let g = game_from_json(&body).unwrap();
+        assert!(!g.unsupported);
+        assert_eq!(g.achievements, 1);
     }
 
     #[test]
