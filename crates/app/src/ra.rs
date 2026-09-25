@@ -271,6 +271,8 @@ pub fn fetch_game(
                         serde_json::from_str(&text).unwrap_or_else(|_| body.clone());
                     cached["Released"] = meta.get("Released").cloned().unwrap_or_default();
                     cached["Publisher"] = meta.get("Publisher").cloned().unwrap_or_default();
+                    cached["Developer"] = meta.get("Developer").cloned().unwrap_or_default();
+                    cached["Genre"] = meta.get("Genre").cloned().unwrap_or_default();
                     write_cache(hash, &serde_json::to_string(&cached).unwrap_or_default())?;
                 }
             }
@@ -1006,6 +1008,21 @@ pub fn release_and_extras(hash: &str) -> (Option<String>, Vec<(String, String)>)
         .filter(|s| !s.is_empty())
     {
         extras.push(("editora".to_string(), publisher.to_string()));
+    }
+    if let Some(developer) = body
+        .get("Developer")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .filter(|d| Some(*d) != body.get("Publisher").and_then(|v| v.as_str()))
+    {
+        extras.push(("desenvolvedor".to_string(), developer.to_string()));
+    }
+    if let Some(genre) = body
+        .get("Genre")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        extras.push(("gênero".to_string(), genre.to_string()));
     }
     (release, extras)
 }
