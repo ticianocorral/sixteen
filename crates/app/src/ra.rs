@@ -778,6 +778,18 @@ impl Award {
         }
     }
 
+    /// O prêmio em palavras, para as infos do painel (plan revision:
+    /// "mostre se foi zerado e/ou mastered junto com as infos do game").
+    pub fn label(&self) -> &'static str {
+        match self {
+            Award::Beaten { hardcore: true } => "zerado (hardcore)",
+            Award::Beaten { hardcore: false } => "zerado (softcore)",
+            Award::Completed { hardcore: true } => "completado (hardcore)",
+            Award::Completed { hardcore: false } => "completado (softcore)",
+            Award::Mastered => "mastered",
+        }
+    }
+
     /// Decodifica o `HighestAwardKind` do servidor — `None` para o que não
     /// for dos formatos conhecidos (o painel simplesmente omite a medalha).
     pub fn from_kind(kind: &str) -> Option<Award> {

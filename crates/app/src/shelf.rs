@@ -1735,6 +1735,11 @@ pub fn run(
                             "conquistas".to_string(),
                             format!("{earned} de {total} ({pct}%)"),
                         ));
+                        // "zerado (softcore)" / "mastered" — o prêmio em
+                        // palavras, junto das infos (plan revision).
+                        if let Some(a) = award {
+                            info.push(("status".to_string(), a.label().to_string()));
+                        }
                         if let Some(medal) = award.map(|a| a.medal()) {
                             let id = crate::ra::medal_image_id(medal);
                             if !cab.has_image(id) {
