@@ -98,10 +98,15 @@ pub fn snes_ra_hash(rom: &[u8]) -> String {
 /// What phase 2 needs to know about a game: its RA title and how many
 /// achievements its set has. The unlock runtime (phase 3) will grow this
 /// with the conditions themselves.
+///
+/// `unsupported`: o RA marcou este **hash** como versão não suportada e
+/// respondeu com o set fictício de aviso (0 conquistas reais) — o botão
+/// Conquistas aparece desativado com o motivo (plan revision).
 #[derive(Debug, Clone)]
 pub struct RaGame {
     pub title: String,
     pub achievements: usize,
+    pub unsupported: bool,
 }
 
 /// Where the per-game cache lives — `saves/ra-cache/<hash>.json`, one file
@@ -162,15 +167,24 @@ fn game_from_json(body: &serde_json::Value) -> Option<RaGame> {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
         })?;
-    let achievements = achievements_json(body)
+    let all = achievements_json(body);
+    let achievements = all
         .iter()
         .filter(|a| {
             a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) != Some(CLIENT_WARNING_ID)
         })
         .count();
+    // Set de aviso: ou contém o achievement fictício, ou o título do
+    // "jogo" já é a própria mensagem ("Unsupported Game Version (…)")
+    // — RAWeb marca hashes incompatíveis assim.
+    let unsupported = all
+        .iter()
+        .any(|a| a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) == Some(CLIENT_WARNING_ID))
+        || title.starts_with("Unsupported Game Version");
     Some(RaGame {
         title,
         achievements,
+        unsupported,
     })
 }
 
@@ -1200,6 +1214,28 @@ mod tests {
         let g = game_from_json(&multi).unwrap();
         assert_eq!(g.title, "Aero the Acro-Bat");
         assert_eq!(g.achievements, 1);
+        assert!(!g.unsupported);
+    }
+
+    #[test]
+    fn warning_set_reads_as_unsupported() {
+        // Hash marcado "Unsupported Game Version" no RA (caso do Batman
+        // Forever Rev 1): a resposta é o set fictício de aviso — 0
+        // conquistas reais e o botão Conquistas desativa com motivo.
+        let dummy = serde_json::json!({
+            "Success": true,
+            "Title": "Unsupported Game Version (Batman Forever)",
+            "Sets": [ { "Title": null, "Type": "core", "AchievementSetId": 407,
+                "GameId": 1100000418,
+                "Achievements": [ { "ID": 101000001, "MemAddr": "1=1.300.",
+                    "Title": "Unsupported Game Version", "Points": 0,
+                    "BadgeName": "00000" } ] } ]
+        });
+        let g = game_from_json(&dummy).unwrap();
+        assert!(g.unsupported);
+        assert_eq!(g.achievements, 0);
+        // E nada do aviso vira conquista ativável.
+        assert!(parse_achievements(&dummy).is_empty());
     }
 
     #[test]

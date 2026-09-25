@@ -720,6 +720,12 @@ pub struct ShelfPanelInfo {
     /// draws a "Conquistas" button (`ShelfButton::ShelfAchievements`)
     /// between "Favoritar" and "Configurações".
     pub achievements: bool,
+    /// O motivo pelo qual o botão Conquistas aparece **desativado** (plan
+    /// revision: "avisar o usuário com tooltip no botão conquistas,
+    /// mostrar mas deixar desativado") — o RA marcou o hash como versão
+    /// não suportada, então o botão desenha apagado com o motivo no
+    /// rótulo e o clique nele não faz nada. `None` = destravado.
+    pub achievements_reason: Option<String>,
     /// A medalha de prêmio do jogo (plan fase 4) — textura já registrada
     /// pelo caller (`set_image`), desenhada à esquerda do número da linha
     /// "conquistas".
@@ -4335,6 +4341,7 @@ fn draw_shelf_panel(
     let y = rect.y() + pad;
     let panel_favorite = panel.and_then(|p| p.favorite);
     let panel_achievements = panel.is_some_and(|p| p.achievements);
+    let panel_ach_reason = panel.and_then(|p| p.achievements_reason.as_deref());
 
     // Stacked buttons at the bottom, "Favoritar" / "Conquistas" /
     // "Configurações" / "Voltar" top to bottom — "Voltar" always the last
@@ -4360,10 +4367,24 @@ fn draw_shelf_panel(
         ),
     ];
     if panel_achievements {
-        buttons.push((
-            ShelfButton::ShelfAchievements,
-            draw_button(canvas, font, ach_rect, "Conquistas", true),
-        ));
+        // Bloqueado (RA marcou o hash como versão não suportada): botão
+        // apagado com o motivo no rótulo e SEM hit — clicar não faz nada
+        // (plan revision: "mostrar mas deixar desativado").
+        match panel_ach_reason {
+            Some(reason) => {
+                let _ = draw_button(
+                    canvas,
+                    font,
+                    ach_rect,
+                    &format!("Conquistas ({reason})"),
+                    false,
+                );
+            }
+            None => buttons.push((
+                ShelfButton::ShelfAchievements,
+                draw_button(canvas, font, ach_rect, "Conquistas", true),
+            )),
+        }
     }
     // The favorite button sits above the trio, drawn before the early
     // `None` return so it never depends on the panel having content.

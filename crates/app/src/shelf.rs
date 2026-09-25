@@ -1722,6 +1722,7 @@ pub fn run(
                     }
                 }
                 info.extend(game_info_lines(e, playtime));
+                let ra_state = ra_games.get(&e.rom.sha1);
                 ShelfPanelInfo {
                     title: e.title().into_owned(),
                     logo_img: cab.has_image(wid).then_some(wid),
@@ -1732,7 +1733,14 @@ pub fn run(
                     section: panel_section,
                     scroll: panel_scroll,
                     favorite: Some(e.rom.favorite),
-                    achievements: ra_games.get(&e.rom.sha1).is_some_and(|g| g.is_some()),
+                    // Identificado = botão desenhado; hash marcado "versão
+                    // não suportada" = botão desativado com o motivo
+                    // (plan revision).
+                    achievements: ra_state.is_some_and(|g| g.is_some()),
+                    achievements_reason: ra_state
+                        .and_then(|g| g.as_ref())
+                        .filter(|g| g.unsupported)
+                        .map(|_| "versão sem suporte".to_string()),
                     award_img,
                 }
             }
@@ -1747,6 +1755,7 @@ pub fn run(
                 scroll: 0,
                 favorite: None,
                 achievements: false,
+                achievements_reason: None,
                 award_img: None,
             },
         };
@@ -2097,6 +2106,7 @@ fn ranked_by_playtime(catalog: &Catalog) -> Result<Vec<(CatalogEntry, u64)>> {
 fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
         section: PanelSection::CapaTraseira,
+        achievements_reason: None,
         title: String::new(),
         logo_img: None,
         cartridge_img: None,

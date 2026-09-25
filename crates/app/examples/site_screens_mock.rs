@@ -174,6 +174,7 @@ fn main() -> anyhow::Result<()> {
             backcover_img: None,
             release: Some("1993".to_string()),
             section: xperience_platform::PanelSection::Informacoes,
+            achievements_reason: None,
             info: vec![
                 ("editora".to_string(), "Horta Games".to_string()),
                 ("conquistas".to_string(), "20 de 21 (95%)".to_string()),

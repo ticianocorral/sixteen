@@ -18,6 +18,11 @@ Deck), cadastro de botões do controle, chime de conquista e abertura
 direto em tela cheia.
 
 ### Corrigido
+- Conquistas de ROM marcada "Unsupported Game Version" no RA (caso do
+  Batman Forever Rev 1): o botão Conquistas da estante aparece
+  **desativado**, com o motivo no próprio rótulo ("Conquistas (versão
+  sem suporte)"), e o clique nele não faz nada (plan revision: "mostrar
+  mas deixar desativado").
 - Ao abrir em tela cheia, a janela não aparece mais no tamanho bruto
   1280×800 antes de dar o zoom do fullscreen (o macOS aplicava o
   fullscreen depois de mostrar a janela): agora ela nasce oculta e só
