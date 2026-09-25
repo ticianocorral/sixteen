@@ -4485,7 +4485,10 @@ fn draw_shelf_panel(
             active == PanelSection::Cartucho || has(PanelSection::Cartucho),
         ),
     ];
-    let mut body_top = cy;
+    // Respiro entre a logo/título e a fileira de botões: sem ele os botões
+    // nascem colados na borda de baixo da logo (plan revision: "baixar um
+    // pouco para os botões não ficarem sobrepostos com a logo").
+    let mut body_top = cy + 10;
     for (n, (btn, label, lit)) in top_row.iter().enumerate() {
         let r = Rect::new(
             x + n as i32 * (half + gap),
