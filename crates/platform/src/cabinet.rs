@@ -4442,64 +4442,59 @@ fn draw_shelf_panel(
     let scrollable = cy + total_h > limit;
 
     let scroll_btn_h = btn_h;
-    let body_limit = if scrollable {
-        limit - (scroll_btn_h + 8) * 2
-    } else {
-        limit
-    };
     let start = if scrollable {
         panel.scroll.min(blocks.len().saturating_sub(1))
     } else {
         0
     };
 
+    // Plan revision ("eu queria aqueles 3 botões de organização das infos
+    // do game na tela grande também"): os saltos ficam SEMPRE visíveis com
+    // jogo focused — em telas grandes o conteúdo costuma caber sem rolagem
+    // e antes os botões nem apareciam. Sem transbordo o salto é no-op
+    // (tudo já está na tela). Como a fileira de baixo das antigas setas
+    // sumiu, o corpo ganha o espaço dela de volta.
+    let gap = 6i32;
+    let half = (inner_w as i32 - gap) / 2;
+    let top_row = [
+        (
+            ShelfButton::PanelJump(PanelSection::CapaTraseira),
+            "capa traseira",
+            panel.backcover_img.is_some(),
+        ),
+        (
+            ShelfButton::PanelJump(PanelSection::Cartucho),
+            "cartucho",
+            panel.cartridge_img.is_some(),
+        ),
+    ];
     let mut body_top = cy;
-    if scrollable {
-        // Plan revision: no lugar das setas "^ Cima"/"v Baixo", três saltos
-        // nomeados — capa traseira, cartucho e informações — centrados, na
-        // mesma reserva de altura das antigas setas. O destino de cada salto
-        // o caller calcula (ele tem o `ShelfPanelInfo` inteiro).
-        let gap = 6i32;
-        let half = (inner_w as i32 - gap) / 2;
-        let top_row = [
-            (
-                ShelfButton::PanelJump(PanelSection::CapaTraseira),
-                "capa traseira",
-                panel.backcover_img.is_some(),
-            ),
-            (
-                ShelfButton::PanelJump(PanelSection::Cartucho),
-                "cartucho",
-                panel.cartridge_img.is_some(),
-            ),
-        ];
-        for (n, (btn, label, lit)) in top_row.iter().enumerate() {
-            let r = Rect::new(
-                x + n as i32 * (half + gap),
-                body_top,
-                half as u32,
-                scroll_btn_h as u32,
-            );
-            buttons.push((*btn, draw_button(canvas, font, r, label, *lit)));
-        }
-        let info_r = Rect::new(x, body_top + scroll_btn_h + 8, inner_w, scroll_btn_h as u32);
-        buttons.push((
-            ShelfButton::PanelJump(PanelSection::Informacoes),
-            draw_button(
-                canvas,
-                font,
-                info_r,
-                "informações",
-                panel.release.is_some() || !panel.info.is_empty(),
-            ),
-        ));
-        body_top += (scroll_btn_h + 8) * 2;
+    for (n, (btn, label, lit)) in top_row.iter().enumerate() {
+        let r = Rect::new(
+            x + n as i32 * (half + gap),
+            body_top,
+            half as u32,
+            scroll_btn_h as u32,
+        );
+        buttons.push((*btn, draw_button(canvas, font, r, label, *lit)));
     }
+    let info_r = Rect::new(x, body_top + scroll_btn_h + 8, inner_w, scroll_btn_h as u32);
+    buttons.push((
+        ShelfButton::PanelJump(PanelSection::Informacoes),
+        draw_button(
+            canvas,
+            font,
+            info_r,
+            "informações",
+            panel.release.is_some() || !panel.info.is_empty(),
+        ),
+    ));
+    body_top += (scroll_btn_h + 8) * 2;
 
     let mut cy = body_top;
     for block in &blocks[start..] {
         let h = panel_block_height(inner_w, block);
-        if cy + h > body_limit {
+        if cy + h > limit {
             break;
         }
         let block_top = cy;
