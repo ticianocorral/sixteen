@@ -223,12 +223,17 @@ fn main() -> Result<()> {
     }
     // O RA exige a conta conectada (senha na tela de configurações): sem o
     // token Connect não há lógica das conquistas nem envio — só metadados.
-    let ra_on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
-    if ra_on {
-        cab.set_ra_status(Some(RaStatus {
-            hardcore: cfg.ra_hardcore,
-        }));
-    }
+    // Reavaliado a cada volta das configurações: o login acontece com o app
+    // aberto, e selo/estante têm que religar na hora (sem reiniciar).
+    let mut shelf_opts = ShelfOpts {
+        order: args.order,
+        max_frames: None,
+        shot: None,
+        fade_in: None,
+        preset_filter: None,
+        ra: None,
+    };
+    refresh_ra(&cfg, &mut cab, &mut shelf_opts);
 
     // Headless self-check: render one settings screen and exit.
     if let (Some(screen), Some(path)) = (&args.debug_settings, &args.shot) {
@@ -250,20 +255,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut shelf_opts = ShelfOpts {
-        order: args.order,
-        max_frames: None,
-        shot: None,
-        fade_in: None,
-        preset_filter: None,
-        ra: (!cfg.ra_user.is_empty() && cfg.ra_connect.is_some()).then(|| {
-            (
-                cfg.ra_user.clone(),
-                cfg.ra_token.clone(),
-                cfg.ra_connect.clone().unwrap_or_default(),
-            )
-        }),
-    };
     let mut idle_static = idle::RESTING_STATIC;
     let mut core_path = args.core.clone().or_else(default_core_path);
     cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
@@ -303,6 +294,7 @@ fn main() -> Result<()> {
                 if settings::run(&mut plat, &mut cab, &mut cfg)? {
                     break 'app;
                 }
+                refresh_ra(&cfg, &mut cab, &mut shelf_opts);
                 // A core download may have just finished.
                 core_path = args.core.clone().or_else(default_core_path);
                 cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
@@ -323,6 +315,7 @@ fn main() -> Result<()> {
                         if quit {
                             break 'app;
                         }
+                        refresh_ra(&cfg, &mut cab, &mut shelf_opts);
                         // A core download may have just finished.
                         core_path = args.core.clone().or_else(default_core_path);
                         cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
@@ -343,6 +336,7 @@ fn main() -> Result<()> {
                             if quit {
                                 break 'app;
                             }
+                            refresh_ra(&cfg, &mut cab, &mut shelf_opts);
                             core_path = args.core.clone().or_else(default_core_path);
                             cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
                             continue;
@@ -408,6 +402,24 @@ fn main() -> Result<()> {
 /// screen instead of crashing the whole app (which used to happen at
 /// startup, before there was anything to download a core *from*). Returns
 /// `true` if the whole app should quit.
+/// (Re)avalia o estado do RA — selo no queixo e credenciais que a estante
+/// carrega. Chamado no arranque e a cada volta das configurações: o login
+/// por senha acontece com o app aberto, e sem isto o token novo só seria
+/// visto no próximo arranque (o RA "sumia" até reiniciar).
+fn refresh_ra(cfg: &Config, cab: &mut Cabinet, shelf_opts: &mut ShelfOpts) {
+    let on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
+    cab.set_ra_status(on.then_some(RaStatus {
+        hardcore: cfg.ra_hardcore,
+    }));
+    shelf_opts.ra = on.then(|| {
+        (
+            cfg.ra_user.clone(),
+            cfg.ra_token.clone(),
+            cfg.ra_connect.clone().unwrap_or_default(),
+        )
+    });
+}
+
 fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
     loop {
         let m = plat.poll_menu(MenuMode::Nav);

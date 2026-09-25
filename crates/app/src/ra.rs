@@ -162,7 +162,12 @@ fn game_from_json(body: &serde_json::Value) -> Option<RaGame> {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
         })?;
-    let achievements = achievements_json(body).len();
+    let achievements = achievements_json(body)
+        .iter()
+        .filter(|a| {
+            a.get("ID").and_then(|v| v.as_u64()).map(|v| v as u32) != Some(CLIENT_WARNING_ID)
+        })
+        .count();
     Some(RaGame {
         title,
         achievements,
@@ -240,6 +245,12 @@ fn write_cache(hash: &str, text: &str) -> Result<(), String> {
 
 use xperience_ra::runtime::{Achievement, Session};
 
+/// O RA injeta um "achievement" de aviso em toda resposta para clientes
+/// que não estão no registro oficial de emuladores (`CLIENT_WARNING_ID` no
+/// RAWeb; pop em 5 s, `MemAddr` "1=1.300."). Não é conquista: filtrado
+/// antes de ativar, com o texto do aviso logado.
+const CLIENT_WARNING_ID: u32 = 101_000_001;
+
 /// Parse the cached Connect JSON into the runtime's achievement list (id,
 /// texts, points, badge, `MemAddr` definition). Both response shapes (flat
 /// and multiset); achievements whose `MemAddr` is a bare 32-hex digest have
@@ -255,6 +266,14 @@ pub fn parse_achievements(body: &serde_json::Value) -> Vec<Achievement> {
         ) else {
             continue;
         };
+        if id == CLIENT_WARNING_ID {
+            log::warn!(
+                "ra aviso do servidor: {} — {}",
+                title,
+                a.get("Description").and_then(|v| v.as_str()).unwrap_or("")
+            );
+            continue;
+        }
         // A real definition starts with an address ("0xH0042=…", "d0xH…=…");
         // a bare 32-hex string is the redacted hash of one (pre-Connect
         // cache) — nothing to activate.
