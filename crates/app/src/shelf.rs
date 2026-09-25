@@ -285,19 +285,27 @@ fn draw_achievements_view(
                 1,
                 DIM,
                 &format!(
-                    "conquistas {}/{} — {} de {} pontos",
+                    "conquistas {}/{} ({} hardcore) — {} de {} pontos",
                     list.earned.len(),
                     list.achievements.len(),
+                    list.earned.values().filter(|&&hc| hc).count(),
                     got_pts,
                     all_pts
                 ),
             );
             let rows = (h - MARGIN * 2 - 130) / ROW_H;
             let visible = rows.max(1) as usize;
+            // Hardcore em dourado (a cor do prêmio no RA), softcore em
+            // verde — plan revision: "como sei qual tipo ganhei ou já
+            // tenho?".
+            const GOLD: (u8, u8, u8) = (238, 192, 62);
             for (i, a) in list.achievements.iter().enumerate().skip(top).take(visible) {
                 let y = MARGIN + 84 + (i - top) as i32 * ROW_H;
-                let earned = list.earned.contains(&a.id);
-                let (mark, color) = if earned { ("[x]", green) } else { ("[ ]", DIM) };
+                let (mark, color) = match list.earned.get(&a.id) {
+                    Some(true) => ("[HC]", GOLD),
+                    Some(false) => ("[SC]", green),
+                    None => ("[ ]", DIM),
+                };
                 let label = format!("{mark} {} ({} pts)", a.title, a.points);
                 // Badge 18×18 à esquerda (quando a textura já baixou); o
                 // texto abre mão do espaço dele.
@@ -812,8 +820,7 @@ pub fn run(
     // Earned do servidor para os [x] da lista de conquistas (uma tentativa
     // por jogo por visita — o disco cacheia por game id): o worker une no
     // arquivo local `ra-earned/<hash>.json` e devolve o set resultante.
-    let mut ra_earned_worker: Option<Receiver<(String, Option<std::collections::HashSet<u32>>)>> =
-        None;
+    let mut ra_earned_worker: Option<Receiver<(String, Option<crate::ra::EarnedMap>)>> = None;
     let mut ra_earned_tried: HashSet<String> = HashSet::new();
     // The achievements view (plan revision: "mostrar a lista de conquistas
     // e pontuação total dentro da tv com botão de voltar, parecido com o

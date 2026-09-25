@@ -394,14 +394,29 @@ pub fn progress_path(hash: &str) -> std::path::PathBuf {
         .join(format!("{hash}.rap"))
 }
 
-fn load_earned(hash: &str) -> std::collections::HashSet<u32> {
-    std::fs::read_to_string(earned_path(hash))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
+/// As conquistas ganhas de um jogo: id → `true` quando ganha em hardcore,
+/// `false` em softcore (plan revision: "como sei qual tipo ganhei ou já
+/// tenho?"). Persistido em `saves/ra-earned/<hash>.json` como
+/// `{"id": hardcore}` — o formato legado (array de ids, sem modo) é lido
+/// como tudo softcore e corrigido pelo sync do servidor.
+pub type EarnedMap = std::collections::HashMap<u32, bool>;
+
+fn load_earned(hash: &str) -> EarnedMap {
+    let Some(text) = std::fs::read_to_string(earned_path(hash)).ok() else {
+        return EarnedMap::new();
+    };
+    if let Ok(map) = serde_json::from_str::<EarnedMap>(&text) {
+        return map;
+    }
+    // Legado: array plano de ids, sem modo.
+    serde_json::from_str::<Vec<u32>>(&text)
         .unwrap_or_default()
+        .into_iter()
+        .map(|id| (id, false))
+        .collect()
 }
 
-fn save_earned(hash: &str, earned: &std::collections::HashSet<u32>) {
+fn save_earned(hash: &str, earned: &EarnedMap) {
     let path = earned_path(hash);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -420,6 +435,9 @@ pub struct Unlock {
     pub points: u32,
     /// BadgeName — the badge image id on the RA CDN.
     pub badge: String,
+    /// `true` quando o desbloqueio vale hardcore (a sessão inteira define
+    /// o modo — plan revision: "como sei qual tipo ganhei?").
+    pub hardcore: bool,
 }
 
 /// A live RA session for the inserted cartridge. `None` everywhere the
@@ -429,7 +447,7 @@ pub struct Active {
     pub game_title: String,
     pub hardcore: bool,
     session: Session,
-    earned: std::collections::HashSet<u32>,
+    earned: EarnedMap,
     pub user: String,
     pub token: String,
 }
@@ -484,9 +502,15 @@ impl Active {
     pub fn tick(&mut self, ram: &[u8]) -> Vec<Unlock> {
         let mut unlocks = Vec::new();
         for id in self.session.tick(ram) {
-            if !self.earned.insert(id) {
-                continue;
+            // Já ganho permanece ganho — exceto o upgrade softcore →
+            // hardcore: a sessão hardcore re-dispara e o servidor faz o
+            // upgrade no re-award.
+            match self.earned.get(&id) {
+                Some(&true) => continue,
+                Some(&false) if !self.hardcore => continue,
+                _ => {}
             }
+            self.earned.insert(id, self.hardcore);
             save_earned(&self.hash, &self.earned);
             if let Some(a) = self.session.achievements.iter().find(|a| a.id == id) {
                 unlocks.push(Unlock {
@@ -494,6 +518,7 @@ impl Active {
                     title: a.title.clone(),
                     points: a.points,
                     badge: a.badge.clone(),
+                    hardcore: self.hardcore,
                 });
             }
         }
@@ -502,13 +527,18 @@ impl Active {
 
     /// Which achievements are earned (runtime state ∪ local set), for the
     /// pause-book listing.
-    pub fn earned_snapshot(&self) -> (usize, std::collections::HashSet<u32>) {
+    pub fn earned_snapshot(&self) -> (usize, EarnedMap) {
         let total = self.session.achievements.len();
         let mut earned = self.earned.clone();
+        let mut mudou = false;
         for id in self.session.triggered_ids() {
-            if earned.insert(id) {
-                save_earned(&self.hash, &earned);
+            if let std::collections::hash_map::Entry::Vacant(e) = earned.entry(id) {
+                e.insert(self.hardcore);
+                mudou = true;
             }
+        }
+        if mudou {
+            save_earned(&self.hash, &earned);
         }
         (total, earned)
     }
@@ -546,12 +576,27 @@ impl Active {
     /// disco ∪ servidor) no set da sessão, em memória e no disco: a modal
     /// in-game marca conquistas ganhas fora deste app sem depender de a
     /// lista da estante já ter sincronizado.
-    pub fn absorb_earned(&mut self, ids: &std::collections::HashSet<u32>) {
-        let antes = self.earned.len();
-        self.earned.extend(ids.iter().copied());
-        if self.earned.len() != antes {
+    pub fn absorb_earned(&mut self, ids: &EarnedMap) {
+        let antes = (self.earned.len(), self.hardcore_count());
+        for (&id, &hardcore) in ids {
+            match self.earned.get(&id) {
+                Some(true) => {}
+                Some(false) if hardcore => {
+                    self.earned.insert(id, true);
+                }
+                None => {
+                    self.earned.insert(id, hardcore);
+                }
+                _ => {}
+            }
+        }
+        if (self.earned.len(), self.hardcore_count()) != antes {
             save_earned(&self.hash, &self.earned);
         }
+    }
+
+    fn hardcore_count(&self) -> usize {
+        self.earned.values().filter(|&&hardcore| hardcore).count()
     }
 
     /// Fire-and-forget submit of one unlock (worker thread, 2 retries).
@@ -610,7 +655,7 @@ impl Active {
 pub struct ShelfAchievements {
     pub title: String,
     pub achievements: Vec<Achievement>,
-    pub earned: std::collections::HashSet<u32>,
+    pub earned: EarnedMap,
 }
 
 impl ShelfAchievements {
@@ -620,7 +665,7 @@ impl ShelfAchievements {
         let got: u64 = self
             .achievements
             .iter()
-            .filter(|a| self.earned.contains(&a.id))
+            .filter(|a| self.earned.contains_key(&a.id))
             .map(|a| a.points as u64)
             .sum();
         (all, got)
@@ -651,14 +696,10 @@ pub fn shelf_achievements(rom_path: &std::path::Path) -> Option<ShelfAchievement
     if achievements.is_empty() {
         return None;
     }
-    let earned = std::fs::read_to_string(earned_path(&hash))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
     Some(ShelfAchievements {
         title,
         achievements,
-        earned,
+        earned: load_earned(&hash),
     })
 }
 
@@ -912,7 +953,7 @@ fn earned_ids_path(game_id: u64) -> std::path::PathBuf {
 }
 
 /// Os ids de um fetch anterior que já estão no disco.
-fn cached_earned_ids(game_id: u64) -> Option<std::collections::HashSet<u32>> {
+fn cached_earned_ids(game_id: u64) -> Option<EarnedMap> {
     std::fs::read_to_string(earned_ids_path(game_id))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
@@ -921,17 +962,22 @@ fn cached_earned_ids(game_id: u64) -> Option<std::collections::HashSet<u32>> {
 /// Os ids com `DateEarned`/`DateEarnedHardcore` não vazios no mapa
 /// `Achievements` da resposta. Puro de propósito: o teste fixa o formato
 /// real do `API_GetGameInfoAndUserProgress`.
-fn earned_ids_from_json(body: &serde_json::Value) -> std::collections::HashSet<u32> {
-    let mut out = std::collections::HashSet::new();
+fn earned_map_from_json(body: &serde_json::Value) -> EarnedMap {
+    let mut out = EarnedMap::new();
     if let Some(map) = body.get("Achievements").and_then(|a| a.as_object()) {
         for (_k, a) in map {
-            let earned = ["DateEarned", "DateEarnedHardcore"].iter().any(|k| {
-                a.get(*k)
+            let Some(id) = a.get("ID").and_then(|v| v.as_u64()) else {
+                continue;
+            };
+            let dated = |key: &str| {
+                a.get(key)
                     .and_then(|v| v.as_str())
                     .is_some_and(|s| !s.is_empty())
-            });
-            if let (true, Some(id)) = (earned, a.get("ID").and_then(|v| v.as_u64())) {
-                out.insert(id as u32);
+            };
+            if dated("DateEarnedHardcore") {
+                out.insert(id as u32, true);
+            } else if dated("DateEarned") {
+                out.insert(id as u32, false);
             }
         }
     }
@@ -942,11 +988,7 @@ fn earned_ids_from_json(body: &serde_json::Value) -> std::collections::HashSet<u
 /// `API_GetGameInfoAndUserProgress`, o único endpoint vivo que devolve
 /// `DateEarned` por conquista (`GetUserUnlocks`/`GetUserProgress` estão
 /// mortos). Cacheado por game id: a estante nunca pergunta duas vezes.
-pub fn fetch_game_earned(
-    user: &str,
-    token: &str,
-    game_id: u64,
-) -> Result<std::collections::HashSet<u32>, String> {
+pub fn fetch_game_earned(user: &str, token: &str, game_id: u64) -> Result<EarnedMap, String> {
     let resp = agent()
         .get(&format!(
             "{API_BASE}/API/API_GetGameInfoAndUserProgress.php?g={game_id}&u={}&y={}",
@@ -957,7 +999,7 @@ pub fn fetch_game_earned(
         .call()
         .map_err(|e| format!("rede: {e}"))?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
-    let earned = earned_ids_from_json(&body);
+    let earned = earned_map_from_json(&body);
     let path = earned_ids_path(game_id);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -971,14 +1013,22 @@ pub fn fetch_game_earned(
 /// Une os ids ganhos no servidor no arquivo local (`ra-earned/<hash>.json`):
 /// o que foi conquistado em outro lugar passa a valer aqui — aparece marcado
 /// na lista e a sessão nunca re-submete. Devolve o set resultante.
-fn merge_server_earned(
-    hash: &str,
-    server: &std::collections::HashSet<u32>,
-) -> std::collections::HashSet<u32> {
+fn merge_server_earned(hash: &str, server: &EarnedMap) -> EarnedMap {
     let mut all = load_earned(hash);
-    let antes = all.len();
-    all.extend(server.iter().copied());
-    if all.len() != antes {
+    let antes = (all.len(), all.values().filter(|&&hc| hc).count());
+    for (&id, &hardcore) in server {
+        match all.get(&id) {
+            Some(true) => {}
+            Some(false) if hardcore => {
+                all.insert(id, true);
+            }
+            None => {
+                all.insert(id, hardcore);
+            }
+            _ => {}
+        }
+    }
+    if (all.len(), all.values().filter(|&&hc| hc).count()) != antes {
         save_earned(hash, &all);
     }
     all
@@ -992,7 +1042,7 @@ pub fn fetch_game_earned_worker(
     user: &str,
     token: &str,
     hash: &str,
-) -> std::sync::mpsc::Receiver<(String, Option<std::collections::HashSet<u32>>)> {
+) -> std::sync::mpsc::Receiver<(String, Option<EarnedMap>)> {
     let (tx, rx) = std::sync::mpsc::channel();
     let (user, token, hash) = (user.to_string(), token.to_string(), hash.to_string());
     std::thread::spawn(move || {
@@ -1251,9 +1301,12 @@ mod tests {
                 "96025": {"ID": 96025, "Title": "Combo Finish!", "DateEarned": null}
             }
         });
-        let ids = earned_ids_from_json(&body);
-        assert_eq!(ids, std::collections::HashSet::from([95922, 95999]));
-        assert_eq!(earned_ids_from_json(&serde_json::json!({})).len(), 0);
+        let earned = earned_map_from_json(&body);
+        // Softcore (só DateEarned) vira false; hardcore vira true.
+        assert_eq!(earned.get(&95922), Some(&false));
+        assert_eq!(earned.get(&95999), Some(&true));
+        assert_eq!(earned.len(), 2);
+        assert!(earned_map_from_json(&serde_json::json!({})).is_empty());
     }
 
     #[test]

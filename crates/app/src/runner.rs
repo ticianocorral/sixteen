@@ -1875,13 +1875,21 @@ pub fn run_game(
                 UiEvent::OpenAchievementsModal if powered => {
                     let Some(ra) = &ra_session else { continue };
                     let (total, earned) = ra.earned_snapshot();
+                    // Cada linha diz o modo do ganho: [HC] hardcore,
+                    // [SC] softcore, [ ] não ganha (plan revision: "como
+                    // sei qual tipo ganhei ou já tenho?").
                     let rows: Vec<(String, bool)> = ra
                         .achievements()
                         .iter()
                         .map(|a| {
+                            let modo = match earned.get(&a.id) {
+                                Some(true) => " [HC]",
+                                Some(false) => " [SC]",
+                                None => "",
+                            };
                             (
-                                format!("{} ({} pts)", a.title, a.points),
-                                earned.contains(&a.id),
+                                format!("{} ({} pts){}", a.title, a.points, modo),
+                                earned.contains_key(&a.id),
                             )
                         })
                         .collect();
@@ -2150,6 +2158,11 @@ pub fn run_game(
                             "CONQUISTA DESBLOQUEADA",
                             &unlock.title,
                             &format!("+{} pontos", unlock.points),
+                            if unlock.hardcore {
+                                "modo hardcore"
+                            } else {
+                                "modo softcore"
+                            },
                         ],
                         Some(osd_badge_id(&unlock.badge)),
                         OSD_UNLOCK_TTL,
