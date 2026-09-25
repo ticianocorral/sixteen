@@ -502,6 +502,10 @@ pub enum ShelfButton {
     /// the enlarged view (plan revision: "ao clicar no back cover
     /// possibilitar mostrar em tamanho maior, com botão de fechar").
     Backcover,
+    /// O cartucho desenhado na aba dele (plan revision: "colocar zoom igual
+    /// ao backcover no cartucho") — mesmo comportamento: clique abre a
+    /// arte ampliada, "voltar"/Back fecha.
+    Cartridge,
     /// Toggle the focused game's favorite marker (plan revision: "adicionar
     /// marcador de favorito nos jogos") — drawn by `draw_shelf_panel` when
     /// `ShelfPanelInfo::favorite` is `Some`.
@@ -4564,6 +4568,16 @@ fn draw_shelf_panel(
                 canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
                 let _ = canvas.draw_rect(hit);
                 buttons.push((ShelfButton::Backcover, hit));
+            }
+        }
+        // O cartucho ganha o mesmo tratamento do back cover (plan revision:
+        // "colocar zoom igual ao backcover no cartucho").
+        if let (PanelBlock::Image(id, _), Some(cc)) = (block, panel.cartridge_img) {
+            if *id == cc {
+                let hit = Rect::new(x, block_top, inner_w, h.max(1) as u32);
+                canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
+                let _ = canvas.draw_rect(hit);
+                buttons.push((ShelfButton::Cartridge, hit));
             }
         }
     }

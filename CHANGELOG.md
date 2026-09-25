@@ -76,6 +76,10 @@ direto em tela cheia.
   ativa, em qualquer resolução (antes, em telas grandes tudo empilhava e
   os botões nem apareciam). Clicar de novo em "informações" avança campo
   a campo quando a lista transborda; aba sem conteúdo mostra aviso dim.
+- Zoom no cartucho (plan revision: "colocar zoom igual ao backcover no
+  cartucho"): o cartucho na aba dele ganhou borda e clique, abrindo a
+  arte ampliada no tubo com "voltar"/Back para fechar — mesmo fluxo do
+  back cover.
 - Cadastro de botões do controle na tela de configurações ("controles"):
   cada ação agora mostra `tecla | controle`, e clicar na linha aceita a
   primeira entrada que chegar — tecla do teclado **ou** botão do controle

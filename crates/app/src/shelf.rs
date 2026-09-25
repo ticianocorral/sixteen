@@ -680,6 +680,7 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
                 // header now, handled above.
                 Some(ShelfButton::PanelJump(_))
                 | Some(ShelfButton::Backcover)
+                | Some(ShelfButton::Cartridge)
                 | Some(ShelfButton::ToggleFavorite)
                 | Some(ShelfButton::Refresh)
                 | Some(ShelfButton::ShelfAchievements)
@@ -731,7 +732,11 @@ pub fn run(
     // possibilitar mostrar em tamanho maior"): Some = the "voltar" button's
     // screen-local rect — the zoom replaces the tube's content until
     // dismissed (the flat panel stays).
-    let mut zoom_close: Option<(i32, i32, u32, u32)> = None;
+    // A arte ampliada (zoom): o id da imagem no cabinet + o rect do botão
+    // "voltar" do frame atual. Antes era só do back cover (plan revision:
+    // "colocar zoom igual ao backcover no cartucho" — agora os dois).
+    let mut zoom_close: Option<u64> = None;
+    let mut zoom_rect: (i32, i32, u32, u32) = (0, 0, 1, 1);
     let mut tried_logo: HashSet<String> = HashSet::new();
     let mut tried_cartridge: HashSet<String> = HashSet::new();
     let mut tried_backcover: HashSet<String> = HashSet::new();
@@ -998,13 +1003,11 @@ pub fn run(
                 }
                 if let Some((x, y)) = m.click {
                     let (ox, oy) = cab.window_to_output(x, y);
-                    if let Some(close) = zoom_close {
-                        if cab
-                            .hit_screen_point(ox, oy)
-                            .is_some_and(|(lx, ly)| in_rect(lx, ly, close))
-                        {
-                            zoom_close = None;
-                        }
+                    if cab
+                        .hit_screen_point(ox, oy)
+                        .is_some_and(|(lx, ly)| in_rect(lx, ly, zoom_rect))
+                    {
+                        zoom_close = None;
                     }
                 }
             } else if ach_view {
@@ -1279,7 +1282,33 @@ pub fn run(
                                             if let Ok((w, h, rgba)) = decode_art_scaled(&path, 2048)
                                             {
                                                 cab.set_image(bid, w, h, &rgba);
-                                                zoom_close = Some((0, 0, 1, 1));
+                                                zoom_close = Some(bid);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ShelfButton::Cartridge => {
+                                // Zoom do cartucho, igual ao do back cover
+                                // (plan revision): re-decodifica a arte em
+                                // resolução cheia e abre ampliado no tubo.
+                                let picked = if in_fav {
+                                    favorites.get(fav_idx)
+                                } else if in_recent {
+                                    recent.get(recent_idx)
+                                } else {
+                                    view.get(sel)
+                                };
+                                if let Some(e) = picked {
+                                    let cid = cartridge_id(&e.rom.sha1);
+                                    if cab.has_image(cid) {
+                                        if let Some(path) =
+                                            find_local_art(&cartridge_dir, &e.rom.path)
+                                        {
+                                            if let Ok((w, h, rgba)) = decode_art_scaled(&path, 2048)
+                                            {
+                                                cab.set_image(cid, w, h, &rgba);
+                                                zoom_close = Some(cid);
                                             }
                                         }
                                     }
@@ -1950,12 +1979,11 @@ pub fn run(
         // Back cover enlarged: it replaces the tube's content while up —
         // drawn through the same warp, on the TV — and the flat panel
         // keeps showing beside it.
-        if zoom_close.is_some() {
+        if let Some(img) = zoom_close {
             match focused {
-                Some(e) => {
-                    let bid = backcover_id(&e.rom.sha1);
-                    let r = cab.frame_image_zoom(bid, "voltar");
-                    zoom_close = Some((r.x(), r.y(), r.width(), r.height()));
+                Some(_) => {
+                    let r = cab.frame_image_zoom(img, "voltar");
+                    zoom_rect = (r.x(), r.y(), r.width(), r.height());
                 }
                 None => zoom_close = None,
             }
@@ -2044,7 +2072,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
                     // The history screen's panel never has any per-game
                     // content, so it never scrolls (and never has a back
                     // cover to enlarge).
-                    ShelfButton::Backcover => {}
+                    ShelfButton::Backcover | ShelfButton::Cartridge => {}
                     ShelfButton::ToggleFavorite => {}
                     ShelfButton::ShelfAchievements => {}
                     ShelfButton::PanelJump(_) => {}
