@@ -1476,7 +1476,7 @@ pub fn run(
                                                 return;
                                             };
                                             let _ = ev_tx.send(crate::manual::ManualEv::Ready {
-                                                sha1: open_sha1,
+                                                sha1: open_sha1.clone(),
                                                 pages,
                                             });
                                             for page in req_rx {
@@ -1485,6 +1485,7 @@ pub fn run(
                                                     Ok(Some(img)) => {
                                                         let _ = ev_tx.send(
                                                             crate::manual::ManualEv::Page {
+                                                                sha1: open_sha1.clone(),
                                                                 page,
                                                                 w: img.w,
                                                                 h: img.h,
@@ -1495,6 +1496,7 @@ pub fn run(
                                                     _ => {
                                                         let _ = ev_tx.send(
                                                             crate::manual::ManualEv::Page {
+                                                                sha1: open_sha1.clone(),
                                                                 page,
                                                                 w: 0,
                                                                 h: 0,
@@ -1925,14 +1927,24 @@ pub fn run(
                     }
                     live_channels.push(rx);
                 }
-                Ok(crate::manual::ManualEv::Page { page, w, h, rgba }) => {
-                    if let Some(m) = manual.as_ref() {
-                        if w > 0 {
-                            cab.set_image(manual_page_id(&m.sha1, page), w, h, &rgba);
-                        }
+                Ok(crate::manual::ManualEv::Page {
+                    sha1,
+                    page,
+                    w,
+                    h,
+                    rgba,
+                }) => {
+                    // A textura é registrada SEMPRE (preview incluído) — o
+                    // registro anterior dependia do leitor estar aberto e
+                    // descartava a página do preview (plan revision: "a
+                    // primeira pgina nao aparece no painel").
+                    if w > 0 {
+                        cab.set_image(manual_page_id(&sha1, page), w, h, &rgba);
                     }
                     if let Some(m) = manual.as_mut() {
-                        m.requested.insert(page);
+                        if m.sha1 == sha1 {
+                            m.requested.insert(page);
+                        }
                     }
                     live_channels.push(rx);
                 }
@@ -2055,6 +2067,7 @@ pub fn run(
                             if let Ok(Some(img)) = crate::manual::render_page(&preview_path, 1, 512)
                             {
                                 let _ = ev_tx.send(crate::manual::ManualEv::Page {
+                                    sha1: preview_sha1.clone(),
                                     page: 1,
                                     w: img.w,
                                     h: img.h,

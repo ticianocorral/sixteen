@@ -32,6 +32,7 @@ pub enum ManualEv {
         pages: usize,
     },
     Page {
+        sha1: String,
         page: usize,
         w: u32,
         h: u32,
