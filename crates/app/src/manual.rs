@@ -75,15 +75,23 @@ pub fn render_page(path: &Path, page: usize, max: u32) -> Result<Option<PageImag
 /// onde `bytes` é um JPEG quando o filtro é `DCTDecode` (o `image` resolve)
 /// e samples crus 8bpc quando `FlateDecode` (o `raw_to_image` reconstrói).
 fn largest_page_image(doc: &PdfDocument, page_id: lopdf::ObjectId) -> Option<(i64, i64, Vec<u8>)> {
-    let page = doc.get_object(page_id).ok()?;
-    let resources = get_resolve(doc, page, b"Resources")?;
+    // A /Resources pode estar HERDADA do nó /Pages pai (padrão em PDFs de
+    // scanner) — sobe a árvore procurando; e as imagens costumam morar
+    // todas num dicionário compartilhado, com o content stream da página
+    // escolhendo a sua (`/Im0 Do`). Só cai no "maior do dicionário" quando
+    // o content não nomeia nada.
+    let resources = page_resources(doc, page_id)?;
     let xobjects = get_resolve(doc, &resources, b"XObject")?;
     let Object::Dictionary(xdict) = &xobjects else {
         return None;
     };
+    let invoked = content_image_names(doc, page_id);
 
     let mut best: Option<(i64, i64, Vec<u8>)> = None;
-    for (_name, obj) in xdict.iter() {
+    for (name, obj) in xdict.iter() {
+        if !invoked.is_empty() && !invoked.contains(&name.to_vec()) {
+            continue;
+        }
         let Some(obj) = resolve(doc, obj) else {
             continue;
         };
@@ -119,6 +127,63 @@ fn largest_page_image(doc: &PdfDocument, page_id: lopdf::ObjectId) -> Option<(i6
         }
     }
     best
+}
+
+/// A /Resources da página, subindo a árvore /Parent quando herdada.
+fn page_resources(doc: &PdfDocument, page_id: lopdf::ObjectId) -> Option<Object> {
+    let mut cur = doc.get_object(page_id).ok()?.clone();
+    for _ in 0..16 {
+        if let Some(res) = get_resolve(doc, &cur, b"Resources") {
+            return Some(res);
+        }
+        cur = get_resolve(doc, &cur, b"Parent")?;
+    }
+    None
+}
+
+/// Os nomes de XObject que o content da página desenha (`/Nome Do`), em
+/// ordem — é o que diz qual imagem é a PÁGINA quando o dicionário de
+/// recursos é compartilhado por todas.
+fn content_image_names(doc: &PdfDocument, page_id: lopdf::ObjectId) -> Vec<Vec<u8>> {
+    // lopdf devolve a LISTA de content streams da página — concatena os
+    // decodificados e procura os operadores `Do`.
+    let contents = doc.get_page_contents(page_id);
+    let mut contents_all = Vec::new();
+    for (num, gen) in contents {
+        let Ok(obj) = doc.get_object((num, gen)) else {
+            continue;
+        };
+        let Ok(stream) = obj.as_stream() else {
+            continue;
+        };
+        if let Some(data) = stream_data(doc, stream) {
+            contents_all.extend(data);
+        }
+    }
+    let contents = contents_all;
+    let mut names = Vec::new();
+    let mut i = 0;
+    while i + 4 <= contents.len() {
+        if contents[i] == b'/' {
+            // nome = '/' + token até espaço; procura o operador `Do` depois.
+            let name_start = i + 1;
+            let mut j = name_start;
+            while j < contents.len() && !contents[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            let mut k = j;
+            while k < contents.len() && contents[k].is_ascii_whitespace() {
+                k += 1;
+            }
+            if contents.len() >= k + 2 && &contents[k..k + 2] == b"Do" {
+                names.push(contents[name_start..j].to_vec());
+                i = k + 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    names
 }
 
 /// Os bytes decodificados da stream como o `image` os entende: JPEG
