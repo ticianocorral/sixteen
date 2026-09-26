@@ -487,6 +487,10 @@ pub enum PanelSection {
     CapaTraseira,
     Cartucho,
     Informacoes,
+    /// A primeira página do manual (plan revision: "mostrar primeira
+    /// pagina do manual igual mostra o back cover e cartucho / ao clicar
+    /// abrir nele visualização").
+    Manual,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -728,10 +732,10 @@ pub struct ShelfPanelInfo {
     /// draws a "Conquistas" button (`ShelfButton::ShelfAchievements`)
     /// between "Favoritar" and "Configurações".
     pub achievements: bool,
-    /// Há manual em PDF para o jogo focused (plan revision: "criar botão
-    /// no painel para abrir o manual") — desenha o botão "Manual" na
-    /// pilha, entre "Conquistas" e "Configurações".
-    pub has_manual: bool,
+    /// A primeira página do manual em PDF (plan revision: o corpo da aba
+    /// manual a mostra como as artes, e o clique nela abre o leitor).
+    /// `None` = sem manual para o jogo.
+    pub manual_first_page: Option<u64>,
     /// O motivo pelo qual o botão Conquistas aparece **desativado** (plan
     /// revision: "avisar o usuário com tooltip no botão conquistas,
     /// mostrar mas deixar desativado") — o RA marcou o hash como versão
@@ -4366,16 +4370,10 @@ fn draw_shelf_panel(
     let btn_h = (GLYPH_H + 12) as i32;
     let back_rect = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
     let settings_rect = Rect::new(x, back_rect.y() - 8 - btn_h, inner_w, btn_h as u32);
-    // A pilha cresce para cima: Manual (quando há PDF), Conquistas
-    // (quando o RA identificou) e Favoritar — cada um só quando existe,
-    // e o corte do corpo acompanha o botão de cima de verdade.
-    let panel_has_manual = panel.is_some_and(|p| p.has_manual);
+    // A pilha cresce para cima: Conquistas (quando o RA identificou) e
+    // Favoritar — cada um só quando existe, e o corte do corpo acompanha
+    // o botão de cima de verdade. O Manual vive nas abas do topo.
     let mut top = settings_rect.y();
-    let manual_rect = panel_has_manual.then(|| {
-        let r = Rect::new(x, top - 8 - btn_h, inner_w, btn_h as u32);
-        top = r.y();
-        r
-    });
     let ach_rect = panel_achievements.then(|| {
         let r = Rect::new(x, top - 8 - btn_h, inner_w, btn_h as u32);
         top = r.y();
@@ -4396,12 +4394,6 @@ fn draw_shelf_panel(
             draw_button(canvas, font, settings_rect, "Configurações", true),
         ),
     ];
-    if let Some(manual_r) = manual_rect {
-        buttons.push((
-            ShelfButton::Manual,
-            draw_button(canvas, font, manual_r, "Manual", true),
-        ));
-    }
     if let Some(ach_r) = ach_rect {
         // Bloqueado (RA marcou o hash como versão não suportada): botão
         // apagado com o motivo no rótulo e SEM hit — clicar não faz nada
@@ -4490,16 +4482,22 @@ fn draw_shelf_panel(
             None => info_blocks.push(PanelBlock::Field(label, value)),
         }
     }
+    let manual_blocks: Vec<PanelBlock> = panel
+        .manual_first_page
+        .map(|id| vec![PanelBlock::Image(id, 280)])
+        .unwrap_or_default();
     let (blocks, empty_label): (Vec<PanelBlock>, &str) = match panel.section {
         PanelSection::CapaTraseira => (capa_blocks, "sem capa traseira"),
         PanelSection::Cartucho => (cart_blocks, "sem cartucho"),
         PanelSection::Informacoes => (info_blocks, "sem informações"),
+        PanelSection::Manual => (manual_blocks, "sem manual"),
     };
 
     let has = |s: PanelSection| match s {
         PanelSection::CapaTraseira => panel.backcover_img.is_some(),
         PanelSection::Cartucho => panel.cartridge_img.is_some(),
         PanelSection::Informacoes => panel.release.is_some() || !panel.info.is_empty(),
+        PanelSection::Manual => panel.manual_first_page.is_some(),
     };
 
     // A aba ativa transborda? (só "informações", com muitos campos,
@@ -4524,7 +4522,10 @@ fn draw_shelf_panel(
     let gap = 6i32;
     let half = (inner_w as i32 - gap) / 2;
     let active = panel.section;
-    let top_row = [
+    // Quatro abas em duas fileiras: capa traseira | cartucho, depois
+    // informações | manual (plan revision: "mostra botao do manual junto
+    // com os botões de cartucho, info etc").
+    let tabs = [
         (
             ShelfButton::PanelJump(PanelSection::CapaTraseira),
             "capa traseira",
@@ -4535,31 +4536,32 @@ fn draw_shelf_panel(
             "cartucho",
             active == PanelSection::Cartucho || has(PanelSection::Cartucho),
         ),
+        (
+            ShelfButton::PanelJump(PanelSection::Informacoes),
+            "informações",
+            active == PanelSection::Informacoes || has(PanelSection::Informacoes),
+        ),
+        (
+            ShelfButton::PanelJump(PanelSection::Manual),
+            "manual",
+            active == PanelSection::Manual || has(PanelSection::Manual),
+        ),
     ];
     // Respiro entre a logo/título e a fileira de botões: sem ele os botões
     // nascem colados na borda de baixo da logo (plan revision: "baixar um
     // pouco para os botões não ficarem sobrepostos com a logo").
     let mut body_top = cy + 10;
-    for (n, (btn, label, lit)) in top_row.iter().enumerate() {
+    for (n, (btn, label, lit)) in tabs.iter().enumerate() {
+        let row = (n / 2) as i32;
+        let col = (n % 2) as i32;
         let r = Rect::new(
-            x + n as i32 * (half + gap),
-            body_top,
+            x + col * (half + gap),
+            body_top + row * (scroll_btn_h + 8),
             half as u32,
             scroll_btn_h as u32,
         );
         buttons.push((*btn, draw_button(canvas, font, r, label, *lit)));
     }
-    let info_r = Rect::new(x, body_top + scroll_btn_h + 8, inner_w, scroll_btn_h as u32);
-    buttons.push((
-        ShelfButton::PanelJump(PanelSection::Informacoes),
-        draw_button(
-            canvas,
-            font,
-            info_r,
-            "informações",
-            active == PanelSection::Informacoes || has(PanelSection::Informacoes),
-        ),
-    ));
     body_top += (scroll_btn_h + 8) * 2;
 
     let mut cy = body_top;
@@ -4604,6 +4606,16 @@ fn draw_shelf_panel(
                 canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
                 let _ = canvas.draw_rect(hit);
                 buttons.push((ShelfButton::Cartridge, hit));
+            }
+        }
+        // E a primeira página do manual (plan revision: "ao clicar abrir
+        // nele visualização") — abre o leitor de páginas.
+        if let (PanelBlock::Image(id, _), Some(mp)) = (block, panel.manual_first_page) {
+            if *id == mp {
+                let hit = Rect::new(x, block_top, inner_w, h.max(1) as u32);
+                canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
+                let _ = canvas.draw_rect(hit);
+                buttons.push((ShelfButton::Manual, hit));
             }
         }
     }

@@ -28,6 +28,7 @@ pub struct PageImage {
 /// renderizada sob demanda (`w == 0` = página sem imagem embutida).
 pub enum ManualEv {
     Ready {
+        sha1: String,
         pages: usize,
     },
     Page {

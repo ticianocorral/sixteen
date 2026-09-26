@@ -852,8 +852,13 @@ pub fn run(
         requested: HashSet<usize>,
     }
     let mut manual: Option<ManualState> = None;
-    let mut manual_rx: Option<Receiver<crate::manual::ManualEv>> = None;
+    // Vários workers podem estar vivos (preview da 1ª página por jogo +
+    // o leitor aberto); todos falam ManualEv.
+    let mut manual_channels: Vec<Receiver<crate::manual::ManualEv>> = Vec::new();
     let mut manual_tx: Option<std::sync::mpsc::Sender<usize>> = None;
+    // Contagem de páginas por jogo (do preview) — o leitor nasce com ela.
+    let mut manual_pages: HashMap<String, usize> = HashMap::new();
+    let mut manual_preview_tried: HashSet<String> = HashSet::new();
     let mut manual_rects: (ViewBtn, ViewBtn, ViewBtn) = ((0, 0, 1, 1), (0, 0, 1, 1), (0, 0, 1, 1));
     // O PDF do jogo focused, resolvido uma vez por jogo (fs por frame não).
     let manual_dir = crate::dirs::assets_dir().join("manual");
@@ -1462,6 +1467,7 @@ pub fn run(
                                         manual_paths.get(&e.rom.sha1).cloned().flatten()
                                     {
                                         let thread_path = path.clone();
+                                        let open_sha1 = e.rom.sha1.clone();
                                         let (ev_tx, ev_rx) = mpsc::channel();
                                         let (req_tx, req_rx) = std::sync::mpsc::channel();
                                         std::thread::spawn(move || {
@@ -1469,8 +1475,10 @@ pub fn run(
                                             let Ok(pages) = crate::manual::page_count(&path) else {
                                                 return;
                                             };
-                                            let _ = ev_tx
-                                                .send(crate::manual::ManualEv::Ready { pages });
+                                            let _ = ev_tx.send(crate::manual::ManualEv::Ready {
+                                                sha1: open_sha1,
+                                                pages,
+                                            });
                                             for page in req_rx {
                                                 match crate::manual::render_page(&path, page, 2048)
                                                 {
@@ -1499,11 +1507,14 @@ pub fn run(
                                         });
                                         manual = Some(ManualState {
                                             sha1: e.rom.sha1.clone(),
-                                            pages: 0,
+                                            pages: manual_pages
+                                                .get(&e.rom.sha1)
+                                                .copied()
+                                                .unwrap_or(0),
                                             page: 1,
                                             requested: HashSet::new(),
                                         });
-                                        manual_rx = Some(ev_rx);
+                                        manual_channels.push(ev_rx);
                                         manual_tx = Some(req_tx);
                                     }
                                 }
@@ -1902,33 +1913,35 @@ pub fn run(
         // Manual (plan revision): eventos do worker — contagem ao abrir e
         // páginas renderizadas viram texturas; a página corrente (e a
         // seguinte, de brincadeira) são pedidas assim que faltam.
-        while let Some(rx) = manual_rx.take() {
-            let ev = match rx.try_recv() {
-                Ok(ev) => ev,
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    manual_rx = Some(rx);
-                    break;
-                }
-                // O worker morreu (fechou sem página nenhuma) — sem canal.
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
-            };
-            manual_rx = Some(rx);
-            match ev {
-                crate::manual::ManualEv::Ready { pages } => {
+        let mut live_channels = Vec::with_capacity(manual_channels.len());
+        for rx in manual_channels.drain(..) {
+            match rx.try_recv() {
+                Ok(crate::manual::ManualEv::Ready { sha1, pages }) => {
+                    manual_pages.insert(sha1.clone(), pages);
                     if let Some(m) = manual.as_mut() {
-                        m.pages = pages;
+                        if m.sha1 == sha1 {
+                            m.pages = pages;
+                        }
                     }
+                    live_channels.push(rx);
                 }
-                crate::manual::ManualEv::Page { page, w, h, rgba } => {
-                    if let Some(m) = manual.as_mut() {
+                Ok(crate::manual::ManualEv::Page { page, w, h, rgba }) => {
+                    if let Some(m) = manual.as_ref() {
                         if w > 0 {
                             cab.set_image(manual_page_id(&m.sha1, page), w, h, &rgba);
                         }
+                    }
+                    if let Some(m) = manual.as_mut() {
                         m.requested.insert(page);
                     }
+                    live_channels.push(rx);
                 }
+                // O worker morreu (fechou sem página nenhuma) — sem canal.
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => live_channels.push(rx),
             }
         }
+        manual_channels = live_channels;
         if let (Some(m), Some(tx)) = (manual.as_mut(), manual_tx.as_ref()) {
             if m.pages > 0 && !m.requested.contains(&m.page) {
                 m.requested.insert(m.page);
@@ -2025,6 +2038,33 @@ pub fn run(
                     .entry(e.rom.sha1.clone())
                     .or_insert_with(|| find_local_manual(&manual_dir, &e.rom.path))
                     .clone();
+                // Preview: contagem + primeira página decodificadas uma vez
+                // por jogo — a aba manual as mostra como as artes mostram
+                // capa/cartucho (plan revision).
+                if let Some(preview_path) = &manual_path {
+                    if manual_preview_tried.insert(e.rom.sha1.clone()) {
+                        let (ev_tx, ev_rx) = mpsc::channel();
+                        let preview_path = preview_path.clone();
+                        let preview_sha1 = e.rom.sha1.clone();
+                        std::thread::spawn(move || {
+                            let pages = crate::manual::page_count(&preview_path).unwrap_or(0);
+                            let _ = ev_tx.send(crate::manual::ManualEv::Ready {
+                                sha1: preview_sha1.clone(),
+                                pages,
+                            });
+                            if let Ok(Some(img)) = crate::manual::render_page(&preview_path, 1, 512)
+                            {
+                                let _ = ev_tx.send(crate::manual::ManualEv::Page {
+                                    page: 1,
+                                    w: img.w,
+                                    h: img.h,
+                                    rgba: img.rgba,
+                                });
+                            }
+                        });
+                        manual_channels.push(ev_rx);
+                    }
+                }
                 let ra_state = ra_games.get(&e.rom.sha1);
                 ShelfPanelInfo {
                     title: e.title().into_owned(),
@@ -2044,7 +2084,9 @@ pub fn run(
                         .and_then(|g| g.as_ref())
                         .filter(|g| g.unsupported)
                         .map(|_| "versão sem suporte".to_string()),
-                    has_manual: manual_path.is_some(),
+                    manual_first_page: manual_path
+                        .is_some()
+                        .then(|| manual_page_id(&e.rom.sha1, 1)),
                     award_img,
                 }
             }
@@ -2060,7 +2102,7 @@ pub fn run(
                 favorite: None,
                 achievements: false,
                 achievements_reason: None,
-                has_manual: false,
+                manual_first_page: None,
                 award_img: None,
             },
         };
@@ -2418,7 +2460,7 @@ fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
         section: PanelSection::CapaTraseira,
         achievements_reason: None,
-        has_manual: false,
+        manual_first_page: None,
         title: String::new(),
         logo_img: None,
         cartridge_img: None,

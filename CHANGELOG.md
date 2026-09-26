@@ -62,13 +62,16 @@ direto em tela cheia.
 
 ### Adicionado
 - Manuais em PDF (plan revision: "colocar suporte para abrir manual pdf /
-  criar pasta para colocar manual / criar botão no painel para abrir o
-  manual / abrir na tv como o back cover com opção de ver as paginas"):
-  coloque `assets/manual/<nome da rom>.pdf` — o painel ganha um botão
-  **Manual** (só quando existe PDF), que abre o documento na TV página a
-  página, com `‹ página`/`página ›`, `voltar` e Back do controle. Manuais
-  escaneados (imagem por página, o padrão dos packs) são renderizados
-  nítidos; página vetorial sem imagem mostra "página não disponível".
+  criar pasta para colocar manual / mostrar botao do manual junto com os
+  botões de cartucho, info etc / mostrar primeira pagina do manual igual
+  mostra o back cover e cartucho / ao clicar abrir nele visualização"):
+  coloque `assets/manual/<nome da rom>.pdf` — o painel ganha uma quarta
+  aba **manual** ao lado de capa traseira/cartucho/informações, cujo
+  corpo mostra a primeira página do documento (igual às artes); clicar
+  nela abre o leitor na TV, página a página, com `‹ página`/`página ›`,
+  `voltar` e Back do controle. Manuais escaneados (imagem por página, o
+  padrão dos packs) são renderizados nítidos; página vetorial sem
+  imagem mostra "página não disponível".
 - Notificação sonora ao ganhar uma conquista (plan revision): um chime
   ascendente sintetizado no próprio repositório (arpejo C5-E5-G5-C6, 0,9 s,
   mesmo formato dos foley), tocado sobre o áudio do jogo no momento do
