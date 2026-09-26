@@ -11,7 +11,7 @@
 //! outside the tube's warp, like the in-game side panel — so this module only
 //! ever lays out the grid inside `Cabinet::shelf_screen_size`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
@@ -200,6 +200,110 @@ fn wheel_id(sha1: &str) -> u64 {
 /// can't collide with `cover_id`/`wheel_id`.
 fn cartridge_id(sha1: &str) -> u64 {
     wheel_id(sha1) ^ 0x9E37_79B9_7F4A_7C15
+}
+
+/// Texture key de uma página do manual em PDF (plan revision: "colocar
+/// suporte para abrir manual pdf") — hash do sha1 + página com o bit alto
+/// da família badge (nunca colide com as chaves de arte do jogo).
+fn manual_page_id(sha1: &str, page: usize) -> u64 {
+    format!("{sha1}:{page}")
+        .bytes()
+        .fold(0x9E37_79B9_7F4A_7C15u64, |mut acc, b| {
+            acc ^= b as u64;
+            acc = acc.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
+            acc ^= acc >> 33;
+            acc
+        })
+        | (1 << 62)
+}
+
+/// O PDF do manual da ROM em `dir` (`assets/manual/<nome da rom>.pdf`),
+/// com o mesmo casamento por nome/variantes da arte local.
+fn find_local_manual(dir: &Path, rom_path: &str) -> Option<PathBuf> {
+    let stem = Path::new(rom_path).file_stem()?.to_str()?;
+    let mut candidates = vec![stem.to_string()];
+    let mut cur = stem.to_string();
+    while cur.ends_with(')') {
+        match cur.rfind(" (") {
+            Some(idx) => {
+                cur.truncate(idx);
+                candidates.push(cur.clone());
+            }
+            None => break,
+        }
+    }
+    for cand in candidates {
+        let p = dir.join(format!("{cand}.pdf"));
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// `(x, y, w, h)` em coordenadas de tela — o rect de um botão do leitor.
+type ViewBtn = (i32, i32, u32, u32);
+
+/// O leitor de manual na TV (plan revision: "abrir na tv como o back cover
+/// com opção de ver as paginas") — página ampliada + `‹`/`›` + `voltar`.
+/// Devolve os rects dos três botões para o hit-test do frame seguinte.
+fn draw_manual_view(
+    d: &mut Screen,
+    sha1: &str,
+    page: usize,
+    pages: usize,
+    page_ready: bool,
+) -> (ViewBtn, ViewBtn, ViewBtn) {
+    let (w, h) = d.size();
+    let (w, h) = (w as i32, h as i32);
+    let btn = (110u32, 34u32);
+    let voltar = (w / 2 - btn.0 as i32 / 2, h - 64, btn.0, btn.1);
+    let prev = (w / 2 - btn.0 as i32 - 90, h - 64, btn.0, btn.1);
+    let next = (w / 2 + 90, h - 64, btn.0, btn.1);
+
+    d.text(
+        MARGIN,
+        MARGIN,
+        2,
+        TEXT,
+        &format!(
+            "manual — página {page} de {pages}",
+            pages = if pages > 0 {
+                pages.to_string()
+            } else {
+                "…".to_string()
+            }
+        ),
+    );
+    let id = manual_page_id(sha1, page);
+    let area = (
+        MARGIN,
+        MARGIN + 60,
+        (w - MARGIN * 2) as u32,
+        (h - MARGIN * 2 - 140) as u32,
+    );
+    if page_ready {
+        d.image_fit(id, area.0, area.1, area.2, area.3);
+    } else if pages > 0 {
+        d.text(MARGIN, area.1 + 20, 1, DIM, "renderizando a página...");
+    } else {
+        d.text(MARGIN, area.1 + 20, 1, DIM, "abrindo o manual...");
+    }
+
+    let mut draw_nav = |r: &(i32, i32, u32, u32), label: &str| {
+        d.outline(r.0, r.1, r.2, r.3, 2, (TEXT.0, TEXT.1, TEXT.2, 255));
+        d.text(
+            r.0 + (r.2 as i32 - label.chars().count() as i32 * 9) / 2,
+            r.1 + 7,
+            1,
+            TEXT,
+            label,
+        );
+    };
+    draw_nav(&prev, "< página");
+    draw_nav(&next, "página >");
+    draw_nav(&voltar, "voltar");
+    (prev, next, voltar)
 }
 
 /// Texture key for an achievement badge — hashed from the badge name with a
@@ -681,6 +785,7 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
                 Some(ShelfButton::PanelJump(_))
                 | Some(ShelfButton::Backcover)
                 | Some(ShelfButton::Cartridge)
+                | Some(ShelfButton::Manual)
                 | Some(ShelfButton::ToggleFavorite)
                 | Some(ShelfButton::Refresh)
                 | Some(ShelfButton::ShelfAchievements)
@@ -737,6 +842,22 @@ pub fn run(
     // "colocar zoom igual ao backcover no cartucho" — agora os dois).
     let mut zoom_close: Option<u64> = None;
     let mut zoom_rect: (i32, i32, u32, u32) = (0, 0, 1, 1);
+    // O manual em PDF aberto na TV (plan revision) — worker decodifica as
+    // páginas sob demanda; o estado guarda o pedido em voo para não
+    // repetir. `manual_rects` são os botões do frame anterior.
+    struct ManualState {
+        sha1: String,
+        pages: usize,
+        page: usize,
+        requested: HashSet<usize>,
+    }
+    let mut manual: Option<ManualState> = None;
+    let mut manual_rx: Option<Receiver<crate::manual::ManualEv>> = None;
+    let mut manual_tx: Option<std::sync::mpsc::Sender<usize>> = None;
+    let mut manual_rects: (ViewBtn, ViewBtn, ViewBtn) = ((0, 0, 1, 1), (0, 0, 1, 1), (0, 0, 1, 1));
+    // O PDF do jogo focused, resolvido uma vez por jogo (fs por frame não).
+    let manual_dir = crate::dirs::assets_dir().join("manual");
+    let mut manual_paths: HashMap<String, Option<PathBuf>> = HashMap::new();
     let mut tried_logo: HashSet<String> = HashSet::new();
     let mut tried_cartridge: HashSet<String> = HashSet::new();
     let mut tried_backcover: HashSet<String> = HashSet::new();
@@ -1008,6 +1129,44 @@ pub fn run(
                         .is_some_and(|(lx, ly)| in_rect(lx, ly, zoom_rect))
                     {
                         zoom_close = None;
+                    }
+                }
+            } else if manual.is_some() {
+                // O leitor de manual dono do tubo: ‹/› viram página (os
+                // rects vieram do frame anterior), voltar/Back fecha.
+                for nav in m.nav.iter() {
+                    if let Some(m) = manual.as_mut() {
+                        match nav {
+                            MenuNav::Left => m.page = m.page.saturating_sub(1).max(1),
+                            MenuNav::Right if m.page < m.pages => m.page += 1,
+                            MenuNav::Back => {
+                                manual = None;
+                                manual_tx = None;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if manual.is_some() {
+                    if let Some((x, y)) = m.click {
+                        let (ox, oy) = cab.window_to_output(x, y);
+                        if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
+                            let (prev, next, voltar) = manual_rects;
+                            if in_rect(lx, ly, prev) {
+                                if let Some(mm) = manual.as_mut() {
+                                    mm.page = mm.page.saturating_sub(1).max(1);
+                                }
+                            } else if in_rect(lx, ly, next) {
+                                if let Some(mm) = manual.as_mut() {
+                                    if mm.page < mm.pages {
+                                        mm.page += 1;
+                                    }
+                                }
+                            } else if in_rect(lx, ly, voltar) {
+                                manual = None;
+                                manual_tx = None;
+                            }
+                        }
                     }
                 }
             } else if ach_view {
@@ -1285,6 +1444,67 @@ pub fn run(
                                                 zoom_close = Some(bid);
                                             }
                                         }
+                                    }
+                                }
+                            }
+                            ShelfButton::Manual => {
+                                // Abrir o leitor na TV (plan revision):
+                                // worker decodifica páginas sob demanda.
+                                let picked = if in_fav {
+                                    favorites.get(fav_idx)
+                                } else if in_recent {
+                                    recent.get(recent_idx)
+                                } else {
+                                    view.get(sel)
+                                };
+                                if let Some(e) = picked {
+                                    if let Some(path) =
+                                        manual_paths.get(&e.rom.sha1).cloned().flatten()
+                                    {
+                                        let thread_path = path.clone();
+                                        let (ev_tx, ev_rx) = mpsc::channel();
+                                        let (req_tx, req_rx) = std::sync::mpsc::channel();
+                                        std::thread::spawn(move || {
+                                            let path = thread_path;
+                                            let Ok(pages) = crate::manual::page_count(&path) else {
+                                                return;
+                                            };
+                                            let _ = ev_tx
+                                                .send(crate::manual::ManualEv::Ready { pages });
+                                            for page in req_rx {
+                                                match crate::manual::render_page(&path, page, 2048)
+                                                {
+                                                    Ok(Some(img)) => {
+                                                        let _ = ev_tx.send(
+                                                            crate::manual::ManualEv::Page {
+                                                                page,
+                                                                w: img.w,
+                                                                h: img.h,
+                                                                rgba: img.rgba,
+                                                            },
+                                                        );
+                                                    }
+                                                    _ => {
+                                                        let _ = ev_tx.send(
+                                                            crate::manual::ManualEv::Page {
+                                                                page,
+                                                                w: 0,
+                                                                h: 0,
+                                                                rgba: Vec::new(),
+                                                            },
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        });
+                                        manual = Some(ManualState {
+                                            sha1: e.rom.sha1.clone(),
+                                            pages: 0,
+                                            page: 1,
+                                            requested: HashSet::new(),
+                                        });
+                                        manual_rx = Some(ev_rx);
+                                        manual_tx = Some(req_tx);
                                     }
                                 }
                             }
@@ -1679,6 +1899,48 @@ pub fn run(
             }
         }
 
+        // Manual (plan revision): eventos do worker — contagem ao abrir e
+        // páginas renderizadas viram texturas; a página corrente (e a
+        // seguinte, de brincadeira) são pedidas assim que faltam.
+        while let Some(rx) = manual_rx.take() {
+            let ev = match rx.try_recv() {
+                Ok(ev) => ev,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    manual_rx = Some(rx);
+                    break;
+                }
+                // O worker morreu (fechou sem página nenhuma) — sem canal.
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+            };
+            manual_rx = Some(rx);
+            match ev {
+                crate::manual::ManualEv::Ready { pages } => {
+                    if let Some(m) = manual.as_mut() {
+                        m.pages = pages;
+                    }
+                }
+                crate::manual::ManualEv::Page { page, w, h, rgba } => {
+                    if let Some(m) = manual.as_mut() {
+                        if w > 0 {
+                            cab.set_image(manual_page_id(&m.sha1, page), w, h, &rgba);
+                        }
+                        m.requested.insert(page);
+                    }
+                }
+            }
+        }
+        if let (Some(m), Some(tx)) = (manual.as_mut(), manual_tx.as_ref()) {
+            if m.pages > 0 && !m.requested.contains(&m.page) {
+                m.requested.insert(m.page);
+                let _ = tx.send(m.page);
+            }
+            let next_page = m.page + 1;
+            if next_page <= m.pages && !m.requested.contains(&next_page) {
+                m.requested.insert(next_page);
+                let _ = tx.send(next_page);
+            }
+        }
+
         // The flat side panel (plan revision — drawn by `Cabinet` itself,
         // outside the tube): whatever's focused right now, DAT extras and
         // all when the DAT had any ("se o DAT tiver informacoes do jogo,
@@ -1759,6 +2021,10 @@ pub fn run(
                     }
                 }
                 info.extend(game_info_lines(e, playtime));
+                let manual_path = manual_paths
+                    .entry(e.rom.sha1.clone())
+                    .or_insert_with(|| find_local_manual(&manual_dir, &e.rom.path))
+                    .clone();
                 let ra_state = ra_games.get(&e.rom.sha1);
                 ShelfPanelInfo {
                     title: e.title().into_owned(),
@@ -1778,6 +2044,7 @@ pub fn run(
                         .and_then(|g| g.as_ref())
                         .filter(|g| g.unsupported)
                         .map(|_| "versão sem suporte".to_string()),
+                    has_manual: manual_path.is_some(),
                     award_img,
                 }
             }
@@ -1793,13 +2060,21 @@ pub fn run(
                 favorite: None,
                 achievements: false,
                 achievements_reason: None,
+                has_manual: false,
                 award_img: None,
             },
         };
         cab.set_shelf_panel(shelf_panel);
 
         // --- draw (into a screen-sized buffer, then warped through the tube) --
+        let page_ready = manual
+            .as_ref()
+            .is_some_and(|m| cab.has_image(manual_page_id(&m.sha1, m.page)));
         let render = |d: &mut Screen| {
+            if let Some(m) = &manual {
+                manual_rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
+                return;
+            }
             if ach_view {
                 // The list owns the tube (plan revision: "mostrar a lista de
                 // conquistas e pontuação total dentro da tv com botão de
@@ -2080,7 +2355,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
                     // The history screen's panel never has any per-game
                     // content, so it never scrolls (and never has a back
                     // cover to enlarge).
-                    ShelfButton::Backcover | ShelfButton::Cartridge => {}
+                    ShelfButton::Backcover | ShelfButton::Cartridge | ShelfButton::Manual => {}
                     ShelfButton::ToggleFavorite => {}
                     ShelfButton::ShelfAchievements => {}
                     ShelfButton::PanelJump(_) => {}
@@ -2143,6 +2418,7 @@ fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
         section: PanelSection::CapaTraseira,
         achievements_reason: None,
+        has_manual: false,
         title: String::new(),
         logo_img: None,
         cartridge_img: None,

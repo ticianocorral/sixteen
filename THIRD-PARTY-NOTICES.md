@@ -140,3 +140,10 @@ Conquistas, badges e dados de jogos são © [RetroAchievements](https://retroach
 e seus usuários; o app só faz cache local (`saves/ra-cache/`) do que a conta
 do próprio jogador acessa, identifica-se via User-Agent próprio e usa o token
 de Web API gerado pelo próprio usuário.
+
+## lopdf (crate Rust)
+
+Parser de PDF usado pelo leitor de manuais (`crates/app/src/manual.rs`):
+[lopdf](https://github.com/J-F-Liu/lopdf), licenciado sob **MIT** — o app
+apenas extrai as imagens de páginas embutidas dos PDFs que o próprio
+usuário coloca em `assets/manual/`; nada de PDF é distribuído com o app.

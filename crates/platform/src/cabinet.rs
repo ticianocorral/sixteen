@@ -506,6 +506,10 @@ pub enum ShelfButton {
     /// ao backcover no cartucho") — mesmo comportamento: clique abre a
     /// arte ampliada, "voltar"/Back fecha.
     Cartridge,
+    /// Abrir o manual em PDF do jogo (plan revision: "criar botão no painel
+    /// para abrir o manual") — só desenhado quando há PDF na pasta de
+    /// manuais; o leitor vive no tubo, lado estante.
+    Manual,
     /// Toggle the focused game's favorite marker (plan revision: "adicionar
     /// marcador de favorito nos jogos") — drawn by `draw_shelf_panel` when
     /// `ShelfPanelInfo::favorite` is `Some`.
@@ -724,6 +728,10 @@ pub struct ShelfPanelInfo {
     /// draws a "Conquistas" button (`ShelfButton::ShelfAchievements`)
     /// between "Favoritar" and "Configurações".
     pub achievements: bool,
+    /// Há manual em PDF para o jogo focused (plan revision: "criar botão
+    /// no painel para abrir o manual") — desenha o botão "Manual" na
+    /// pilha, entre "Conquistas" e "Configurações".
+    pub has_manual: bool,
     /// O motivo pelo qual o botão Conquistas aparece **desativado** (plan
     /// revision: "avisar o usuário com tooltip no botão conquistas,
     /// mostrar mas deixar desativado") — o RA marcou o hash como versão
@@ -4358,8 +4366,26 @@ fn draw_shelf_panel(
     let btn_h = (GLYPH_H + 12) as i32;
     let back_rect = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
     let settings_rect = Rect::new(x, back_rect.y() - 8 - btn_h, inner_w, btn_h as u32);
-    let ach_rect = Rect::new(x, settings_rect.y() - 8 - btn_h, inner_w, btn_h as u32);
-    let fav_rect = Rect::new(x, ach_rect.y() - 8 - btn_h, inner_w, btn_h as u32);
+    // A pilha cresce para cima: Manual (quando há PDF), Conquistas
+    // (quando o RA identificou) e Favoritar — cada um só quando existe,
+    // e o corte do corpo acompanha o botão de cima de verdade.
+    let panel_has_manual = panel.is_some_and(|p| p.has_manual);
+    let mut top = settings_rect.y();
+    let manual_rect = panel_has_manual.then(|| {
+        let r = Rect::new(x, top - 8 - btn_h, inner_w, btn_h as u32);
+        top = r.y();
+        r
+    });
+    let ach_rect = panel_achievements.then(|| {
+        let r = Rect::new(x, top - 8 - btn_h, inner_w, btn_h as u32);
+        top = r.y();
+        r
+    });
+    let fav_rect = panel_favorite.map(|_| {
+        let r = Rect::new(x, top - 8 - btn_h, inner_w, btn_h as u32);
+        top = r.y();
+        r
+    });
     let mut buttons = vec![
         (
             ShelfButton::Back,
@@ -4370,7 +4396,13 @@ fn draw_shelf_panel(
             draw_button(canvas, font, settings_rect, "Configurações", true),
         ),
     ];
-    if panel_achievements {
+    if let Some(manual_r) = manual_rect {
+        buttons.push((
+            ShelfButton::Manual,
+            draw_button(canvas, font, manual_r, "Manual", true),
+        ));
+    }
+    if let Some(ach_r) = ach_rect {
         // Bloqueado (RA marcou o hash como versão não suportada): botão
         // apagado com o motivo no rótulo e SEM hit — clicar não faz nada
         // (plan revision: "mostrar mas deixar desativado").
@@ -4379,26 +4411,26 @@ fn draw_shelf_panel(
                 let _ = draw_button(
                     canvas,
                     font,
-                    ach_rect,
+                    ach_r,
                     &format!("Conquistas ({reason})"),
                     false,
                 );
             }
             None => buttons.push((
                 ShelfButton::ShelfAchievements,
-                draw_button(canvas, font, ach_rect, "Conquistas", true),
+                draw_button(canvas, font, ach_r, "Conquistas", true),
             )),
         }
     }
     // The favorite button sits above the trio, drawn before the early
     // `None` return so it never depends on the panel having content.
-    if let Some(fav) = panel_favorite {
+    if let (Some(fav), Some(fav_r)) = (panel_favorite, fav_rect) {
         buttons.push((
             ShelfButton::ToggleFavorite,
             draw_button(
                 canvas,
                 font,
-                fav_rect,
+                fav_r,
                 if fav { "Remover favorito" } else { "Favoritar" },
                 true,
             ),
@@ -4416,13 +4448,7 @@ fn draw_shelf_panel(
     // short, which was harmless while that slot sat empty and became a real
     // overflow the moment the RA's "Conquistas" button filled it (the info
     // text ran straight over the button).
-    let limit = if panel_favorite.is_some() {
-        fav_rect.y()
-    } else if panel_achievements {
-        ach_rect.y()
-    } else {
-        settings_rect.y()
-    } - 12;
+    let limit = top - 12;
 
     let cy = if let Some(id) = panel.logo_img {
         draw_image_absolute(canvas, images, id, x, y, inner_w, 110);
