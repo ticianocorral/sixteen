@@ -311,6 +311,11 @@ pub struct Cabinet {
     /// (line 0 = app version, line 1 = snes9x version); the app flips them
     /// via `set_nameplate_updates` once its startup check reports something.
     nameplate_updates: (bool, bool),
+    /// Os rects das setas verdes de update no nameplate (app, core) —
+    /// preenchidos a cada frame do caminho estático; o idle usa para
+    /// abrir os fluxos de atualização (plan revision: "ao clicar no icone
+    /// verde de atualizar, atualizar").
+    update_arrows: (Option<Rect>, Option<Rect>),
     /// The chin's OSD queue (plan: `docs/plano-retroachievements.md`,
     /// fase 4) — "CONQUISTA DESBLOQUEADA" blocks drawn right-aligned in the
     /// chin, front entry only, expiring by time; the next one slides in
@@ -537,6 +542,17 @@ pub enum ShelfButton {
 pub enum SettingsButton {
     Section(usize),
     Back,
+}
+
+/// Qual seta de update do nameplate foi clicada (plan revision: "ao
+/// clicar no icone verde de atualizar (tanto do app quanto o nucleo),
+/// atualizar").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UpdateArrow {
+    /// A seta da linha do próprio app — abre o changelog + botão atualizar.
+    App,
+    /// A seta da linha do snes9x — baixa e instala o core na hora.
+    Core,
 }
 
 /// The settings screen's flat panel content — one button per section plus
@@ -897,6 +913,7 @@ impl Cabinet {
             canvas_rect,
             nameplate: BRAND.to_string(),
             nameplate_updates: (false, false),
+            update_arrows: (None, None),
             osd_queue: VecDeque::new(),
             ra_status: None,
             close_button: Rect::new(0, 0, 0, 0),
@@ -916,6 +933,21 @@ impl Cabinet {
     /// right after line 0 / line 1, respectively). `false, false` clears both.
     pub fn set_nameplate_updates(&mut self, app: bool, core: bool) {
         self.nameplate_updates = (app, core);
+    }
+
+    /// Qual seta verde de update do nameplate um ponto (output) acerta —
+    /// rects preenchidos pelo caminho estático (`present_static`), onde o
+    /// nameplate é clicável (idle). (plan revision: "ao clicar no icone
+    /// verde de atualizar".)
+    pub fn hit_update_arrow(&self, ox: i32, oy: i32) -> Option<UpdateArrow> {
+        let (app, core) = self.update_arrows;
+        if app.is_some_and(|r| r.contains_point((ox, oy))) {
+            Some(UpdateArrow::App)
+        } else if core.is_some_and(|r| r.contains_point((ox, oy))) {
+            Some(UpdateArrow::Core)
+        } else {
+            None
+        }
     }
 
     /// MOCK (design preview for the achievements notification — see
@@ -1637,7 +1669,7 @@ impl Cabinet {
         self.mesh = Some(mesh);
         self.bezel = Some(bezel);
 
-        draw_brand(
+        self.update_arrows = draw_brand(
             &mut self.canvas,
             &mut self.font,
             self.screen,
@@ -1728,7 +1760,7 @@ impl Cabinet {
             c.set_viewport(Some(canvas_rect));
             let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
-            draw_brand(c, font, screen, out_h, nameplate, nameplate_updates);
+            let _ = draw_brand(c, font, screen, out_h, nameplate, nameplate_updates);
             match &osd {
                 ChinOsd::Notify { lines, badge } => {
                     draw_chin_osd(c, font, images, screen, out_h, nameplate, lines, *badge);
@@ -3402,6 +3434,11 @@ fn truncate_to_cols(s: &str, max_cols: usize) -> String {
     out
 }
 
+/// `(rect da seta do app, rect da seta do core)` — `None` quando a linha
+/// não tem seta neste frame. Saída de [`draw_brand`] para o hit-test do
+/// idle (plan revision: "ao clicar no icone verde de atualizar").
+type UpdateArrowRects = (Option<Rect>, Option<Rect>);
+
 fn draw_brand(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -3409,11 +3446,12 @@ fn draw_brand(
     out_h: u32,
     label: &str,
     updates: (bool, bool),
-) {
+) -> UpdateArrowRects {
+    let mut arrows: UpdateArrowRects = (None, None);
     let chin_top = screen.bottom();
     let chin_h = out_h as i32 - chin_top;
     if chin_h < 24 {
-        return;
+        return arrows;
     }
     // A '\n' in the label stacks lines (plan revision: "no nameplate colocar
     // a versão do snes9x abaixo do snes xperience") — the block centred in
@@ -3442,14 +3480,20 @@ fn draw_brand(
         // app's version, line 1 the core's.
         let wants_arrow = i == 0 && updates.0 || i == 1 && updates.1;
         if wants_arrow {
-            draw_update_arrow(
-                canvas,
-                screen.left() + line.chars().count() as i32 * GLYPH_W as i32 + 10,
-                y + row / 2,
-            );
+            let ax = screen.left() + line.chars().count() as i32 * GLYPH_W as i32 + 10;
+            draw_update_arrow(canvas, ax, y + row / 2);
+            // Área de clique generosa (o ícone tem 11×12 px) — uma faixa
+            // da altura da linha, um pouco mais larga que a seta.
+            let hit = Rect::new(ax - 4, y, 19u32, row as u32);
+            if i == 0 {
+                arrows.0 = Some(hit);
+            } else {
+                arrows.1 = Some(hit);
+            }
         }
         y += row + gap;
     }
+    arrows
 }
 
 /// The nameplate's "tem update" marker (plan revision: "uma seta verde pra

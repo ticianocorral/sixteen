@@ -65,6 +65,20 @@ pub fn roms_dir() -> PathBuf {
     app_root().join("roms")
 }
 
+/// Onde o download do update do app fica até ser aplicado no arranque
+/// seguinte (plan revision: "será atualizado ao reiniciar").
+pub fn update_dir() -> PathBuf {
+    let p = saves_dir().join("update");
+    let _ = std::fs::create_dir_all(&p);
+    p
+}
+
+/// Igual a [`update_dir`], sem criar — o apply no arranque não deve ter
+/// efeito colateral em disco.
+pub fn update_dir_opt() -> Option<PathBuf> {
+    Some(saves_dir().join("update"))
+}
+
 pub fn core_dir() -> PathBuf {
     app_root().join("core")
 }

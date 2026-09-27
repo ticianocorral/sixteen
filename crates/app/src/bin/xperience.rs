@@ -161,6 +161,10 @@ their canonical No-Intro name.";
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // O "será atualizado ao reiniciar" (plan revision): um update baixado
+    // pela tela do app vale aqui — substitui o binário/bundle antes de
+    // qualquer SDL. Melhor-esforço; falha loga e segue com o atual.
+    xperience_app::update_check::apply_pending_update();
     let args = parse_args()?;
 
     for dir in [

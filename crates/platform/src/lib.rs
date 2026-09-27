@@ -8,7 +8,8 @@ mod input;
 pub use audio::AudioOut;
 pub use cabinet::{
     Cabinet, FrameRef, PanelButton, PanelSection, PixelFormat, RaStatus, Screen, SettingsButton,
-    SettingsPanelInfo, ShelfButton, ShelfPanelInfo, BRAND, DEMO_BADGE_IMG, RA_LOGO_IMG,
+    SettingsPanelInfo, ShelfButton, ShelfPanelInfo, UpdateArrow, BRAND, DEMO_BADGE_IMG,
+    RA_LOGO_IMG,
 };
 pub use input::{Input, KeyMap, PadButton, PadMap, UiEvent, MAX_PORTS};
 // The SDL gamepad button enum, for callers that hold a captured press

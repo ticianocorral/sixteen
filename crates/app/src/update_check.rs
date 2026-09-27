@@ -18,13 +18,26 @@ const RELEASES_API: &str =
 /// receives one of these when there's actually something to say (see
 /// `check`), so both fields are never "empty" at once.
 pub struct UpdateNotice {
-    /// The newer release's tag (e.g. `"v0.10.0"`), if GitHub has one.
-    pub app_update: Option<String>,
+    /// The newer release, if GitHub has one — tag + changelog + the asset
+    /// for this platform, everything the update screen needs (plan
+    /// revision: "quando for update do app mostrar o changelog e o botão
+    /// de atualizar").
+    pub app_update: Option<AppUpdate>,
     /// Whether the installed snes9x core is older than what the buildbot
     /// currently serves — only ever `true` for a core this app downloaded
     /// itself (see `CoreInstallMeta`); a hand-placed core has no baseline to
     /// compare against and is never flagged.
     pub core_stale: bool,
+}
+
+/// Uma atualização do app disponível no GitHub.
+#[derive(Clone)]
+pub struct AppUpdate {
+    pub tag: String,
+    /// O `body` do release (o changelog em markdown — mostrado como texto).
+    pub changelog: String,
+    /// URL do asset desta plataforma (dmg/AppImage/zip), se houver.
+    pub asset_url: Option<String>,
 }
 
 /// What `core_update::download_and_install` records alongside the core file
@@ -89,6 +102,33 @@ fn core_is_stale(core_dir: &Path) -> bool {
 #[derive(Deserialize)]
 struct GhRelease {
     tag_name: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    assets: Vec<GhAsset>,
+}
+
+#[derive(Deserialize)]
+struct GhAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// O asset do release para a plataforma em que roda — `-macos.dmg`,
+/// `-linux-*.AppImage` ou `-win.zip` pelo nome (o CI publica exatamente
+/// esses sufixos).
+fn asset_for_platform(assets: &[GhAsset]) -> Option<String> {
+    let (needle, ext): (&str, &str) = if cfg!(target_os = "macos") {
+        ("-macos", ".dmg")
+    } else if cfg!(target_os = "linux") {
+        ("-linux-", ".AppImage")
+    } else {
+        ("-win", ".zip")
+    };
+    assets
+        .iter()
+        .find(|a| a.name.contains(needle) && a.name.ends_with(ext))
+        .map(|a| a.browser_download_url.clone())
 }
 
 /// `Some(tag)` if GitHub's latest release is newer than `current` — `None`
@@ -96,7 +136,7 @@ struct GhRelease {
 /// compared as dot-separated integers (a leading `v` is stripped first), not
 /// full semver — good enough for this project's plain `MAJOR.MINOR.PATCH`
 /// tags.
-fn newer_release(current: &str) -> Option<String> {
+fn newer_release(current: &str) -> Option<AppUpdate> {
     let resp = agent()
         .get(RELEASES_API)
         .set("User-Agent", "snes-xperience-update-check")
@@ -104,7 +144,14 @@ fn newer_release(current: &str) -> Option<String> {
         .ok()?;
     let release: GhRelease = resp.into_json().ok()?;
     let tag = release.tag_name.trim_start_matches('v');
-    (parse_version(tag) > parse_version(current)).then_some(release.tag_name)
+    if parse_version(tag) <= parse_version(current) {
+        return None;
+    }
+    Some(AppUpdate {
+        tag: release.tag_name,
+        changelog: release.body,
+        asset_url: asset_for_platform(&release.assets),
+    })
 }
 
 fn parse_version(v: &str) -> Vec<u32> {
@@ -124,6 +171,141 @@ pub fn check(core_dir: PathBuf, app_version: String, tx: Sender<UpdateNotice>) {
             core_stale,
         });
     }
+}
+
+/// Baixa o asset da atualização para `dest_dir` (o update view chama em
+/// worker; progresso em percentual no canal). Devolve o caminho do arquivo.
+pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<PathBuf, String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout(Duration::from_secs(600))
+        .build();
+    let resp = agent.get(url).call().map_err(|e| e.to_string())?;
+    let total = resp
+        .header("Content-Length")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    let file_name = url.rsplit('/').next().unwrap_or("update.bin").to_string();
+    std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
+    let dest = dest_dir.join(&file_name);
+    let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let mut reader = resp.into_reader();
+    let mut buf = [0u8; 64 * 1024];
+    let mut got: u64 = 0;
+    loop {
+        use std::io::Read;
+        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        std::io::Write::write_all(&mut file, &buf[..n]).map_err(|e| e.to_string())?;
+        got += n as u64;
+        if let Some(pct) = (got * 100).checked_div(total) {
+            let _ = tx.send(pct.min(100) as u32);
+        }
+    }
+    Ok(dest)
+}
+
+/// Aplica, no arranque, uma atualização baixada pela tela de update — o
+/// "será atualizado ao reiniciar" (plan revision). Melhor-esforço: qualquer
+/// falha loga e mantém o arquivo para tentar de novo. Antes do SDL, na
+/// main do `xperience`.
+pub fn apply_pending_update() {
+    let Some(dir) = crate::dirs::update_dir_opt() else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let outcome = if cfg!(target_os = "macos") && name.ends_with(".dmg") {
+            apply_macos_dmg(&path)
+        } else if cfg!(target_os = "linux") && name.ends_with(".AppImage") {
+            apply_linux_appimage(&path)
+        } else if cfg!(target_os = "windows") {
+            Err("atualização automática não suportada nesta plataforma —                  instale do release"
+                .to_string())
+        } else {
+            continue; // não é desta plataforma / não é update
+        };
+        match outcome {
+            Ok(()) => {
+                log::info!("update: {name} aplicado — reinicie para valer");
+                let _ = std::fs::remove_file(&path);
+            }
+            Err(e) => log::info!("update: {name} não aplicado ({e}) — tenta no próximo arranque"),
+        }
+    }
+}
+
+/// macOS: monta o dmg, copia o .app por cima do bundle em execução
+/// (`ditto` preserva a estrutura), desmonta. O binário em execução pode
+/// ser substituído — o inode vivo continua rodando.
+fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
+    use std::process::Command;
+    let mnt = std::env::temp_dir().join("xperience-update-mnt");
+    let _ = std::fs::remove_dir_all(&mnt);
+    std::fs::create_dir_all(&mnt).map_err(|e| e.to_string())?;
+    let out = Command::new("hdiutil")
+        .args(["attach", "-nobrowse", "-readonly", "-mountpoint"])
+        .arg(&mnt)
+        .arg(dmg)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(format!(
+            "hdiutil attach: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    let result = (|| -> Result<(), String> {
+        let app_bundle = std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.ancestors()
+                    .find(|a| a.extension().is_some_and(|e| e == "app"))
+                    .map(|a| a.to_path_buf())
+            })
+            .ok_or_else(|| "não achei o .app em execução".to_string())?;
+        let new_app = std::fs::read_dir(&mnt)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| p.extension().is_some_and(|e| e == "app"))
+            .ok_or_else(|| "dmg sem .app dentro".to_string())?;
+        let status = Command::new("ditto")
+            .arg(new_app)
+            .arg(&app_bundle)
+            .status()
+            .map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("ditto falhou".to_string())
+        }
+    })();
+    let _ = Command::new("hdiutil")
+        .args(["detach", "-force"])
+        .arg(&mnt)
+        .status();
+    let _ = std::fs::remove_dir_all(&mnt);
+    result
+}
+
+/// Linux (Steam Deck incluído): substitui o binário/AppImage em execução —
+/// rename sobre o arquivo rodando é seguro no Linux (o inode segue vivo).
+fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    std::fs::copy(appimage, &exe).map_err(|e| e.to_string())?;
+    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use std::sync::mpsc;
 
 use anyhow::Result;
-use xperience_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen};
+use xperience_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen, UpdateArrow};
 
 use crate::core_update::{self, CoreUpdateMsg};
 use crate::update_check::UpdateNotice;
@@ -184,6 +184,18 @@ pub fn run(
         dat.label = "instalado".to_string();
     }
     let mut core_missing = !core_installed;
+    // Updates (plan revision: "ao clicar no icone verde de atualizar"):
+    // o notice é GUARDADO (o changelog/asset o leitor da tela usa), a
+    // aba de update do app abre a tela com changelog + botão, e o core
+    // baixa na hora. `core_stale` controla a seta até o download valer.
+    let mut app_update: Option<crate::update_check::AppUpdate> = None;
+    let mut core_stale = false;
+    let mut update_view: Option<crate::update_check::AppUpdate> = None;
+    let mut update_rx: Option<Receiver<Result<String, String>>> = None;
+    let mut update_progress_rx: Option<Receiver<u32>> = None;
+    let mut update_pct: Option<u32> = None;
+    let mut update_status = String::new();
+    let mut update_rects: (UpdateBtn, UpdateBtn) = ((0, 0, 1, 1), (0, 0, 1, 1));
 
     loop {
         let core_was_done = core.done;
@@ -195,6 +207,12 @@ pub fn run(
         if core.done && !core_was_done {
             let p = core_update::default_core_path();
             cab.set_nameplate(&core_update::nameplate_text(p.as_deref()));
+            // O app reconhece a nova versão na hora — e a seta do core
+            // apaga (o meta do install já vale para o próximo arranque).
+            if core_stale {
+                core_stale = false;
+                cab.set_nameplate_updates(app_update.is_some(), false);
+            }
         }
         if core.rx.is_none() && core.done {
             core_missing = false;
@@ -206,9 +224,44 @@ pub fn run(
                 // 0 for the app, line 1 for the core.
                 Ok(n) => {
                     cab.set_nameplate_updates(n.app_update.is_some(), n.core_stale);
+                    app_update = n.app_update;
+                    core_stale = n.core_stale;
                     *notice_rx = None;
                 }
                 Err(TryRecvError::Disconnected) => *notice_rx = None,
+                Err(TryRecvError::Empty) => {}
+            }
+        }
+
+        // Download do update do app em andamento: percentual vivo e o
+        // final ("será atualizado ao reiniciar") no rótulo da tela.
+        while let Some(rx) = update_progress_rx.take() {
+            match rx.try_recv() {
+                Ok(pct) => {
+                    update_pct = Some(pct);
+                    update_status = format!("baixando... {pct}%");
+                    update_progress_rx = Some(rx);
+                    break;
+                }
+                Err(TryRecvError::Empty) => {
+                    update_progress_rx = Some(rx);
+                    break;
+                }
+                Err(TryRecvError::Disconnected) => {}
+            }
+        }
+        if let Some(rx) = &update_rx {
+            match rx.try_recv() {
+                Ok(Ok(file)) => {
+                    update_status = format!("{file} baixado — será atualizado ao reiniciar o app");
+                    update_pct = None;
+                    update_rx = None;
+                }
+                Ok(Err(e)) => {
+                    update_status = format!("falhou: {e}");
+                    update_rx = None;
+                }
+                Err(TryRecvError::Disconnected) => update_rx = None,
                 Err(TryRecvError::Empty) => {}
             }
         }
@@ -302,6 +355,65 @@ pub fn run(
 
         cab.set_idle_core_prompt(core_missing.then_some("Baixar núcleo snes9x"));
 
+        // Tela de update do app aberta: dona do tubo (changelog + botão).
+        if update_view.is_some() {
+            let (upt_tag, upt_body, asset_url) = {
+                let u = update_view.as_ref().expect("checado acima");
+                (u.tag.clone(), u.changelog.clone(), u.asset_url.clone())
+            };
+            for nav in &m.nav {
+                if matches!(nav, MenuNav::Back) && update_rx.is_none() {
+                    update_view = None;
+                }
+            }
+            if let Some((x, y)) = m.click {
+                let (ox, oy) = cab.window_to_output(x, y);
+                if cab.hit_close_button(ox, oy) {
+                    return Ok(IdleExit::Quit);
+                }
+                if let Some((sx, sy)) = cab.hit_screen_point(ox, oy) {
+                    let (btn, voltar) = update_rects;
+                    if in_update_rect(sx, sy, voltar) {
+                        update_view = None;
+                    } else if in_update_rect(sx, sy, btn)
+                        && update_rx.is_none()
+                        && asset_url.is_some()
+                    {
+                        // "Atualizar": baixa o asset da plataforma para o
+                        // diretório de updates — o arranque seguinte aplica
+                        // (plan revision: "avisar que sera atualizado ao
+                        // reiniciar").
+                        let (tx, rx) = mpsc::channel();
+                        let (ptx, prx) = mpsc::channel();
+                        let url = asset_url.unwrap_or_default();
+                        let dest = crate::dirs::update_dir();
+                        std::thread::spawn(move || {
+                            let result = crate::update_check::download_asset(&url, &dest, &ptx)
+                                .map(|p| {
+                                    p.file_name()
+                                        .unwrap_or_default()
+                                        .to_string_lossy()
+                                        .into_owned()
+                                });
+                            let _ = tx.send(result);
+                        });
+                        update_rx = Some(rx);
+                        update_progress_rx = Some(prx);
+                        update_pct = None;
+                        update_status = "baixando...".to_string();
+                    }
+                }
+            }
+            let busy = update_rx.is_some();
+            let status = update_status.clone();
+            let render = |d: &mut Screen| {
+                update_rects = draw_update_view(d, &upt_tag, &upt_body, &status, busy, update_pct);
+            };
+            cab.frame_idle_2d(SETUP_BG, render);
+            crate::runner::pace_frame(&mut next, frame);
+            continue;
+        }
+
         if let Some((x, y)) = m.click {
             let (ox, oy) = cab.window_to_output(x, y);
             if cab.hit_close_button(ox, oy) {
@@ -310,6 +422,30 @@ pub fn run(
             if cab.hit_minimize_button(ox, oy) {
                 cab.minimize();
                 continue;
+            }
+            // Setas verdes do nameplate (plan revision): app abre a tela
+            // de changelog; core baixa e instala na hora.
+            match cab.hit_update_arrow(ox, oy) {
+                Some(UpdateArrow::App) if app_update.is_some() => {
+                    update_view = app_update.clone();
+                    update_status.clear();
+                }
+                Some(UpdateArrow::Core) if core_stale && core.rx.is_none() => {
+                    match core_update::core_download_url() {
+                        Some(url) => {
+                            let (tx, rx) = mpsc::channel();
+                            let dest = crate::dirs::core_dir();
+                            std::thread::spawn(move || {
+                                core_update::download_and_install(url, &dest, &tx)
+                            });
+                            core.rx = Some(rx);
+                            core.done = false;
+                            core.label = "baixando...".to_string();
+                        }
+                        None => core.label = "sem build automática - use configurações".into(),
+                    }
+                }
+                _ => {}
             }
             match cab.hit_panel_button(ox, oy) {
                 // Sem o snes9x instalado (plan revision: "só desative o
@@ -354,6 +490,111 @@ pub fn run(
         cab.present_static(static_level);
         crate::runner::pace_frame(&mut next, frame);
     }
+}
+
+/// `(x, y, w, h)` em coordenadas de tela — rect de botão da tela de update.
+type UpdateBtn = (i32, i32, u32, u32);
+
+const UPDATE_MARGIN: i32 = 40;
+
+fn in_update_rect(x: i32, y: i32, r: UpdateBtn) -> bool {
+    x >= r.0 && y >= r.1 && (x - r.0) < r.2 as i32 && (y - r.1) < r.3 as i32
+}
+
+/// A tela de update do app (plan revision: "quando for update do app
+/// mostrar o changelog e o botão de atualizar, e dai avisar que sera
+/// atualizado ao reiniciar") — título, changelog do release, status do
+/// download e os botões "atualizar"/"voltar". Devolve os rects.
+fn draw_update_view(
+    d: &mut Screen,
+    tag: &str,
+    changelog: &str,
+    status: &str,
+    busy: bool,
+    _pct: Option<u32>,
+) -> (UpdateBtn, UpdateBtn) {
+    let (w, h) = d.size();
+    let (w, h) = (w as i32, h as i32);
+    let x = UPDATE_MARGIN;
+
+    d.text(
+        x,
+        UPDATE_MARGIN,
+        2,
+        SETUP_TEXT,
+        &format!("atualização {tag}"),
+    );
+    // Changelog em texto — o body vem em markdown do GitHub; as marcas
+    // (#, *, `) são ruído no fonte de pixel.
+    let clean: String = changelog
+        .replace('\r', "")
+        .chars()
+        .filter(|c| !matches!(c, '#' | '*' | '`'))
+        .collect();
+    let lines: Vec<&str> = clean.lines().take(24).collect();
+    let mut y = UPDATE_MARGIN + 60;
+    for line in &lines {
+        if y > h - 150 {
+            d.text(x, y, 1, SETUP_DIM, "…");
+            break;
+        }
+        d.text_wrapped(x, y, (w - UPDATE_MARGIN * 2) as u32, 1, SETUP_TEXT, line);
+        y += 22;
+    }
+
+    let btn = (w - UPDATE_MARGIN * 2 - 220, h - 96, 220u32, 44u32);
+    let voltar = (x, h - 96, 140u32, 44u32);
+    d.text(x, h - 130, 1, SETUP_DIM, status);
+    // O botão some (dim, sem hit) enquanto baixa e depois de baixado —
+    // o status ocupa o lugar.
+    let can_update = !busy && !status.contains("baixado");
+    let label = if can_update {
+        "atualizar"
+    } else {
+        "atualizado"
+    };
+    if can_update {
+        d.outline(
+            btn.0,
+            btn.1,
+            btn.2,
+            btn.3,
+            2,
+            (SETUP_GREEN.0, SETUP_GREEN.1, SETUP_GREEN.2, 255),
+        );
+        d.text(
+            btn.0 + (btn.2 as i32 - label.chars().count() as i32 * 18) / 2,
+            btn.1 + 12,
+            2,
+            SETUP_GREEN,
+            label,
+        );
+    } else {
+        d.outline(btn.0, btn.1, btn.2, btn.3, 2, (90, 90, 96, 255));
+        d.text(
+            btn.0 + (btn.2 as i32 - label.chars().count() as i32 * 18) / 2,
+            btn.1 + 12,
+            2,
+            SETUP_DIM,
+            label,
+        );
+    }
+    d.outline(
+        voltar.0,
+        voltar.1,
+        voltar.2,
+        voltar.3,
+        2,
+        (SETUP_TEXT.0, SETUP_TEXT.1, SETUP_TEXT.2, 255),
+    );
+    d.text(
+        voltar.0 + (voltar.2 as i32 - "voltar".chars().count() as i32 * 18) / 2,
+        voltar.1 + 12,
+        2,
+        SETUP_TEXT,
+        "voltar",
+    );
+    (btn, voltar)
 }
 
 /// Whether the setup screen should come up — either file the player needs

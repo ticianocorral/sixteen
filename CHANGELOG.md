@@ -61,6 +61,15 @@ direto em tela cheia.
   digitação (editor de anotações) também não é mais engolido.
 
 ### Adicionado
+- Update pelas setas verdes do nameplate (plan revision: "ao clicar no
+  icone verde de atualizar (tanto do app quanto o nucleo), atualizar"):
+  - **core**: o clique baixa e instala o snes9x na hora — o nameplate
+    passa a mostrar a versão nova e a seta apaga, sem reiniciar;
+  - **app**: o clique abre na TV a tela com o **changelog do release**
+    e o botão **atualizar** — baixa o asset da plataforma (dmg/AppImage)
+    com percentual vivo e avisa que **será atualizado ao reiniciar**;
+    no arranque seguinte o app aplica (monta o dmg e substitui o bundle
+    no macOS; troca o AppImage/binário no Linux) antes de qualquer SDL.
 - Manuais em PDF (plan revision: "colocar suporte para abrir manual pdf /
   criar pasta para colocar manual / mostrar botao do manual junto com os
   botões de cartucho, info etc / mostrar primeira pagina do manual igual
