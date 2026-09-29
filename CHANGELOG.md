@@ -15,9 +15,9 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   cartridge/back-cover) e o descompacta na raiz do app, para demonstrar o
   emulador funcionando numa instalação nova. Só instala o que está sob
   `roms/` e `assets/` (com guarda contra caminhos `..`/absolutos); depois
-  de instalar, "Atualizar" na estante traz o jogo. A URL do pacote ainda
-  está vazia (`EXEMPLO_ZIP_URL` em `devmenu.rs`) e
-  `XPERIENCE_EXEMPLO_ZIP_URL` sobrepõe para testes.
+  de instalar, "Atualizar" na estante traz o jogo. O pacote
+  (`exemplo-platformer-example.zip`) é commitado no repositório e a URL
+  aponta para ele; `XPERIENCE_EXEMPLO_ZIP_URL` sobrepõe para testes.
 - Feedback do download do núcleo na seta verde do nameplate: o painel da
   tela inicial mostra "baixando… X MB" ao vivo, "núcleo atualizado!" ao
   concluir (e a seta se apaga) ou o motivo da falha — que antes era
