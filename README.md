@@ -37,8 +37,9 @@ janela com o jogo. Projeto pessoal, sem fins comerciais.
 - **Só mouse e gamepad** para tudo; a única exceção é escrever uma
   anotação, que precisa de teclado por natureza.
 - **Portátil, sem banco de dados e sem raspagem online**: tudo em pastas
-  ao lado do executável (`roms/`, `core/`, `assets/`, `saves/`, `notes/`)
-  — capa, logo, cartucho, contracapa e o wordmark do console
+  ao lado do executável (`roms/`, `core/`, `assets/`, `saves/`, `notes/`,
+  `retroachievements/` e `config/` com o cfg, o DAT, o library e o hash
+  cache) — capa, logo, cartucho, contracapa e o wordmark do console
   (`console-tag.png`) vêm de imagens suas; o core snes9x baixa sozinho pelo
   menu de configurações.
 
@@ -64,8 +65,8 @@ cargo run --bin xperience
 Clique em "Inserir cartucho" para abrir a estante. Solte um
 `<nome-da-rom>.png` (mesmo nome do arquivo, sem extensão) em
 `assets/{cover,logo,cartridge,backcover}/` para dar arte a um jogo — capas
-são desenhadas em paisagem. Um `nointro.dat` (DAT XML do No-Intro) na raiz
-do app dá o nome canônico dos jogos — opcional, baixe você mesmo.
+são desenhadas em paisagem. Um `nointro.dat` (DAT XML do No-Intro) em
+`config/` dá o nome canônico dos jogos — opcional, baixe você mesmo.
 
 ## Compilar
 
