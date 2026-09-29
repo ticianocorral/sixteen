@@ -2160,7 +2160,10 @@ impl Cabinet {
             .render_geometry(&bezel.verts, None, &bezel.indices[..]);
         self.bezel = Some(bezel);
         self.mesh = Some(mesh);
-        draw_brand(
+        // O retorno PRECISA ser guardado: são os rects clicáveis das setas
+        // verdes de update — sem isto o idle desenha as setas mas o clique
+        // nunca acerta (hit_update_arrow lia uma lista sempre vazia).
+        self.update_arrows = draw_brand(
             &mut self.canvas,
             &mut self.font,
             self.screen,

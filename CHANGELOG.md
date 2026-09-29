@@ -7,6 +7,15 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.1] - 2026-09-28
+
+### Corrigido
+- As setas verdes de update no nameplate **não eram clicáveis** na tela
+  inicial: o caminho de desenho estático (o que o idle usa) descartava os
+  rects clicáveis das setas — só o caminho de gameplay os guardava — e o
+  clique sempre ia para o vazio. Agora o clique acerta, com todo o
+  feedback de download no painel (progresso, sucesso, motivo de falha).
+
 ## [1.1.0] - 2026-09-28
 
 ### Adicionado
