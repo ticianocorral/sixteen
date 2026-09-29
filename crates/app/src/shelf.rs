@@ -1065,11 +1065,31 @@ pub fn run(
         } else {
             0
         };
+        // Steam Deck (e qualquer tela baixa): as duas faixas + a grade não
+        // cabem — ao favoritar, os tiles da grade viravam selos (125×94) e a
+        // estante "desconfigurava". Favoritos tem prioridade: se com as duas
+        // faixas os tiles da grade ficarem abaixo de ~150 de altura, a faixa
+        // de jogados recentemente cede a vez (some desta tela até a janela
+        // crescer ou um favorito ser removido).
+        let mut show_recent = show_recent;
+        if show_fav && show_recent {
+            let top_com_todas =
+                MARGIN + HEADER_H + fav_block_h + RECENT_LABEL_H + RECENT_TILE_H as i32
+                    + GAP as i32 + ALL_GAMES_LABEL_H;
+            let avail = scr_h as i32 - top_com_todas - MARGIN;
+            let two_rows = (avail / 2 - GAP as i32).max(36);
+            if two_rows < 150 {
+                show_recent = false;
+            }
+        }
         let recent_block_h = if show_recent {
             RECENT_LABEL_H + RECENT_TILE_H as i32 + GAP as i32
         } else {
             0
         };
+        if !show_recent {
+            in_recent = false;
+        }
         let all_games_label_y = MARGIN + HEADER_H + fav_block_h + recent_block_h;
         let grid_top_y = all_games_label_y + ALL_GAMES_LABEL_H;
         let grid = GridLayout::new(scr_w, scr_h, list_mode, grid_top_y);

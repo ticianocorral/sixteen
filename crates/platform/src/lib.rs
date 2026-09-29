@@ -284,6 +284,8 @@ pub struct Platform {
     /// How much of [`KONAMI`] is currently matched, while `konami_watch` is
     /// on — an index into the sequence, reset on any wrong step.
     konami_step: usize,
+    /// Cliques sintéticos agendados (testes de UI) pendentes de disparo.
+    scheduled_clicks: Vec<(Instant, i32, i32)>,
 }
 
 const MENU_PAD_MAP: [(PadBtn, MenuNav); 8] = [
@@ -368,6 +370,7 @@ impl Platform {
             pad_map: PadMap::defaults(),
             konami_watch: false,
             konami_step: 0,
+            scheduled_clicks: Vec::new(),
         };
         me.sync_gamepads();
         Ok(me)
@@ -472,12 +475,38 @@ impl Platform {
         }
     }
 
+    /// Testing hook, `push_synthetic_click`'s scheduled variant: registers a
+    /// left click at window coordinates to be pushed `delay` from now — the
+    /// due ones fire at the top of the next `poll`/`poll_menu` (same thread;
+    /// the SDL context can't cross threads). Lets example harnesses drive
+    /// menus that are already inside their own loop.
+    pub fn push_synthetic_click_later(&mut self, x: i32, y: i32, delay: Duration) {
+        self.scheduled_clicks
+            .push((Instant::now() + delay, x, y));
+    }
+
+    /// Dispara os cliques agendados que já venceram.
+    fn fire_due_clicks(&mut self) {
+        let now = Instant::now();
+        let due: Vec<_> = self
+            .scheduled_clicks
+            .iter()
+            .filter(|(at, _, _)| *at <= now)
+            .map(|(_, x, y)| (*x, *y))
+            .collect();
+        self.scheduled_clicks.retain(|(at, _, _)| *at > now);
+        for (x, y) in due {
+            self.push_synthetic_click(x, y);
+        }
+    }
+
     /// Drain events for a menu screen: mouse click, mouse wheel (-> `Up`/
     /// `Down`), and gamepad d-pad/buttons (rising edge only, `MENU_PAD_MAP`)
     /// always feed `nav`. In `CaptureKey` mode only, a keydown is captured
     /// raw instead — see [`MenuMode`].
     pub fn poll_menu(&mut self, mode: MenuMode) -> MenuInput {
         use sdl3::keyboard::Keycode;
+        self.fire_due_clicks();
         let _span = TraceSpan::new("poll_menu");
         let mut out = MenuInput::default();
         for event in self.event_pump.poll_iter() {

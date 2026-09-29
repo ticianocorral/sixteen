@@ -7,6 +7,16 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.2] - 2026-09-28
+
+### Corrigido
+- Steam Deck (e qualquer janela 1280×800): ao favoritar um jogo, a faixa
+  "favoritos" aparecia **junto** com a de "jogados recentemente" e os
+  tiles da grade desabavam para 125×94 — a estante parecia
+  desconfigurada. Agora favoritos tem prioridade: em tela baixa, a faixa
+  de jogados recentemente cede a vez e a grade mantém os tiles grandes
+  (ela volta quando a janela cresce ou um favorito é removido).
+
 ## [1.1.1] - 2026-09-28
 
 ### Corrigido
