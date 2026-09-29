@@ -223,16 +223,19 @@ pub fn apply_pending_update() {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        let outcome = if cfg!(target_os = "macos") && name.ends_with(".dmg") {
-            apply_macos_dmg(&path)
-        } else if cfg!(target_os = "linux") && name.ends_with(".AppImage") {
-            apply_linux_appimage(&path)
-        } else if cfg!(target_os = "windows") {
-            Err("atualização automática não suportada nesta plataforma —                  instale do release"
-                .to_string())
+        // Só o formato desta plataforma é candidato a update; qualquer outro
+        // arquivo na pasta de updates é ignorado em silêncio.
+        let relevante = if cfg!(target_os = "macos") {
+            name.ends_with(".dmg")
+        } else if cfg!(target_os = "linux") {
+            name.ends_with(".AppImage")
         } else {
-            continue; // não é desta plataforma / não é update
+            false
         };
+        if !relevante {
+            continue;
+        }
+        let outcome = apply_for_platform(&path, &name);
         match outcome {
             Ok(()) => {
                 log::info!("update: {name} aplicado — reinicie para valer");
@@ -246,6 +249,7 @@ pub fn apply_pending_update() {
 /// macOS: monta o dmg, copia o .app por cima do bundle em execução
 /// (`ditto` preserva a estrutura), desmonta. O binário em execução pode
 /// ser substituído — o inode vivo continua rodando.
+#[cfg(target_os = "macos")]
 fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
     use std::process::Command;
     let mnt = std::env::temp_dir().join("xperience-update-mnt");
@@ -299,6 +303,7 @@ fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
 
 /// Linux (Steam Deck incluído): substitui o binário/AppImage em execução —
 /// rename sobre o arquivo rodando é seguro no Linux (o inode segue vivo).
+#[cfg(target_os = "linux")]
 fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -306,6 +311,32 @@ fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// O despacho por plataforma é por `#[cfg]` (não `cfg!()`): as funções de
+/// outras plataformas nem chegam a compilar — `std::os::unix` quebrava o
+/// build do Windows na release 1.1.0.
+#[cfg(target_os = "macos")]
+fn apply_for_platform(path: &Path, name: &str) -> Result<(), String> {
+    if name.ends_with(".dmg") {
+        apply_macos_dmg(path)
+    } else {
+        Err("não é um update desta plataforma".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn apply_for_platform(path: &Path, name: &str) -> Result<(), String> {
+    if name.ends_with(".AppImage") {
+        apply_linux_appimage(path)
+    } else {
+        Err("não é um update desta plataforma".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_for_platform(_path: &Path, _name: &str) -> Result<(), String> {
+    Err("atualização automática não suportada nesta plataforma — instale do release".to_string())
 }
 
 #[cfg(test)]
