@@ -49,6 +49,9 @@ pub enum IdleExit {
     /// "Configurações" clicked — the only way into settings from here (no
     /// keyboard shortcut, mouse/gamepad only).
     OpenSettings,
+    /// "Dev" clicked — the dev-mode button that only exists once the Konami
+    /// code has been entered on this screen (plan revision: "ultra secreto").
+    OpenDev,
 }
 
 /// One clickable region of the setup screen, in output coordinates —
@@ -104,6 +107,9 @@ struct Download {
     label: String,
     rx: Option<mpsc::Receiver<CoreUpdateMsg>>,
     done: bool,
+    /// The last run failed (`label` tem o motivo) — o idle usa para manter
+    /// o status visível e a seta verde acesa para tentar de novo.
+    failed: bool,
 }
 
 impl Download {
@@ -112,6 +118,7 @@ impl Download {
             label: label.to_string(),
             rx: None,
             done: false,
+            failed: false,
         }
     }
 
@@ -130,11 +137,13 @@ impl Download {
             Ok(CoreUpdateMsg::Done) => {
                 self.done = true;
                 self.rx = None;
+                self.failed = false;
                 self.label = "instalado".to_string();
             }
             Ok(CoreUpdateMsg::Failed(e)) => {
-                self.label = format!("falha ({e}) - clique para tentar de novo");
+                self.label = format!("falha ao atualizar o núcleo: {e}");
                 self.rx = None;
+                self.failed = true;
             }
             Err(TryRecvError::Disconnected) => self.rx = None,
             Err(TryRecvError::Empty) => {}
@@ -184,6 +193,10 @@ pub fn run(
         dat.label = "instalado".to_string();
     }
     let mut core_missing = !core_installed;
+    // Feedback do download do núcleo na seta verde (plan revision: "cliquei
+    // no icone verde de update do nucleo mas nao abriu nada"): a confirmação
+    // fica alguns segundos no painel depois que instala.
+    let mut core_ok_until: Option<Instant> = None;
     // Updates (plan revision: "ao clicar no icone verde de atualizar"):
     // o notice é GUARDADO (o changelog/asset o leitor da tela usa), a
     // aba de update do app abre a tela com changelog + botão, e o core
@@ -213,6 +226,7 @@ pub fn run(
                 core_stale = false;
                 cab.set_nameplate_updates(app_update.is_some(), false);
             }
+            core_ok_until = Some(Instant::now() + Duration::from_secs(4));
         }
         if core.rx.is_none() && core.done {
             core_missing = false;
@@ -270,6 +284,15 @@ pub fn run(
         if m.quit {
             return Ok(IdleExit::Quit);
         }
+        // O código Konami (↑↑↓↓←→←→BA — teclado ou controle) completa aqui:
+        // religa o devmode da sessão e o painel passa a mostrar o botão "Dev"
+        // acima do "Configurações" (plan revision: "ultra secreto"). Nada na
+        // tela denuncia a escuta — sem flash, sem som; o log só sai no
+        // stderr de quem rodou pelo terminal.
+        if m.konami {
+            cab.set_dev_mode(true);
+            log::info!("devmode: on");
+        }
 
         if setup {
             let (w, h) = cab.screen_size();
@@ -296,6 +319,7 @@ pub fn run(
                                 core_update::download_and_install(url, &dest, &tx)
                             });
                             core.rx = Some(rx);
+                            core.failed = false;
                         } else {
                             core.label = "sem build automática - use configurações".to_string();
                         }
@@ -440,6 +464,7 @@ pub fn run(
                             });
                             core.rx = Some(rx);
                             core.done = false;
+                            core.failed = false;
                             core.label = "baixando...".to_string();
                         }
                         None => core.label = "sem build automática - use configurações".into(),
@@ -454,6 +479,10 @@ pub fn run(
                 // oferece o download do core no lugar.
                 Some(PanelButton::Insert) if !core_missing => return Ok(IdleExit::OpenShelf),
                 Some(PanelButton::Settings) if !core_missing => return Ok(IdleExit::OpenSettings),
+                // O botão só existe com o devmode ligado (só o painel o
+                // desenha), mas o gate fica explícito: sem devmode, cliques
+                // fantasmas não abrem nada.
+                Some(PanelButton::Dev) if cab.dev_mode() => return Ok(IdleExit::OpenDev),
                 Some(PanelButton::CoreDownload) if core.rx.is_none() => {
                     match core_update::core_download_url() {
                         Some(url) => {
@@ -464,6 +493,7 @@ pub fn run(
                             });
                             core.rx = Some(rx);
                             core.done = false;
+                            core.failed = false;
                             core.label = "baixando...".to_string();
                         }
                         None => {
@@ -487,6 +517,17 @@ pub fn run(
                 _ => {}
             }
         }
+        // A seta verde do núcleo não abre tela nenhuma: o download roda em
+        // segundo plano, e o painel mostra o andamento (plan revision:
+        // "cliquei no icone verde de update do nucleo mas nao abriu nada").
+        let core_status = if core.rx.is_some() || core.failed {
+            Some(core.label.clone())
+        } else if let Some(until) = core_ok_until {
+            (Instant::now() < until).then(|| "núcleo atualizado!".to_string())
+        } else {
+            None
+        };
+        cab.set_core_status(core_status.as_deref());
         cab.present_static(static_level);
         crate::runner::pace_frame(&mut next, frame);
     }

@@ -9,6 +9,47 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
 ## [Não lançado]
 
+### Adicionado
+- Modo dev: o menu (atrás do código Konami) ganhou a ação "instalar
+  assets de exemplo" — baixa um pacote zip (uma ROM + cover/logo/
+  cartridge/back-cover) e o descompacta na raiz do app, para demonstrar o
+  emulador funcionando numa instalação nova. Só instala o que está sob
+  `roms/` e `assets/` (com guarda contra caminhos `..`/absolutos); depois
+  de instalar, "Atualizar" na estante traz o jogo. A URL do pacote ainda
+  está vazia (`EXEMPLO_ZIP_URL` em `devmenu.rs`) e
+  `XPERIENCE_EXEMPLO_ZIP_URL` sobrepõe para testes.
+- Feedback do download do núcleo na seta verde do nameplate: o painel da
+  tela inicial mostra "baixando… X MB" ao vivo, "núcleo atualizado!" ao
+  concluir (e a seta se apaga) ou o motivo da falha — que antes era
+  silenciosa na tela inicial (o rótulo só existia na tela de setup), com a
+  seta permanecendo acesa para tentar de novo.
+- Título customizado por jogo no `library.json` (campo `"title"` na
+  entrada do SHA1): para hacks/traduções cujo cabeçalho do ROM traz o
+  carimbo do site de origem (ex.: "SNESFOREVER.COM.BR") em vez de um nome
+  de jogo. O override vale para a estante, a ordenação por nome e o
+  painel, e sobrevive a renomear o arquivo — é ligado ao conteúdo do ROM.
+
+### Alterado
+- Nova pasta `config/` na raiz do app reunindo os arquivos de
+  configuração/identificação: `xperience.cfg`, `nointro.dat`,
+  `library.json` e `hashcache.json` (migrados sozinhos no primeiro
+  arranque; um `--config` explícito nunca é tocado).
+- Os dados do RetroAchievements (`ra-cache/`, `ra-earned/`,
+  `ra-progress/`, `ra-pending.jsonl`) saíram de `saves/` e foram para a
+  nova pasta `retroachievements/` na raiz do app — `saves/` fica só com os
+  saves dos jogos. A mudança é migrada sozinha no primeiro arranque (nada
+  é re-baixado nem perdido).
+- Estante: o painel de detalhes abre na aba "informações" por padrão, e as
+  abas seguiram a ordem informações | capa traseira / manual | cartucho.
+- Modo dev, ultra secreto: o código Konami (↑↑↓↓←→←→BA — teclado ou
+  controle) na tela inicial liga o modo para a sessão inteira (nada é
+  persistido) e o painel passa a mostrar o botão "Dev" logo acima do
+  "Configurações". O menu em si, por ora, é um placeholder em branco com
+  apenas o botão "voltar". O código só é escutado na tela inicial — em
+  qualquer outra tela os mesmos botões seguem fazendo o que sempre
+  fizeram (com um detalhe: o "B" do controle que fecha o código não
+  encerra o app por acidente).
+
 ## [1.0.1-beta] - 2026-09-25
 
 A retrocompatibilidade do dia a dia: controles USB clones sem travar a

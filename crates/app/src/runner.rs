@@ -1658,9 +1658,11 @@ pub fn run_game(
                             PanelButton::LoadState => Some(UiEvent::OpenLoadModal),
                             // The rest are all idle-screen-, pause-book- or
                             // modal-only, never shown alongside the panel
-                            // that's up now.
+                            // that's up now. `Dev` is idle-screen-only too
+                            // (and its menu lives outside a game).
                             PanelButton::Insert
                             | PanelButton::Settings
+                            | PanelButton::Dev
                             | PanelButton::CoreDownload
                             | PanelButton::PauseContinue
                             | PanelButton::PauseNotePrev

@@ -91,26 +91,42 @@ pub fn saves_dir() -> PathBuf {
     app_root().join("saves")
 }
 
+/// Tudo do RetroAchievements (cache por jogo, ids ganhos, sessões de
+/// progresso, envios pendentes, badges) — plan revision: "dados do
+/// retroachievements da pasta save devem ficar em uma pasta
+/// 'retroachievements' na raiz - pasta save apenas são os saves dos jogos".
+pub fn retroachievements_dir() -> PathBuf {
+    app_root().join("retroachievements")
+}
+
 pub fn notes_dir() -> PathBuf {
     app_root().join("notes")
 }
 
+/// Os arquivos de configuração/identificação num lugar só — plan revision:
+/// "criar pasta config e colocar o cfg, o dat, library e o hash".
+pub fn config_dir() -> PathBuf {
+    app_root().join("config")
+}
+
 pub fn config_path() -> PathBuf {
-    app_root().join("xperience.cfg")
+    config_dir().join("xperience.cfg")
 }
 
 /// Play counts / added-at / last-played-at, keyed by ROM hash — the only
 /// state that needs to survive between runs (everything else is recomputed
-/// by scanning `roms/` fresh each launch).
+/// by scanning `roms/` fresh each launch). O hash cache do catálogo
+/// (`hashcache.json`) vive ao lado, derivado deste path por
+/// `with_file_name`.
 pub fn library_path() -> PathBuf {
-    app_root().join("library.json")
+    config_dir().join("library.json")
 }
 
 /// A No-Intro DAT (XML) for canonical ROM titles — optional, supplied by
 /// whoever runs the app (no direct download link exists on No-Intro's own
 /// site to fetch it automatically).
 pub fn nointro_dat_path() -> PathBuf {
-    app_root().join("nointro.dat")
+    config_dir().join("nointro.dat")
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@
 //! - [`core_update`] — download/update the snes9x core from the libretro buildbot.
 //! - [`dirs`] — the portable app layout (one root: next to the executable
 //!   on Windows/Linux, `~/Documents/SNES Xperience` on macOS).
+//! - [`devmenu`] — the dev-mode menu (Konami-code secret; blank for now).
 //! - [`idle`] — the idle/root screen (`xperience`'s home: TV off, "Inserir cartucho").
 //! - [`rom_rename`] — rename ROMs to their canonical No-Intro name (settings-screen action).
 //! - [`runner`] — the emulator run-loop (`emu-run`, and `xperience` between games).
@@ -17,6 +18,7 @@ pub mod console_art;
 pub mod core_update;
 pub mod dat_update;
 pub mod dirs;
+pub mod devmenu;
 pub mod idle;
 pub mod manual;
 pub mod ra;

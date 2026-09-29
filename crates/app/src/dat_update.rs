@@ -22,11 +22,11 @@ pub fn dat_download_url() -> &'static str {
     "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System.dat"
 }
 
-/// Where the DAT is installed — `dirs::nointro_dat_path()`'s own definition,
-/// mirrored here so the caller can decide "is it already there" and this
-/// module stays the only writer.
+/// Where the DAT is installed — `dirs::nointro_dat_path()`, restated here
+/// so the caller can decide "is it already there" and this module stays the
+/// only writer.
 pub fn dat_path() -> PathBuf {
-    crate::dirs::app_root().join("nointro.dat")
+    crate::dirs::nointro_dat_path()
 }
 
 /// Whether a usable DAT is already installed (exists and is non-trivial —

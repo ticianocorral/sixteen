@@ -255,10 +255,9 @@ impl KeyMap {
 
 /// Gamepad-button layout: which SDL gamepad button drives each SNES button —
 /// the gamepad counterpart of [`KeyMap`]. SDL's controller DB normalizes the
-/// button *names* across devices, but clones (and the native macOS path this
-/// app steers clone "Switch" pads into) can still land a press in the wrong
-/// slot — so the layout is rebindable in the settings screen, same as the
-/// keyboard's, and persists in the config's `[gamepad]` section.
+/// button *names* across devices, but clones can still land a press in the
+/// wrong slot — so the layout is rebindable in the settings screen, same as
+/// the keyboard's, and persists in the config's `[gamepad]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PadMap {
     pad: Vec<(PadBtn, PadButton)>,

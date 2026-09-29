@@ -275,6 +275,18 @@ pub struct Cabinet {
     /// app's own live status ("Baixar núcleo" / progress text). `None`
     /// restores the plain idle panel.
     idle_core_prompt: Option<String>,
+    /// O modo dev (plan revision: "konami code na tela inicial do app ...
+    /// habilitar botão em cima da configuração") — desligado até o app
+    /// religar; ligado, o painel da tela inicial desenha um botão "Dev"
+    /// logo acima do "Configurações". Session-only: nunca é persistido, o
+    /// segredo não vaza para arquivo nenhum.
+    dev_mode: bool,
+    /// Linha de status do download do núcleo no painel da tela inicial
+    /// (plan revision: "cliquei no icone verde de update do nucleo mas nao
+    /// abriu nada") — o download é em segundo plano e o rótulo dele só
+    /// existia na tela de setup; aqui o idle mostra "baixando… X MB",
+    /// "núcleo atualizado!" ou o motivo da falha.
+    core_status: Option<String>,
     /// The foley stream (app-supplied one-shots: insert/eject/power/reset,
     /// plan revision) — opened lazily on the first sound and kept alive for
     /// the process, because a stream dropped right after `queue` destroys
@@ -384,6 +396,11 @@ enum ChinOsd {
 pub enum PanelButton {
     Insert,
     Settings,
+    /// The idle screen's dev-mode button (plan revision: "habilitar botão em
+    /// cima da configuração") — only drawn while the app's dev mode is on,
+    /// which only the Konami code on the idle screen can turn on. The dev
+    /// menu itself lives app-side.
+    Dev,
     /// The idle screen's "Baixar núcleo" button (plan revision: "ao iniciar
     /// o app pela primeira vez e/ou nao tiver o core na pasta, mostrar
     /// botão para baixar") — only drawn while the core is missing; the
@@ -905,6 +922,8 @@ impl Cabinet {
             settings_buttons: Vec::new(),
             audio: audio.clone(),
             idle_core_prompt: None,
+            dev_mode: false,
+            core_status: None,
             static_hiss: false,
             hiss: None,
             hiss_rng: 0x2545_f491,
@@ -978,6 +997,27 @@ impl Cabinet {
     /// ever rendered on the idle (panel-less) screen.
     pub fn set_idle_core_prompt(&mut self, label: Option<&str>) {
         self.idle_core_prompt = label.map(|l| l.to_string());
+    }
+
+    /// O modo dev (plan revision: "konami code na tela inicial do app") —
+    /// ligado só pelo app, ao reconhecer o código; enquanto ligado, o painel
+    /// da tela inicial desenha o botão "Dev" acima do "Configurações".
+    /// Nunca é persistido nem lido de arquivo: o segredo vive só na sessão.
+    pub fn set_dev_mode(&mut self, on: bool) {
+        self.dev_mode = on;
+    }
+
+    /// O estado atual do modo dev — o app consulta para saber se a sessão
+    /// já o desbloqueou (o botão em si o Cabinet desenha sozinho).
+    pub fn dev_mode(&self) -> bool {
+        self.dev_mode
+    }
+
+    /// A linha de status do download do núcleo no painel do idle ("baixando…
+    /// X MB" / "núcleo atualizado!" / motivo da falha) — `None` não desenha
+    /// nada. O app atualiza a cada frame enquanto o download vive.
+    pub fn set_core_status(&mut self, status: Option<&str>) {
+        self.core_status = status.map(|s| s.to_string());
     }
 
     pub fn toggle_fullscreen(&mut self) {
@@ -1705,6 +1745,8 @@ impl Cabinet {
             panel,
             self.session,
             self.idle_core_prompt.as_deref(),
+            self.dev_mode,
+            self.core_status.as_deref(),
         );
         self.canvas.set_viewport(None);
         self.present_and_time();
@@ -1748,6 +1790,8 @@ impl Cabinet {
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
+        let dev_mode = self.dev_mode;
+        let core_status = self.core_status.as_deref();
         let osd = self.osd_for_capture();
         let font = &mut self.font;
         let images = &self.images;
@@ -1778,6 +1822,8 @@ impl Cabinet {
                 panel,
                 session,
                 idle_core_prompt,
+                dev_mode,
+                core_status,
             );
             c.set_viewport(None);
             saved = c
@@ -2145,6 +2191,8 @@ impl Cabinet {
             panel,
             self.session,
             self.idle_core_prompt.as_deref(),
+            self.dev_mode,
+            self.core_status.as_deref(),
         );
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
@@ -2181,6 +2229,8 @@ impl Cabinet {
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
+        let dev_mode = self.dev_mode;
+        let core_status = self.core_status.as_deref();
         let ra_status = self.ra_status;
         let font = &mut self.font;
         let images = &self.images;
@@ -2208,6 +2258,8 @@ impl Cabinet {
                 panel,
                 session,
                 idle_core_prompt,
+                dev_mode,
+                core_status,
             );
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
@@ -2584,6 +2636,8 @@ impl Cabinet {
             panel,
             self.session,
             self.idle_core_prompt.as_deref(),
+            self.dev_mode,
+            self.core_status.as_deref(),
         );
         self.canvas.set_viewport(None);
         self.present_and_time();
@@ -2675,6 +2729,8 @@ impl Cabinet {
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
+        let dev_mode = self.dev_mode;
+        let core_status = self.core_status.as_deref();
         let nameplate = self.nameplate.as_str();
         let nameplate_updates = self.nameplate_updates;
         let mut close_button = self.close_button;
@@ -2702,6 +2758,8 @@ impl Cabinet {
                 panel,
                 session,
                 idle_core_prompt,
+                dev_mode,
+                core_status,
             );
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
@@ -3897,6 +3955,7 @@ fn panel_rect(out_w: u32, out_h: u32) -> Rect {
 /// button in the logo's spot. Returns the clickable buttons drawn this frame,
 /// in `rect`'s (output/canvas) coordinate space — the caller stores them for
 /// `Cabinet::hit_panel_button`.
+#[allow(clippy::too_many_arguments)]
 fn draw_panel(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -3905,6 +3964,8 @@ fn draw_panel(
     rect: Rect,
     session: Duration,
     idle_core_prompt: Option<&str>,
+    dev_mode: bool,
+    core_status: Option<&str>,
 ) -> Vec<(PanelButton, Rect)> {
     if rect.width() == 0 {
         return Vec::new();
@@ -4003,15 +4064,28 @@ fn draw_panel(
                 draw_button(canvas, font, settings, "Configurações", true),
             ),
         ];
+        // O botão do modo dev (plan revision: "habilitar botão em cima da
+        // configuração") — só existe com o devmode ligado, e o devmode só
+        // entra pelo código Konami nesta tela. Entra na pilha entre o
+        // "Configurações" e o aviso de core, que sobe junto.
+        let mut btn_top = settings.y();
+        if dev_mode {
+            let dev = Rect::new(x, btn_top - 8 - btn_h, inner_w, btn_h as u32);
+            btn_top = dev.y();
+            buttons.push((
+                PanelButton::Dev,
+                draw_button(canvas, font, dev, "Dev", true),
+            ));
+        }
         // The core prompt (plan revision: "avisar que para jogar é
         // necessário o download do core" / "coloque o aviso em cima do
         // botão de download"): warning line directly above the button, both
-        // just above the Configurações footer.
+        // just above the Configurações footer (ou do Dev, quando ele existe).
         if let Some(label) = idle_core_prompt {
             const WARN: &str = "Para jogar é necessário baixar o núcleo snes9x.";
-            let btn_top = settings.y() - 8 - btn_h;
+            let btn = Rect::new(x, btn_top - 8 - btn_h, inner_w, btn_h as u32);
             let warn_h = wrapped_height(inner_w, 1, WARN);
-            let warn_y = btn_top - 6 - warn_h;
+            let warn_y = btn.y() - 6 - warn_h;
             if warn_y > cy {
                 draw_text_wrapped_absolute(
                     canvas,
@@ -4022,11 +4096,28 @@ fn draw_panel(
                     TextStyle::new(1, PANEL_WARN),
                     WARN,
                 );
-                let btn = Rect::new(x, btn_top, inner_w, btn_h as u32);
                 buttons.push((
                     PanelButton::CoreDownload,
                     draw_button(canvas, font, btn, label, true),
                 ));
+            }
+        } else if let Some(status) = core_status {
+            // Andamento do download do núcleo na seta verde (plan revision:
+            // "cliquei no icone verde de update do nucleo mas nao abriu
+            // nada") — linha dim acima do rodapé; sem botão, o clique é na
+            // seta do nameplate.
+            let warn_h = wrapped_height(inner_w, 1, status);
+            let warn_y = btn_top - 6 - warn_h;
+            if warn_y > cy {
+                draw_text_wrapped_absolute(
+                    canvas,
+                    font,
+                    x,
+                    warn_y,
+                    inner_w,
+                    TextStyle::new(1, PANEL_WARN),
+                    status,
+                );
             }
         }
         return buttons;
@@ -4566,29 +4657,29 @@ fn draw_shelf_panel(
     let gap = 6i32;
     let half = (inner_w as i32 - gap) / 2;
     let active = panel.section;
-    // Quatro abas em duas fileiras: capa traseira | cartucho, depois
-    // informações | manual (plan revision: "mostra botao do manual junto
-    // com os botões de cartucho, info etc").
+    // Quatro abas em duas fileiras: informações | capa traseira, depois
+    // manual | cartucho (plan revision: "mudar ordem dos botoes: informações,
+    // capa traseira, manual e cartucho").
     let tabs = [
-        (
-            ShelfButton::PanelJump(PanelSection::CapaTraseira),
-            "capa traseira",
-            active == PanelSection::CapaTraseira || has(PanelSection::CapaTraseira),
-        ),
-        (
-            ShelfButton::PanelJump(PanelSection::Cartucho),
-            "cartucho",
-            active == PanelSection::Cartucho || has(PanelSection::Cartucho),
-        ),
         (
             ShelfButton::PanelJump(PanelSection::Informacoes),
             "informações",
             active == PanelSection::Informacoes || has(PanelSection::Informacoes),
         ),
         (
+            ShelfButton::PanelJump(PanelSection::CapaTraseira),
+            "capa traseira",
+            active == PanelSection::CapaTraseira || has(PanelSection::CapaTraseira),
+        ),
+        (
             ShelfButton::PanelJump(PanelSection::Manual),
             "manual",
             active == PanelSection::Manual || has(PanelSection::Manual),
+        ),
+        (
+            ShelfButton::PanelJump(PanelSection::Cartucho),
+            "cartucho",
+            active == PanelSection::Cartucho || has(PanelSection::Cartucho),
         ),
     ];
     // Respiro entre a logo/título e a fileira de botões: sem ele os botões

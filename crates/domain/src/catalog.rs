@@ -96,6 +96,11 @@ pub struct RomRow {
     /// Canonical title from the No-Intro DAT, if one was loaded and matched
     /// by CRC32 (plan §4.1).
     pub nointro_name: Option<String>,
+    /// The player's own title override (plan revision: hacks/translations
+    /// whose ROM header carries the dumper's stamp — "SNESFOREVER.COM.BR" —
+    /// instead of a game name). Lives in the sidecar keyed by SHA1, so it
+    /// survives file renames and wins over every automatic source.
+    pub custom_title: Option<String>,
     /// Extra facts for the shelf panel — label/value pairs (e.g. "ano"/
     /// "1994"). A loaded No-Intro DAT's own fields win when present; the
     /// year/publisher bundled from TOSEC (plan revision) fill in the gaps,
@@ -118,11 +123,15 @@ pub struct CatalogEntry {
 }
 
 impl RomRow {
-    /// The game's display title — No-Intro name when the DAT resolved one,
-    /// the internal header name otherwise, the file stem as a last resort.
-    /// `Cow` so the common cases borrow instead of allocating a `String` per
-    /// call (this is on the shelf's per-frame sort/filter paths).
+    /// The game's display title — the player's override when set, the
+    /// No-Intro name when the DAT resolved one, the internal header name
+    /// otherwise, the file stem as a last resort. `Cow` so the common cases
+    /// borrow instead of allocating a `String` per call (this is on the
+    /// shelf's per-frame sort/filter paths).
     pub fn title(&self) -> Cow<'_, str> {
+        if let Some(t) = &self.custom_title {
+            return Cow::Borrowed(t);
+        }
         if let Some(n) = &self.nointro_name {
             return Cow::Borrowed(n);
         }
@@ -165,6 +174,10 @@ struct Persisted {
     /// load as "nothing is a favorite" instead of failing the whole store.
     #[serde(default)]
     favorite: bool,
+    /// The player's own display title (hacks whose ROM header says e.g.
+    /// "SNESFOREVER.COM.BR") — absent for every game that never got one.
+    #[serde(default)]
+    title: Option<String>,
 }
 
 pub struct Catalog {
@@ -202,6 +215,7 @@ impl Catalog {
                     last_played_at: None,
                     play_count: 0,
                     favorite: false,
+                    title: None,
                 });
                 let nointro_hit = dat.and_then(|d| d.lookup(&r.id.crc32));
                 let nointro_name = nointro_hit.map(|i| i.name.clone());
@@ -213,6 +227,7 @@ impl Catalog {
                     size: r.file_size,
                     internal_name: r.id.internal_name,
                     nointro_name,
+                    custom_title: p.title,
                     nointro_extra,
                     added_at: p.added_at,
                     last_played_at: p.last_played_at,
@@ -284,6 +299,7 @@ impl Catalog {
                         last_played_at: r.last_played_at,
                         play_count: r.play_count,
                         favorite: r.favorite,
+                        title: r.custom_title.clone(),
                     },
                 )
             })
@@ -325,12 +341,24 @@ mod tests {
             size: 0x8000,
             internal_name: Some(name.to_uppercase()),
             nointro_name: None,
+            custom_title: None,
             nointro_extra: Vec::new(),
             added_at,
             last_played_at: None,
             play_count: 0,
             favorite: false,
         }
+    }
+
+    #[test]
+    fn title_prefers_the_player_override_over_everything() {
+        let mut r = row("abc", "World Cup 2026", 0);
+        assert_eq!(r.title(), "WORLD CUP 2026"); // cabeçalho interno
+        r.nointro_name = Some("Canonical (World) (Rev 1)".into());
+        assert_eq!(r.title(), "Canonical (World) (Rev 1)");
+        // O override do jogador ganha até do DAT.
+        r.custom_title = Some("ISS World Cup 2026".into());
+        assert_eq!(r.title(), "ISS World Cup 2026");
     }
 
     fn fake_catalog(rows: Vec<RomRow>) -> Catalog {

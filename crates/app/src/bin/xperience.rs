@@ -1,9 +1,9 @@
 //! The whole thing: idle → selector → game → idle → …, in one process, no
 //! shell glue, no installation. Portable: `roms/`, `core/`, `assets/`,
-//! `saves/`, `notes/`, `xperience.cfg` and `library.json` all live in one
-//! root (see `xperience_app::dirs`) — next to the executable on
-//! Windows/Linux, `~/Documents/SNES Xperience` on macOS — drop ROMs in
-//! `roms/` and go.
+//! `saves/`, `notes/` and a `config/` folder (xperience.cfg, nointro.dat,
+//! library.json, hashcache.json) all live in one root (see
+//! `xperience_app::dirs`) — next to the executable on Windows/Linux,
+//! `~/Documents/SNES Xperience` on macOS — drop ROMs in `roms/` and go.
 //!
 //! The idle screen (TV off, "Inserir cartucho"/"Configurações" in place of
 //! the logo) is the app's home: it's what you see at startup, after backing
@@ -176,6 +176,8 @@ fn main() -> Result<()> {
         xperience_app::dirs::assets_dir().join("backcover"),
         args.save_dir.clone(),
         args.notes_dir.clone(),
+        xperience_app::dirs::retroachievements_dir(),
+        xperience_app::dirs::config_dir(),
     ] {
         let _ = std::fs::create_dir_all(&dir);
     }
@@ -278,6 +280,12 @@ fn main() -> Result<()> {
     }
 
     'app: loop {
+        // O código Konami (↑↑↓↓←→←→BA) só é escutado na tela inicial — o
+        // watcher liga aqui e desliga ao sair dela, para que navegar com
+        // d-pad na estante/configurações nunca engula um Back/Confirm nem
+        // complete a sequência por acidente (plan revision: devmode ultra
+        // secreto). Em memória, nunca persistido.
+        plat.set_konami_watch(true);
         let exit = idle::run(
             &mut plat,
             &mut cab,
@@ -286,6 +294,7 @@ fn main() -> Result<()> {
             core_path.is_some(),
             xperience_app::dat_update::dat_installed(),
         )?;
+        plat.set_konami_watch(false);
         // The idle screen's own "Baixar núcleo" button may have just
         // installed one — re-resolve (cheap when core/ is unchanged) and
         // refresh the nameplate either way.
@@ -294,6 +303,15 @@ fn main() -> Result<()> {
         match exit {
             IdleExit::Quit => break 'app,
             IdleExit::OpenShelf => shelf_opts.fade_in = Some(idle_static),
+            IdleExit::OpenDev => {
+                // O menu do devmode (plan revision: "por enquanto criar menu
+                // em branco apenas com o botão voltar") — `true` aqui é o
+                // fechamento da janela dentro dele, que encerra o app.
+                if xperience_app::devmenu::run(&mut plat, &mut cab)? {
+                    break 'app;
+                }
+                continue 'app;
+            }
             IdleExit::OpenSettings => {
                 if settings::run(&mut plat, &mut cab, &mut cfg)? {
                     break 'app;
@@ -477,6 +495,51 @@ fn migrate_old_data() {
         ]);
     }
     migrate_macos_bundle_sibling();
+    migrate_ra_out_of_saves();
+    migrate_root_files_into_config();
+}
+
+/// Plan revision: "criar pasta config e colocar o cfg, o dat, library e o
+/// hash" — move `xperience.cfg`, `nointro.dat`, `library.json` e
+/// `hashcache.json` da raiz do app para `config/`. Idempotente: só move
+/// quando o destino não existe (um `--config` explícito nunca é tocado —
+/// a migração só trata os nomes padrão na raiz). Roda antes do
+/// `Config::load` e da abertura do catálogo, que leem os caminhos novos.
+fn migrate_root_files_into_config() {
+    let config = xperience_app::dirs::config_dir();
+    for item in ["xperience.cfg", "nointro.dat", "library.json", "hashcache.json"] {
+        let src = xperience_app::dirs::app_root().join(item);
+        let dst = config.join(item);
+        if !src.is_file() || dst.exists() {
+            continue;
+        }
+        match std::fs::rename(&src, &dst) {
+            Ok(()) => log::info!("migrado: {item} -> config/{item}"),
+            Err(e) => log::warn!("migrando {item} para config/: {e}"),
+        }
+    }
+}
+
+/// Plan revision: "dados do retroachievements da pasta save devem ficar em
+/// uma pasta 'retroachievements' na raiz - pasta save apenas são os saves
+/// dos jogos" — move os quatro itens do RA (`ra-cache/`, `ra-earned/`,
+/// `ra-progress/`, `ra-pending.jsonl`) de `saves/` para
+/// `retroachievements/`. Idempotente: só move quando o destino não existe
+/// (dois lados vivos = fica como está; nada do RA é sobrescrito).
+fn migrate_ra_out_of_saves() {
+    let ra = xperience_app::dirs::retroachievements_dir();
+    let saves = xperience_app::dirs::saves_dir();
+    for item in ["ra-cache", "ra-earned", "ra-progress", "ra-pending.jsonl"] {
+        let src = saves.join(item);
+        let dst = ra.join(item);
+        if !src.exists() || dst.exists() {
+            continue;
+        }
+        match std::fs::rename(&src, &dst) {
+            Ok(()) => log::info!("migrado: saves/{item} -> retroachievements/{item}"),
+            Err(e) => log::warn!("migrando saves/{item}: {e}"),
+        }
+    }
 }
 
 /// macOS only, and only relevant for the brief window before `dirs::app_root`

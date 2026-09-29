@@ -109,11 +109,11 @@ pub struct RaGame {
     pub unsupported: bool,
 }
 
-/// Where the per-game cache lives — `saves/ra-cache/<hash>.json`, one file
+/// Where the per-game cache lives — `retroachievements/ra-cache/<hash>.json`, one file
 /// per identified game, holding the raw `API_GetGameExtended` reply so a
 /// later phase can pull conditions/badges from it without re-fetching.
 fn cache_path(hash: &str) -> std::path::PathBuf {
-    crate::dirs::saves_dir()
+    crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join(format!("{hash}.json"))
 }
@@ -426,26 +426,26 @@ pub fn connect_login(user: &str, password: &str) -> Result<String, String> {
         .ok_or_else(|| "resposta sem token".to_string())
 }
 
-/// Where a game's "already earned" ids live — `saves/ra-earned/<hash>.json`.
+/// Where a game's "already earned" ids live — `retroachievements/ra-earned/<hash>.json`.
 /// The runtime re-arms on reset, so this local set is what keeps unlocks
 /// from being submitted twice.
 fn earned_path(hash: &str) -> std::path::PathBuf {
-    crate::dirs::saves_dir()
+    crate::dirs::retroachievements_dir()
         .join("ra-earned")
         .join(format!("{hash}.json"))
 }
 
 /// Where a game's serialized rcheevos session lives —
-/// `saves/ra-progress/<hash>.rap`.
+/// `retroachievements/ra-progress/<hash>.rap`.
 pub fn progress_path(hash: &str) -> std::path::PathBuf {
-    crate::dirs::saves_dir()
+    crate::dirs::retroachievements_dir()
         .join("ra-progress")
         .join(format!("{hash}.rap"))
 }
 
 /// As conquistas ganhas de um jogo: id → `true` quando ganha em hardcore,
 /// `false` em softcore (plan revision: "como sei qual tipo ganhei ou já
-/// tenho?"). Persistido em `saves/ra-earned/<hash>.json` como
+/// tenho?"). Persistido em `retroachievements/ra-earned/<hash>.json` como
 /// `{"id": hardcore}` — o formato legado (array de ids, sem modo) é lido
 /// como tudo softcore e corrigido pelo sync do servidor.
 pub type EarnedMap = std::collections::HashMap<u32, bool>;
@@ -676,7 +676,7 @@ impl Active {
                 }
             }
             // Out of retries: record for a future pass instead of dropping.
-            let path = crate::dirs::saves_dir().join("ra-pending.jsonl");
+            let path = crate::dirs::retroachievements_dir().join("ra-pending.jsonl");
             if let Ok(mut f) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -1029,9 +1029,9 @@ pub fn release_and_extras(hash: &str) -> (Option<String>, Vec<(String, String)>)
 
 // ---- earned do servidor (os [x] da lista da estante) ------------------
 
-/// Onde os ids ganhos no servidor ficam — `saves/ra-cache/earned/<game_id>.json`.
+/// Onde os ids ganhos no servidor ficam — `retroachievements/ra-cache/earned/<game_id>.json`.
 fn earned_ids_path(game_id: u64) -> std::path::PathBuf {
-    crate::dirs::saves_dir()
+    crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join("earned")
         .join(format!("{game_id}.json"))
@@ -1154,9 +1154,9 @@ pub fn fetch_game_earned_worker(
 
 // ---- badges ----------------------------------------------------------
 
-/// Where a downloaded badge lives — `saves/ra-cache/badges/<name>.png`.
+/// Where a downloaded badge lives — `retroachievements/ra-cache/badges/<name>.png`.
 pub fn badge_path(name: &str) -> Option<std::path::PathBuf> {
-    let p = crate::dirs::saves_dir()
+    let p = crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join("badges")
         .join(format!("{name}.png"));
@@ -1178,7 +1178,7 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         .ok()?;
     let mut bytes = Vec::new();
     resp.into_reader().read_to_end(&mut bytes).ok()?;
-    let dir = crate::dirs::saves_dir().join("ra-cache").join("badges");
+    let dir = crate::dirs::retroachievements_dir().join("ra-cache").join("badges");
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join(format!("{name}.png"));
     std::fs::write(&path, &bytes).ok()?;
@@ -1187,7 +1187,7 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
 
 /// Baixa os badges de todas as conquistas do set (worker thread, fire and
 /// forget) — a notificação de desbloqueio e a lista da estante encontram
-/// tudo já em `saves/ra-cache/badges/` na hora, sem custo de rede no
+/// tudo já em `retroachievements/ra-cache/badges/` na hora, sem custo de rede no
 /// momento do uso. Chamado quando um jogo é identificado.
 pub fn prefetch_badges(rom_path: &std::path::Path) {
     let rom_path = rom_path.to_path_buf();

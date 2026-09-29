@@ -125,11 +125,57 @@ pub enum MenuNav {
     End,
 }
 
+/// One step of the Konami code, input-agnostic — arrows on the keyboard,
+/// d-pad on the pad, and the closing B/A either as letter keys or as the
+/// pad's East/South (the menu Back/Confirm).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KonamiStep {
+    Up,
+    Down,
+    Left,
+    Right,
+    B,
+    A,
+}
+
+/// The code itself (plan revision: "deve ser ultra secreto — konami code na
+/// tela inicial do app").
+const KONAMI: [KonamiStep; 10] = [
+    KonamiStep::Up,
+    KonamiStep::Up,
+    KonamiStep::Down,
+    KonamiStep::Down,
+    KonamiStep::Left,
+    KonamiStep::Right,
+    KonamiStep::Left,
+    KonamiStep::Right,
+    KonamiStep::B,
+    KonamiStep::A,
+];
+
+/// What one press did to the in-progress Konami sequence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KonamiFeed {
+    /// Matched the expected step; the sequence is still short of complete.
+    Advanced,
+    /// The final A landed — the code just completed.
+    Completed,
+    /// Wrong step; the progress reset (to 1 if the press itself starts the
+    /// code, i.e. an Up, else to 0).
+    Mismatch,
+}
+
 /// One frame's worth of menu input.
 #[derive(Default)]
 pub struct MenuInput {
     pub quit: bool,
     pub nav: Vec<MenuNav>,
+    /// The Konami code (↑↑↓↓←→←→BA) completed this frame — arrow keys on
+    /// the keyboard plus B/A, or the pad equivalent (d-pad + East/South).
+    /// Only tracked while [`Platform::set_konami_watch`] is on, so screens
+    /// that opt out never see a swallowed input or a completed sequence.
+    /// The app uses it to unlock the dev mode; nothing else reacts to it.
+    pub konami: bool,
     /// Set only when `poll_menu` was called with `capture_key: true` and a
     /// key went down this frame: its raw SDL name, for rebinding a control.
     pub captured_key: Option<String>,
@@ -231,6 +277,13 @@ pub struct Platform {
     /// walks. Defaults to the factory layout; the settings screen swaps pairs
     /// through `set_pad_map` (persisted by the app).
     pad_map: PadMap,
+    /// Whether `poll_menu` is currently watching for the Konami code — on
+    /// only while the app's idle (home) screen runs, so the sequence never
+    /// half-triggers (or swallows a pad Back/Confirm) anywhere else.
+    konami_watch: bool,
+    /// How much of [`KONAMI`] is currently matched, while `konami_watch` is
+    /// on — an index into the sequence, reset on any wrong step.
+    konami_step: usize,
 }
 
 const MENU_PAD_MAP: [(PadBtn, MenuNav); 8] = [
@@ -244,24 +297,54 @@ const MENU_PAD_MAP: [(PadBtn, MenuNav); 8] = [
     (PadBtn::RightShoulder, MenuNav::PageDown),
 ];
 
+/// A keydown's Konami step, when it has one — arrow keys for the directions,
+/// the letters B and A for the finish (the classic keyboard form of the
+/// code).
+fn konami_key_step(k: sdl3::keyboard::Keycode) -> Option<KonamiStep> {
+    use sdl3::keyboard::Keycode;
+    match k {
+        Keycode::Up => Some(KonamiStep::Up),
+        Keycode::Down => Some(KonamiStep::Down),
+        Keycode::Left => Some(KonamiStep::Left),
+        Keycode::Right => Some(KonamiStep::Right),
+        Keycode::B => Some(KonamiStep::B),
+        Keycode::A => Some(KonamiStep::A),
+        _ => None,
+    }
+}
+
+/// A pad-driven menu intent's Konami step — the d-pad for the directions,
+/// East/B and South/A (the menu's Back/Confirm) for the finish.
+fn konami_nav_step(nav: MenuNav) -> Option<KonamiStep> {
+    match nav {
+        MenuNav::Up => Some(KonamiStep::Up),
+        MenuNav::Down => Some(KonamiStep::Down),
+        MenuNav::Left => Some(KonamiStep::Left),
+        MenuNav::Right => Some(KonamiStep::Right),
+        MenuNav::Back => Some(KonamiStep::B),
+        MenuNav::Confirm => Some(KonamiStep::A),
+        MenuNav::PageUp | MenuNav::PageDown | MenuNav::Home | MenuNav::End => None,
+    }
+}
+
+/// Feed one press into the in-progress Konami sequence — a free function
+/// over just the progress index, so `poll_menu` can call it while the event
+/// pump / open pads still borrow parts of `self`.
+fn konami_feed(progress: &mut usize, step: KonamiStep) -> KonamiFeed {
+    if step == KONAMI[*progress] {
+        *progress += 1;
+        if *progress == KONAMI.len() {
+            *progress = 0;
+            return KonamiFeed::Completed;
+        }
+        return KonamiFeed::Advanced;
+    }
+    *progress = if step == KONAMI[0] { 1 } else { 0 };
+    KonamiFeed::Mismatch
+}
+
 impl Platform {
     pub fn new() -> Result<Self, PlatformError> {
-        // Pads clones de "Switch Pro Controller" (p.ex. RetroFlag de SNES,
-        // VID/PID 057e:2009) fazem o driver hidapi do SDL reivindicá-los com
-        // handshake e um watchdog que, sem pacote de input por 100 ms, envia
-        // um comando ForceUSB SÍNCRONO na thread principal
-        // (SDL_hidapi_switch.c, UpdateDevice) — cada write trava ~1 s até o
-        // timeout do USB, e o resultado é a interface engasgando em ondas
-        // enquanto o pad estiver plugado. No backend nativo (GCController/
-        // IOKit) o mesmo pad é atendido sem nenhum write síncrono; para SNES
-        // não perdemos nada que importe (não usamos rumble nem giro).
-        sdl3::hint::set("SDL_JOYSTICK_HIDAPI_SWITCH", "0");
-        // GCController (o "MFI" da Apple) também engole clones 057e:2009 — e
-        // fica esperando o protocolo Switch que eles não falam: o pad abre e
-        // nenhum botão chega. Sem MFI, o pad cai no backend IOKit bruto, que
-        // lê os reports de joystick genérico que ele manda de verdade (o
-        // mesmo caminho que o kernel HID alimenta no Raspberry).
-        sdl3::hint::set("SDL_JOYSTICK_MFI", "0");
         // Fullscreen sem os Spaces do macOS: a transição nativa de zoom lia
         // como "abre de um tamanho e dá uma aumentada" — com Spaces fora, a
         // janela cobre a tela na hora, sem animação. Vale para janelas
@@ -283,6 +366,8 @@ impl Platform {
             devices_pending: false,
             menu_prev: [false; MENU_PAD_MAP.len()],
             pad_map: PadMap::defaults(),
+            konami_watch: false,
+            konami_step: 0,
         };
         me.sync_gamepads();
         Ok(me)
@@ -433,6 +518,24 @@ impl Platform {
                 Event::GamepadButtonDown { button, .. } if mode == MenuMode::CaptureKey => {
                     out.captured_pad = Some(button);
                 }
+                // Nav mode normally ignores the keyboard entirely (no
+                // keyboard shortcuts) — the one exception is the Konami
+                // watcher: while the idle screen has it on, arrows + B/A
+                // feed the secret sequence and nothing else.
+                Event::KeyDown {
+                    keycode: Some(k),
+                    repeat: false,
+                    ..
+                } if mode == MenuMode::Nav && self.konami_watch => {
+                    if let Some(step) = konami_key_step(k) {
+                        if matches!(
+                            konami_feed(&mut self.konami_step, step),
+                            KonamiFeed::Completed
+                        ) {
+                            out.konami = true;
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -442,7 +545,32 @@ impl Platform {
         for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
             let down = pad.map(|p| p.button(*btn)).unwrap_or(false);
             if down && !self.menu_prev[i] {
-                out.nav.push(*nav);
+                // The pad's Konami steps ride the same buttons the menus use:
+                // the d-pad is inert on the idle screen, but the closing B/A
+                // are Back/Confirm there — quit the app / open the shelf. So
+                // once the arrow run is matched, those two presses feed the
+                // sequence AND are swallowed; anywhere short of that they
+                // pass through untouched.
+                let mut swallow = false;
+                if self.konami_watch {
+                    if let Some(step) = konami_nav_step(*nav) {
+                        let closing = matches!(step, KonamiStep::B | KonamiStep::A);
+                        match konami_feed(&mut self.konami_step, step) {
+                            KonamiFeed::Completed => {
+                                out.konami = true;
+                                swallow = closing;
+                            }
+                            // "Advanced" with a closing step is exactly the
+                            // B at position 8 (B only matches there) — the
+                            // one Back press that must not quit the app.
+                            KonamiFeed::Advanced => swallow = closing,
+                            KonamiFeed::Mismatch => {}
+                        }
+                    }
+                }
+                if !swallow {
+                    out.nav.push(*nav);
+                }
             }
             self.menu_prev[i] = down;
         }
@@ -604,6 +732,14 @@ impl Platform {
         self.pad_map = map;
     }
 
+    /// Turn the Konami code watcher on/off (the app's idle screen turns it on
+    /// for as long as it runs; every other screen leaves it off). Turning it
+    /// on (re)starts the sequence from zero.
+    pub fn set_konami_watch(&mut self, on: bool) {
+        self.konami_watch = on;
+        self.konami_step = 0;
+    }
+
     fn sample_gamepads(&self, input: &mut Input) {
         input.clear_pads();
         for (port, (_, pad)) in self.gamepads.iter().enumerate() {
@@ -618,7 +754,7 @@ impl Platform {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_paste;
+    use super::{konami_feed, konami_nav_step, sanitize_paste, KonamiFeed, KonamiStep, MenuNav};
 
     #[test]
     fn sanitize_paste_drops_control_chars_and_keeps_the_rest() {
@@ -628,5 +764,80 @@ mod tests {
         assert_eq!(sanitize_paste("li\nne\rtab\there"), "linetabhere");
         assert_eq!(sanitize_paste("são çedilha ✨"), "são çedilha ✨");
         assert_eq!(sanitize_paste("\n\r\t"), "");
+    }
+
+    /// Feed a whole sequence, returning what the last press did.
+    fn feed_all(progress: &mut usize, steps: &[KonamiStep]) -> KonamiFeed {
+        let mut last = KonamiFeed::Mismatch;
+        for &s in steps {
+            last = konami_feed(progress, s);
+        }
+        last
+    }
+
+    use KonamiStep::{A, B, Down, Left, Right, Up};
+
+    #[test]
+    fn konami_completes_on_the_exact_sequence() {
+        let mut p = 0;
+        assert_eq!(
+            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]),
+            KonamiFeed::Completed
+        );
+    }
+
+    #[test]
+    fn konami_a_wrong_step_kills_the_run() {
+        let mut p = 0;
+        // Almost there, then a stray Down on the Left run.
+        assert_eq!(
+            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, B]),
+            KonamiFeed::Mismatch
+        );
+        // And the dead run doesn't finish on a lucky A.
+        assert_ne!(
+            feed_all(&mut p, &[A]),
+            KonamiFeed::Completed,
+            "progress reset to 0; a lone A is nothing"
+        );
+    }
+
+    #[test]
+    fn konami_completion_restarts_from_zero() {
+        let mut p = 0;
+        assert_eq!(
+            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]),
+            KonamiFeed::Completed
+        );
+        // Holding Up (one press after a completed code) only re-arms step 1.
+        assert_eq!(konami_feed(&mut p, Up), KonamiFeed::Advanced);
+        assert_eq!(p, 1);
+    }
+
+    #[test]
+    fn konami_up_reuses_the_tail_of_a_broken_run() {
+        let mut p = 0;
+        // Up Up Up: the third Up breaks the run but itself restarts it
+        // (the code begins with Up), so only one fresh press is lost.
+        assert_eq!(
+            feed_all(&mut p, &[Up, Up, Up]),
+            KonamiFeed::Mismatch,
+            "the third Up is a mismatch"
+        );
+        assert_eq!(p, 1, "…but it left the run armed at step 1");
+        assert_eq!(
+            feed_all(&mut p, &[Up, Down, Down, Left, Right, Left, Right, B, A]),
+            KonamiFeed::Completed
+        );
+    }
+
+    #[test]
+    fn konami_pad_map_sends_the_finishing_buttons() {
+        // On the pad the code ends in East then South — the menu's Back and
+        // Confirm — which is exactly why those two presses need swallowing
+        // while the run is live.
+        assert_eq!(konami_nav_step(MenuNav::Back), Some(B));
+        assert_eq!(konami_nav_step(MenuNav::Confirm), Some(A));
+        assert_eq!(konami_nav_step(MenuNav::PageUp), None);
     }
 }

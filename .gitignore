@@ -27,3 +27,14 @@ docs/mocks/*.bmp
 config.toml
 .env
 screenscraper.toml
+
+# Pacote de exemplo do World Cup 2026 (ROM de hack — não commitar);
+# o pacote seguro (platformer-example, open source) É commitado de propósito.
+/exemplo-world-cup-2026.zip
+
+# workspace do ZCode
+.zcode/
+
+# artefatos de runtime dos testes headless
+/platformer-example/
+.zcodeignore

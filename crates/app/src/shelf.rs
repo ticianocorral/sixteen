@@ -889,8 +889,10 @@ pub fn run(
     let mut panel_scroll: usize = 0;
     // A aba ativa do painel (plan revision: "mostrar um info de cada vez
     // mesmo em resolução grande, mudar ao clicar") — persiste entre jogos
-    // de propósito: quem organizou por informações continua nelas.
-    let mut panel_section = PanelSection::CapaTraseira;
+    // de propósito: quem organizou por informações continua nelas. A inicial
+    // é "informações" (plan revision: "na estante sempre abrir informações
+    // como padrao").
+    let mut panel_section = PanelSection::Informacoes;
     let mut last_focus: Option<(u8, usize)> = None;
     // The title filter (plan revision) — `filter_query` is what's actually
     // applied; `filter_draft`/`editing_filter` are live only while typing,
@@ -950,7 +952,8 @@ pub fn run(
     let mut badge_tried: HashSet<String> = HashSet::new();
     // Earned do servidor para os [x] da lista de conquistas (uma tentativa
     // por jogo por visita — o disco cacheia por game id): o worker une no
-    // arquivo local `ra-earned/<hash>.json` e devolve o set resultante.
+    // arquivo local `retroachievements/ra-earned/<hash>.json` e devolve o
+    // set resultante.
     let mut ra_earned_worker: Option<Receiver<(String, Option<crate::ra::EarnedMap>)>> = None;
     let mut ra_earned_tried: HashSet<String> = HashSet::new();
     // The achievements view (plan revision: "mostrar a lista de conquistas
@@ -2110,7 +2113,7 @@ pub fn run(
                 backcover_img: None,
                 release: None,
                 info: Vec::new(),
-                section: PanelSection::CapaTraseira,
+                section: PanelSection::Informacoes,
                 scroll: 0,
                 favorite: None,
                 achievements: false,
@@ -2471,7 +2474,7 @@ fn ranked_by_playtime(catalog: &Catalog) -> Result<Vec<(CatalogEntry, u64)>> {
 /// is; clicking a row launches straight away instead of just selecting it).
 fn empty_shelf_panel() -> ShelfPanelInfo {
     ShelfPanelInfo {
-        section: PanelSection::CapaTraseira,
+        section: PanelSection::Informacoes,
         achievements_reason: None,
         manual_first_page: None,
         title: String::new(),
