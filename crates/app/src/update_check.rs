@@ -235,7 +235,7 @@ pub fn apply_pending_update() {
         if !relevante {
             continue;
         }
-        let outcome = apply_for_platform(&path, &name);
+        let outcome = apply_for_platform(&path, name);
         match outcome {
             Ok(()) => {
                 log::info!("update: {name} aplicado — reinicie para valer");
