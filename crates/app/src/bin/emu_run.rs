@@ -42,6 +42,7 @@ struct Args {
     /// Headless: preview one of the save/load/print/cheats modals instead
     /// of gameplay (dev/testing) — "save", "load", "print", or "cheats".
     debug_shot_modal: Option<String>,
+    debug_cart_anim: Option<std::path::PathBuf>,
 }
 
 fn parse_args() -> Result<Args> {
@@ -60,6 +61,7 @@ fn parse_args() -> Result<Args> {
     let mut debug_note_capture = false;
     let mut debug_shot_pause = false;
     let mut debug_shot_modal = None;
+    let mut debug_cart_anim = None;
 
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -136,6 +138,10 @@ fn parse_args() -> Result<Args> {
                 )
             }
             "--shot-off" => shot_off = true,
+            "--debug-cart-anim" => {
+                debug_cart_anim =
+                    Some(it.next().ok_or_else(|| anyhow!("--debug-cart-anim needs a path"))?.into());
+            }
             "--notes-dir" => {
                 notes_dir = Some(
                     it.next()
@@ -180,6 +186,7 @@ fn parse_args() -> Result<Args> {
         debug_note_capture,
         debug_shot_pause,
         debug_shot_modal,
+        debug_cart_anim,
     })
 }
 
@@ -246,6 +253,7 @@ fn main() -> Result<()> {
         debug_note_capture: args.debug_note_capture,
         debug_shot_pause: args.debug_shot_pause,
         debug_shot_modal: args.debug_shot_modal,
+        debug_cart_anim: args.debug_cart_anim,
     };
     // Standalone: "back" and "close" both just end the process.
     run_game(&mut platform, &mut cabinet, &spec, &cfg)?;

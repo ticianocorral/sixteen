@@ -93,6 +93,10 @@ pub struct GameSpec {
     /// print slot pickers (plan revision) instead of gameplay — `"save"`,
     /// `"load"`, or `"print"`; anything else is ignored (no modal shown).
     pub debug_shot_modal: Option<String>,
+    /// Dev/testing: `Some(dir)` salva frames da animação de inserção do
+    /// cartucho em `dir` (o gif do site é gerado com isto) e sai, sem
+    /// live loop.
+    pub debug_cart_anim: Option<std::path::PathBuf>,
 }
 
 const PAD: [(Button, xperience_platform::PadButton); 12] = {
@@ -1382,6 +1386,21 @@ pub fn run_game(
     // animate.
     if spec.shot.is_none() && has_cartridge_art {
         cartridge_insert_animation(plat, cab);
+    }
+    if let Some(dir) = &spec.debug_cart_anim {
+        std::fs::create_dir_all(dir).map_err(|e| anyhow!(e.to_string()))?;
+        for (i, t) in [0.0f32, 0.12, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0].iter().enumerate() {
+            cab.set_cartridge_motion(Some((*t, false)));
+            cab.capture_static_bmp(
+                OFF_STATIC_LEVEL,
+                &dir.join(format!("cart_{i:02}.bmp")),
+            )
+            .map_err(|e| anyhow!(e.to_string()))?;
+        }
+        cab.set_cartridge_motion(None);
+        cab.capture_static_bmp(OFF_STATIC_LEVEL, &dir.join("cart_08.bmp"))
+            .map_err(|e| anyhow!(e.to_string()))?;
+        return Ok(GameExit::Quit);
     }
 
     // --- audio -----------------------------------------------------------
