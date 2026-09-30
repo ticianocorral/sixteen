@@ -454,11 +454,16 @@ code {
   margin: 18px 0 0;
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--verde);
-  border: 2px dashed var(--verde);
+  color: #b8b2a6;
+  border: 2px dashed #55503f;
   display: inline-block;
   padding: 8px 16px;
   transform: rotate(-2deg);
+}
+.konami-ok {
+  color: #7fc98f;
+  border-color: var(--verde);
+  transform: rotate(2deg);
 }
 
 /* ---- reveal ---- */

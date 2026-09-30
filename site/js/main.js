@@ -35,7 +35,8 @@ if (selo) {
     .catch(() => {}); // sem rede ou rate limit: fica o valor do HTML
 }
 
-// Código Konami no site também — claro que sim.
+// Código Konami no site também — claro que sim. O bannerzinho fica lá
+// embaixo convidando; quem completa vê a mensagem virar.
 const konami = [
   "ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown",
   "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a",
@@ -46,10 +47,10 @@ document.addEventListener("keydown", (ev) => {
   passo = ok ? passo + 1 : ev.key === konami[0] ? 1 : 0;
   if (passo === konami.length) {
     passo = 0;
-    const aviso = document.getElementById("konami");
-    if (aviso) {
-      aviso.hidden = false;
-      aviso.scrollIntoView({ behavior: "smooth", block: "center" });
+    const banner = document.getElementById("konami");
+    if (banner) {
+      banner.textContent = "código Konami aceito — no app, isso libera o devmode ↑↑↓↓←→←→BA";
+      banner.classList.add("konami-ok");
     }
   }
 });
