@@ -1389,13 +1389,13 @@ pub fn run_game(
     }
     if let Some(dir) = &spec.debug_cart_anim {
         std::fs::create_dir_all(dir).map_err(|e| anyhow!(e.to_string()))?;
-        for (i, t) in [0.0f32, 0.12, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0].iter().enumerate() {
+        for (i, t) in [0.0f32, 0.12, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0]
+            .iter()
+            .enumerate()
+        {
             cab.set_cartridge_motion(Some((*t, false)));
-            cab.capture_static_bmp(
-                OFF_STATIC_LEVEL,
-                &dir.join(format!("cart_{i:02}.bmp")),
-            )
-            .map_err(|e| anyhow!(e.to_string()))?;
+            cab.capture_static_bmp(OFF_STATIC_LEVEL, &dir.join(format!("cart_{i:02}.bmp")))
+                .map_err(|e| anyhow!(e.to_string()))?;
         }
         cab.set_cartridge_motion(None);
         cab.capture_static_bmp(OFF_STATIC_LEVEL, &dir.join("cart_08.bmp"))

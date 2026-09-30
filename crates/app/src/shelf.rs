@@ -1073,9 +1073,13 @@ pub fn run(
         // crescer ou um favorito ser removido).
         let mut show_recent = show_recent;
         if show_fav && show_recent {
-            let top_com_todas =
-                MARGIN + HEADER_H + fav_block_h + RECENT_LABEL_H + RECENT_TILE_H as i32
-                    + GAP as i32 + ALL_GAMES_LABEL_H;
+            let top_com_todas = MARGIN
+                + HEADER_H
+                + fav_block_h
+                + RECENT_LABEL_H
+                + RECENT_TILE_H as i32
+                + GAP as i32
+                + ALL_GAMES_LABEL_H;
             let avail = scr_h as i32 - top_com_todas - MARGIN;
             let two_rows = (avail / 2 - GAP as i32).max(36);
             if two_rows < 150 {

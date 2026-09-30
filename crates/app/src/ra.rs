@@ -1178,7 +1178,9 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         .ok()?;
     let mut bytes = Vec::new();
     resp.into_reader().read_to_end(&mut bytes).ok()?;
-    let dir = crate::dirs::retroachievements_dir().join("ra-cache").join("badges");
+    let dir = crate::dirs::retroachievements_dir()
+        .join("ra-cache")
+        .join("badges");
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join(format!("{name}.png"));
     std::fs::write(&path, &bytes).ok()?;

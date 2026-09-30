@@ -139,8 +139,11 @@ fn parse_args() -> Result<Args> {
             }
             "--shot-off" => shot_off = true,
             "--debug-cart-anim" => {
-                debug_cart_anim =
-                    Some(it.next().ok_or_else(|| anyhow!("--debug-cart-anim needs a path"))?.into());
+                debug_cart_anim = Some(
+                    it.next()
+                        .ok_or_else(|| anyhow!("--debug-cart-anim needs a path"))?
+                        .into(),
+                );
             }
             "--notes-dir" => {
                 notes_dir = Some(

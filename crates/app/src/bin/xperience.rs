@@ -508,7 +508,12 @@ fn migrate_old_data() {
 /// `Config::load` e da abertura do catálogo, que leem os caminhos novos.
 fn migrate_root_files_into_config() {
     let config = xperience_app::dirs::config_dir();
-    for item in ["xperience.cfg", "nointro.dat", "library.json", "hashcache.json"] {
+    for item in [
+        "xperience.cfg",
+        "nointro.dat",
+        "library.json",
+        "hashcache.json",
+    ] {
         let src = xperience_app::dirs::app_root().join(item);
         let dst = config.join(item);
         if !src.is_file() || dst.exists() {
