@@ -200,23 +200,33 @@ a:hover { color: var(--roxo-vivo); }
   line-height: 1.5;
 }
 
-/* ---- figuras ---- */
+/* ---- figuras (fotos impressas coladas no manual) ---- */
 .figura {
   margin: 0;
   border: 3px solid var(--tinta);
   box-shadow: var(--sombra);
-  background: #000;
+  background: var(--papel);
+  padding: 12px 12px 0;
 }
-.figura img { display: block; width: 100%; height: auto; }
+.figura img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--tinta);
+  /* o gabinete é preto puro; o filtro o aproxima da tinta sobre papel */
+  filter: contrast(0.95) saturate(0.9) sepia(0.08) brightness(1.04);
+}
 .figura figcaption {
-  background: var(--tinta);
-  color: var(--papel);
+  color: var(--tinta);
   font-family: var(--mono);
   font-size: 12.5px;
-  padding: 8px 14px;
+  padding: 10px 2px 12px;
+  border-top: 1px dashed var(--linha);
+  margin: 12px -12px 0;
+  padding-left: 14px;
 }
 .figura figcaption span {
-  color: var(--roxo-vivo);
+  color: var(--roxo);
   font-weight: 700;
   margin-right: 8px;
 }
