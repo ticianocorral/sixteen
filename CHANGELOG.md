@@ -7,6 +7,15 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.5] - 2026-09-30
+
+### Modificado
+- A pasta de updates do app saiu de `saves/update/` e agora é
+  `<raiz>/update/` (plan revision: "colocar o update na raiz das pastas
+  do app nao dentro dos saves" — saves guardam progresso de jogo, não
+  pacote do app). Um pacote pendente na pasta antiga migra sozinho no
+  arranque, antes do apply; a pasta antiga sai se restar vazia.
+
 ## [1.1.4] - 2026-09-30
 
 ### Corrigido
