@@ -7,6 +7,23 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.4] - 2026-09-30
+
+### Corrigido
+- "Ao clicar em atualizar o app, ele faz o download mas nao atualiza
+  nada": o pacote baixado só era aplicado no arranque **seguinte**, sem
+  aplicar nem sinalizar — se o app reabria por outra via (ex.: build de
+  dev), nem isso. Agora a tela de update aplica o download **na hora**
+  (o apply é seguro com o app rodando: o macOS troca o bundle e o inode
+  vivo segue) e o botão vira **"reiniciar agora"**, que relança o app já
+  atualizado e encerra a sessão. Falha na aplicação mostra o motivo e o
+  apply do arranque seguinte continua como rede de segurança.
+- Linux/AppImage (Steam Deck incluído): o apply sobrescrevia o próprio
+  AppImage **in-place** — com o app rodando de um mount FUSE, que lê o
+  arquivo sob demanda, o conteúdo podia sair misturado. Agora a cópia vai
+  para um temporário e entra por rename, mesmo padrão da instalação do
+  núcleo na 1.1.3.
+
 ## [1.1.3] - 2026-09-29
 
 ### Modificado

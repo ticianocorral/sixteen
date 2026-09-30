@@ -205,6 +205,10 @@ pub fn run(
     let mut core_stale = false;
     let mut update_view: Option<crate::update_check::AppUpdate> = None;
     let mut update_rx: Option<Receiver<Result<String, String>>> = None;
+    // Aplicação do pacote já baixado (1.1.4: na hora, não no arranque
+    // seguinte) — `update_applied` liga o botão "reiniciar agora".
+    let mut apply_rx: Option<Receiver<Result<(), String>>> = None;
+    let mut update_applied = false;
     let mut update_progress_rx: Option<Receiver<u32>> = None;
     let mut update_pct: Option<u32> = None;
     let mut update_status = String::new();
@@ -267,15 +271,44 @@ pub fn run(
         if let Some(rx) = &update_rx {
             match rx.try_recv() {
                 Ok(Ok(file)) => {
-                    update_status = format!("{file} baixado — será atualizado ao reiniciar o app");
+                    // Baixou: aplica na hora (o apply é seguro com o app
+                    // rodando — macOS troca o bundle, o inode vivo segue) e
+                    // oferece o relançamento; falha cai no apply do
+                    // arranque seguinte, que continua no lugar.
+                    update_status = format!("{file} baixado — aplicando...");
                     update_pct = None;
                     update_rx = None;
+                    let (tx, rx) = mpsc::channel();
+                    let path = crate::dirs::update_dir().join(&file);
+                    std::thread::spawn(move || {
+                        let _ = tx.send(crate::update_check::apply_update_file(&path));
+                    });
+                    apply_rx = Some(rx);
                 }
                 Ok(Err(e)) => {
                     update_status = format!("falhou: {e}");
                     update_rx = None;
                 }
                 Err(TryRecvError::Disconnected) => update_rx = None,
+                Err(TryRecvError::Empty) => {}
+            }
+        }
+        if let Some(rx) = &apply_rx {
+            match rx.try_recv() {
+                Ok(Ok(())) => {
+                    let tag = update_view
+                        .as_ref()
+                        .map(|u| u.tag.clone())
+                        .unwrap_or_default();
+                    update_status = format!("atualizado para {tag}! reinicie para valer");
+                    update_applied = true;
+                    apply_rx = None;
+                }
+                Ok(Err(e)) => {
+                    update_status = format!("baixado, mas não aplicou ({e}) — tenta ao reiniciar");
+                    apply_rx = None;
+                }
+                Err(TryRecvError::Disconnected) => apply_rx = None,
                 Err(TryRecvError::Empty) => {}
             }
         }
@@ -399,14 +432,26 @@ pub fn run(
                     let (btn, voltar) = update_rects;
                     if in_update_rect(sx, sy, voltar) {
                         update_view = None;
+                    } else if in_update_rect(sx, sy, btn) && update_applied {
+                        // "reiniciar agora": o pacote já está aplicado no
+                        // disco — relança e encerra a sessão atual.
+                        match crate::update_check::relaunch() {
+                            Ok(()) => return Ok(IdleExit::Quit),
+                            Err(e) => {
+                                update_status =
+                                    format!("não consegui relançar ({e}) — abra o app de novo");
+                            }
+                        }
                     } else if in_update_rect(sx, sy, btn)
                         && update_rx.is_none()
+                        && apply_rx.is_none()
                         && asset_url.is_some()
                     {
                         // "Atualizar": baixa o asset da plataforma para o
-                        // diretório de updates — o arranque seguinte aplica
-                        // (plan revision: "avisar que sera atualizado ao
-                        // reiniciar").
+                        // diretório de updates e aplica em seguida (plan
+                        // revision: "ao clicar em atualizar o app, ele faz
+                        // o download mas nao atualiza nada" — o apply só
+                        // acontecia no arranque seguinte, sem sinal nenhum).
                         let (tx, rx) = mpsc::channel();
                         let (ptx, prx) = mpsc::channel();
                         let url = asset_url.unwrap_or_default();
@@ -428,10 +473,18 @@ pub fn run(
                     }
                 }
             }
-            let busy = update_rx.is_some();
+            let busy = update_rx.is_some() || apply_rx.is_some();
             let status = update_status.clone();
             let render = |d: &mut Screen| {
-                update_rects = draw_update_view(d, &upt_tag, &upt_body, &status, busy, update_pct);
+                update_rects = draw_update_view(
+                    d,
+                    &upt_tag,
+                    &upt_body,
+                    &status,
+                    busy,
+                    update_pct,
+                    update_applied,
+                );
             };
             cab.frame_idle_2d(SETUP_BG, render);
             crate::runner::pace_frame(&mut next, frame);
@@ -543,9 +596,9 @@ fn in_update_rect(x: i32, y: i32, r: UpdateBtn) -> bool {
 }
 
 /// A tela de update do app (plan revision: "quando for update do app
-/// mostrar o changelog e o botão de atualizar, e dai avisar que sera
-/// atualizado ao reiniciar") — título, changelog do release, status do
-/// download e os botões "atualizar"/"voltar". Devolve os rects.
+/// mostrar o changelog e o botão de atualizar" — e, desde a 1.1.4, o apply
+/// acontece logo após o download e o botão vira "reiniciar agora") —
+/// título, changelog do release, status e os botões. Devolve os rects.
 fn draw_update_view(
     d: &mut Screen,
     tag: &str,
@@ -553,6 +606,7 @@ fn draw_update_view(
     status: &str,
     busy: bool,
     _pct: Option<u32>,
+    applied: bool,
 ) -> (UpdateBtn, UpdateBtn) {
     let (w, h) = d.size();
     let (w, h) = (w as i32, h as i32);
@@ -586,15 +640,19 @@ fn draw_update_view(
     let btn = (w - UPDATE_MARGIN * 2 - 220, h - 96, 220u32, 44u32);
     let voltar = (x, h - 96, 140u32, 44u32);
     d.text(x, h - 130, 1, SETUP_DIM, status);
-    // O botão some (dim, sem hit) enquanto baixa e depois de baixado —
-    // o status ocupa o lugar.
-    let can_update = !busy && !status.contains("baixado");
-    let label = if can_update {
+    // Enquanto baixa/aplica o botão dorme (dim, sem hit) — o status ocupa
+    // o lugar. Aplicado, ele acorda verde como "reiniciar agora" (o clique
+    // relança pelo que está no disco e encerra a sessão).
+    let can_update = !busy && !applied && !status.contains("baixado");
+    let label = if applied {
+        "reiniciar agora"
+    } else if can_update {
         "atualizar"
     } else {
         "atualizado"
     };
-    if can_update {
+    let active = can_update || applied;
+    if active {
         d.outline(
             btn.0,
             btn.1,

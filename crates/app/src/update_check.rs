@@ -198,6 +198,29 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
     Ok(dest)
 }
 
+/// Aplica um arquivo já baixado em `saves/update/` — no arranque (o loop de
+/// [`apply_pending_update`]) e, desde a 1.1.4, na própria tela de update
+/// logo após o download ("clicou, atualizou"). Sucesso remove o arquivo;
+/// falha o mantém para o arranque seguinte tentar de novo.
+pub fn apply_update_file(path: &Path) -> Result<(), String> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let outcome = apply_for_platform(path, name);
+    match outcome {
+        Ok(()) => {
+            log::info!("update: {name} aplicado — reinicie para valer");
+            let _ = std::fs::remove_file(path);
+            Ok(())
+        }
+        Err(e) => {
+            log::info!("update: {name} não aplicado ({e}) — tenta no próximo arranque");
+            Err(e)
+        }
+    }
+}
+
 /// Aplica, no arranque, uma atualização baixada pela tela de update — o
 /// "será atualizado ao reiniciar" (plan revision). Melhor-esforço: qualquer
 /// falha loga e mantém o arquivo para tentar de novo. Antes do SDL, na
@@ -226,14 +249,7 @@ pub fn apply_pending_update() {
         if !relevante {
             continue;
         }
-        let outcome = apply_for_platform(&path, name);
-        match outcome {
-            Ok(()) => {
-                log::info!("update: {name} aplicado — reinicie para valer");
-                let _ = std::fs::remove_file(&path);
-            }
-            Err(e) => log::info!("update: {name} não aplicado ({e}) — tenta no próximo arranque"),
-        }
+        let _ = apply_update_file(&path);
     }
 }
 
@@ -293,14 +309,19 @@ fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
 }
 
 /// Linux (Steam Deck incluído): substitui o binário/AppImage em execução —
-/// rename sobre o arquivo rodando é seguro no Linux (o inode segue vivo).
+/// a cópia vai para um temporário e entra por **rename**: o AppImage montado
+/// (FUSE) lê o arquivo sob demanda enquanto o app roda, e sobrescrever
+/// in-place serviria conteúdo misturado (o inode novo entra inteiro ou não
+/// entra — quem tem o inode antigo aberto continua bem servido).
 #[cfg(target_os = "linux")]
 fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    std::fs::copy(appimage, &exe).map_err(|e| e.to_string())?;
-    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755))
+    let tmp = exe.with_extension("new");
+    std::fs::copy(appimage, &tmp).map_err(|e| e.to_string())?;
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
         .map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &exe).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -330,9 +351,52 @@ fn apply_for_platform(_path: &Path, _name: &str) -> Result<(), String> {
     Err("atualização automática não suportada nesta plataforma — instale do release".to_string())
 }
 
+/// Relança o app pelo que está no disco — já substituído pelo apply — e
+/// devolve; o chamador encerra a sessão atual (plan revision 1.1.4:
+/// "clicou em atualizar... faz o download mas nao atualiza nada" — o
+/// relançamento manual era o passo faltando). macOS vai por `open -n` no
+/// .app (LaunchServices cuida do Dock/foco); nas demais, o executável em
+/// si basta.
+pub fn relaunch() -> Result<(), String> {
+    use std::process::Command;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let app = exe
+            .ancestors()
+            .find(|a| a.extension().is_some_and(|e| e == "app"))
+            .ok_or_else(|| "não achei o .app em execução".to_string())?;
+        Command::new("open")
+            .arg("-n")
+            .arg(app)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Command::new(exe)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apply_rejects_unrelated_files_and_keeps_them() {
+        let dir = std::env::temp_dir().join("xperience-apply-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("nao-e-update.txt");
+        std::fs::write(&p, b"x").unwrap();
+        assert!(apply_update_file(&p).is_err());
+        assert!(p.exists(), "falha mantém o arquivo para o próximo arranque");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn version_comparison_is_numeric_not_lexicographic() {
