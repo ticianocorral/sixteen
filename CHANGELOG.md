@@ -7,6 +7,38 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.3] - 2026-09-29
+
+### Modificado
+- O check de update do **núcleo** agora é por **commit**: compara o hash que
+  o próprio binário reporta (`library_version`, ex. `snes9x 1.63 fae2fea`)
+  com o HEAD do `libretro/snes9x` na API do GitHub. Antes comparava o ETag
+  do zip do buildbot, que muda a cada recompilação noturna **mesmo sem o
+  snes9x mudar** — por isso a seta verde de update do núcleo acendia todo
+  dia e a atualização nunca trazia nada de novo. Agora ela só acende quando
+  existe commit novo de verdade (e funciona também para núcleo colocado à
+  mão, já que o baseline vem do binário, não do download). O sidecar
+  `core/.core_meta.json` deixou de ser gravado; o arquivo existente pode
+  ser apagado.
+
+### Corrigido
+- A instalação do núcleo gravava o `.dylib`/`.dll`/`.so` **por cima** do
+  arquivo anterior. O nameplate do arranque já carrega (`dlopen`) o núcleo
+  no mesmo processo, e sobrescrever uma biblioteca mapeada em uso pode
+  derrubar o app no macOS (SIGKILL na revalidação de code signature —
+  reproduzido em `examples/core_refresh_probe.rs`). Agora o download é
+  gravado num arquivo temporário dentro de `core/` e entra no lugar por
+  **rename** atômico: o inode antigo permanece intacto para quem o tem
+  mapeado e o arquivo novo chega sempre consistente.
+- Nota sobre o relato "atualizo o núcleo mas a versão e o commit não
+  mudam": o texto exibido (`snes9x 1.63 fae2fea`) é o `library_version`
+  do próprio núcleo — versão upstream + hash do commit do
+  `libretro/snes9x`. O buildbot recompila nightly, mas a string só muda
+  quando existe **commit novo upstream**; entre 19/09 e 29/09 não houve
+  nenhum, então atualizações sucessivas nesse período baixam builds da
+  mesma revisão de propósito. O download em si está funcionando (o
+  arquivo troca; ex.: a build de 19/09 desligou LTO e ficou menor).
+
 ## [1.1.2] - 2026-09-28
 
 ### Corrigido

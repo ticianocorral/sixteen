@@ -83,6 +83,26 @@ pub fn default_core_path() -> Option<std::path::PathBuf> {
     p.is_file().then_some(p)
 }
 
+/// The commit suffix of a core's `library_version` — "1.63 fae2fea" →
+/// "fae2fea" (lowercase). The libretro buildbot embeds the snes9x commit it
+/// built from; a version string without a trailing hex chunk ("1.63",
+/// "1.62.3") reports no commit.
+pub fn commit_from_version(version: &str) -> Option<String> {
+    let last = version.split_whitespace().next_back()?;
+    let looks_like_sha = (7..=40).contains(&last.len())
+        && last.chars().all(|c| c.is_ascii_hexdigit());
+    looks_like_sha.then(|| last.to_ascii_lowercase())
+}
+
+/// The commit the core at `core_path` was built from — `None` if it doesn't
+/// load or doesn't report one. Like `nameplate_text`, this `Core::load`s
+/// (no `retro_init`), so it's read-only and cheap; safe to call from a
+/// background thread (`update_check` does).
+pub fn core_commit(core_path: &std::path::Path) -> Option<String> {
+    let core = xperience_emulation::Core::load(core_path).ok()?;
+    commit_from_version(core.system_version())
+}
+
 /// Download `url` and unzip the core into `dest_dir/core_file_name()`,
 /// reporting progress on `tx`. Meant to run on a background thread (the app's
 /// standard spawn + `mpsc` + per-frame `try_recv()` pattern) — a
@@ -101,7 +121,6 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
         .timeout(Duration::from_secs(120))
         .build();
     let resp = agent.get(url).call().map_err(|e| e.to_string())?;
-    let etag = resp.header("ETag").map(str::to_string);
     let total = resp
         .header("Content-Length")
         .and_then(|s| s.parse::<u64>().ok());
@@ -146,17 +165,59 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
     entry.read_to_end(&mut out).map_err(|e| e.to_string())?;
 
     std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
-    std::fs::write(dest_dir.join(core_file_name()), out).map_err(|e| e.to_string())?;
-    // Record what was just installed (plan revision) — the only baseline a
-    // later startup check has for "is this core stale" without
-    // re-downloading the whole zip just to find out.
-    crate::update_check::save_core_meta(
-        dest_dir,
-        &crate::update_check::CoreInstallMeta {
-            url: url.to_string(),
-            etag,
-            content_length: total,
-        },
-    );
+    install_core_bytes(dest_dir, &out)?;
     Ok(())
+}
+
+/// Write the core into `dest_dir` under its final name via a temporary file
+/// and a rename. The startup nameplate `Core::load`s (`dlopen`s) the
+/// installed dylib, and macOS kills the process (SIGKILL, code-signature
+/// revalidation — see `examples/core_refresh_probe.rs`) when a mapped dylib
+/// gets overwritten in place; a rename swaps the directory entry and leaves
+/// whatever inode is mapped untouched.
+fn install_core_bytes(dest_dir: &Path, bytes: &[u8]) -> Result<(), String> {
+    let dest = dest_dir.join(core_file_name());
+    let tmp = dest_dir.join(format!("{}.new", core_file_name()));
+    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_replaces_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join("xperience-core-update-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        install_core_bytes(&dir, b"antiga").unwrap();
+        assert_eq!(
+            std::fs::read(dir.join(core_file_name())).unwrap(),
+            b"antiga"
+        );
+        install_core_bytes(&dir, b"nova").unwrap();
+        assert_eq!(std::fs::read(dir.join(core_file_name())).unwrap(), b"nova");
+        assert!(!dir.join(format!("{}.new", core_file_name())).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn commit_from_version_extracts_the_build_commit() {
+        assert_eq!(
+            commit_from_version("1.63 fae2fea").as_deref(),
+            Some("fae2fea")
+        );
+        assert_eq!(
+            commit_from_version("Snes9x 1.63 FAE2FEA").as_deref(),
+            Some("fae2fea")
+        );
+        assert_eq!(
+            commit_from_version("1.63 0123456789abcdef0123456789abcdef0123abcd").as_deref(),
+            Some("0123456789abcdef0123456789abcdef0123abcd")
+        );
+        assert_eq!(commit_from_version("1.63"), None);
+        assert_eq!(commit_from_version("1.62.3"), None);
+        assert_eq!(commit_from_version(""), None);
+    }
 }

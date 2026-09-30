@@ -9,10 +9,14 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 const RELEASES_API: &str =
     "https://api.github.com/repos/ticianocorral/snes-xperience/releases/latest";
+
+/// HEAD of the snes9x core's own repo — the same identifier a core embeds
+/// in its `library_version` ("1.63 fae2fea" is upstream version + commit).
+const SNES9X_COMMIT_API: &str = "https://api.github.com/repos/libretro/snes9x/commits/HEAD";
 
 /// What's worth telling the player about at startup — `idle::run` only ever
 /// receives one of these when there's actually something to say (see
@@ -23,10 +27,13 @@ pub struct UpdateNotice {
     /// revision: "quando for update do app mostrar o changelog e o botão
     /// de atualizar").
     pub app_update: Option<AppUpdate>,
-    /// Whether the installed snes9x core is older than what the buildbot
-    /// currently serves — only ever `true` for a core this app downloaded
-    /// itself (see `CoreInstallMeta`); a hand-placed core has no baseline to
-    /// compare against and is never flagged.
+    /// Whether the installed snes9x core was built from a commit older than
+    /// `libretro/snes9x` HEAD. The core itself reports the commit it was
+    /// built from in `library_version`, so this works no matter how the
+    /// core got installed — and it only ever lights up when upstream
+    /// actually moved (plan revision: "faz do commit mesmo" — the previous
+    /// ETag-of-the-zip check flagged the buildbot's nightly recompiles, so
+    /// the arrow lit daily with nothing new to install).
     pub core_stale: bool,
 }
 
@@ -40,34 +47,6 @@ pub struct AppUpdate {
     pub asset_url: Option<String>,
 }
 
-/// What `core_update::download_and_install` records alongside the core file
-/// itself — the only way to tell "the buildbot has shipped a newer build
-/// since this one" without re-downloading the whole thing: an ETag/
-/// Content-Length fingerprint from the moment it was fetched.
-#[derive(Serialize, Deserialize)]
-pub struct CoreInstallMeta {
-    pub url: String,
-    pub etag: Option<String>,
-    pub content_length: Option<u64>,
-}
-
-fn core_meta_path(core_dir: &Path) -> PathBuf {
-    core_dir.join(".core_meta.json")
-}
-
-/// Best-effort — a failure here just means a later staleness check has
-/// nothing to compare against, not a failed download.
-pub fn save_core_meta(core_dir: &Path, meta: &CoreInstallMeta) {
-    if let Ok(text) = serde_json::to_string(meta) {
-        let _ = std::fs::write(core_meta_path(core_dir), text);
-    }
-}
-
-fn load_core_meta(core_dir: &Path) -> Option<CoreInstallMeta> {
-    let text = std::fs::read_to_string(core_meta_path(core_dir)).ok()?;
-    serde_json::from_str(&text).ok()
-}
-
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(5))
@@ -75,28 +54,40 @@ fn agent() -> ureq::Agent {
         .build()
 }
 
-/// `true` if the buildbot is now serving a different build than the one
-/// recorded at install time — `false` with nothing to compare against (no
-/// sidecar, i.e. a hand-placed core) or on any network/header hiccup, never
-/// a false "yes" from a fluke.
+/// `true` if the installed core was built from a commit older than
+/// `libretro/snes9x` HEAD — `false` when the core doesn't report its commit
+/// (no core at all, or a build without the hex suffix) or on any network
+/// hiccup, never a false "yes" from a fluke.
 fn core_is_stale(core_dir: &Path) -> bool {
-    let Some(meta) = load_core_meta(core_dir) else {
+    let core_path = core_dir.join(crate::core_update::core_file_name());
+    let Some(installed) = crate::core_update::core_commit(&core_path) else {
         return false;
     };
-    let Ok(resp) = agent().head(&meta.url).call() else {
+    let Some(head) = latest_snes9x_commit() else {
         return false;
     };
-    let etag = resp.header("ETag").map(str::to_string);
-    if let (Some(a), Some(b)) = (&etag, &meta.etag) {
-        return a != b;
-    }
-    let len = resp
-        .header("Content-Length")
-        .and_then(|s| s.parse::<u64>().ok());
-    if let (Some(a), Some(b)) = (len, meta.content_length) {
-        return a != b;
-    }
-    false
+    installed != head
+}
+
+/// `libretro/snes9x` HEAD as a short lowercase sha — the exact identifier a
+/// core embeds in its `library_version`. `None` on any network/parse hiccup.
+fn latest_snes9x_commit() -> Option<String> {
+    let resp = agent()
+        .get(SNES9X_COMMIT_API)
+        .set("User-Agent", "snes-xperience-update-check")
+        .call()
+        .ok()?;
+    let head: GhCommit = resp.into_json().ok()?;
+    let short = head.sha.get(..7)?;
+    short
+        .chars()
+        .all(|c| c.is_ascii_hexdigit())
+        .then(|| short.to_ascii_lowercase())
+}
+
+#[derive(Deserialize)]
+struct GhCommit {
+    sha: String,
 }
 
 #[derive(Deserialize)]
@@ -359,5 +350,15 @@ mod tests {
     fn hits_the_real_github_api() {
         assert!(newer_release("0.0.0").is_some());
         assert!(newer_release("999.0.0").is_none());
+    }
+
+    /// Same shape as `hits_the_real_github_api`:
+    /// `cargo test -p xperience-app --lib -- --ignored hits_the_real_snes9x_commit_api`.
+    #[test]
+    #[ignore]
+    fn hits_the_real_snes9x_commit_api() {
+        let head = latest_snes9x_commit().expect("HEAD do libretro/snes9x");
+        assert_eq!(head.len(), 7);
+        assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
