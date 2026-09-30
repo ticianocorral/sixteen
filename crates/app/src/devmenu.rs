@@ -31,7 +31,10 @@ fn exemplo_zip_url() -> String {
 
 /// Progress/result reported by the install worker thread.
 enum InstallMsg {
-    Progress { downloaded: u64, total: Option<u64> },
+    Progress {
+        downloaded: u64,
+        total: Option<u64>,
+    },
     /// Instalado com sucesso — quantidade de arquivos gravados.
     Done(usize),
     Failed(String),
@@ -51,13 +54,23 @@ const CELL: i32 = 9;
 /// the idle setup screen's `setup_rects`).
 fn voltar_rect(w: u32, h: u32) -> (i32, i32, u32, u32) {
     let (bw, bh) = (220u32, 44u32);
-    ((w as i32 - bw as i32) / 2, h as i32 - bh as i32 - 52, bw, bh)
+    (
+        (w as i32 - bw as i32) / 2,
+        h as i32 - bh as i32 - 52,
+        bw,
+        bh,
+    )
 }
 
 /// The "instalar assets de exemplo" button's rect — the menu's one action.
 fn install_rect(w: u32, h: u32) -> (i32, i32, u32, u32) {
     let (bw, bh) = (510u32, 44u32);
-    ((w as i32 - bw as i32) / 2, h as i32 / 2 - bh as i32 - 10, bw, bh)
+    (
+        (w as i32 - bw as i32) / 2,
+        h as i32 / 2 - bh as i32 - 10,
+        bw,
+        bh,
+    )
 }
 
 fn in_rect(x: i32, y: i32, r: (i32, i32, u32, u32)) -> bool {
@@ -171,7 +184,13 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
             // tela estreita cai para text_wrapped na margem.
             let single = status.chars().count() as i32 * CELL;
             if single <= w as i32 - 40 {
-                d.text((w as i32 - single) / 2, iy + ih as i32 + 18, 1, status_color, &status);
+                d.text(
+                    (w as i32 - single) / 2,
+                    iy + ih as i32 + 18,
+                    1,
+                    status_color,
+                    &status,
+                );
             } else {
                 d.text_wrapped(40, iy + ih as i32 + 18, w - 80, 1, status_color, &status);
             }
@@ -319,8 +338,8 @@ pub fn capture_preview(cab: &mut Cabinet, path: &std::path::Path) -> Result<()> 
 #[cfg(test)]
 mod tests {
     use super::{install_bytes, try_install, InstallMsg};
-    use std::sync::mpsc;
     use std::io::{Read as _, Write as _};
+    use std::sync::mpsc;
 
     fn zip_in_memory(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let mut buf = std::io::Cursor::new(Vec::new());
@@ -350,7 +369,10 @@ mod tests {
         let (tx, _rx) = mpsc::channel();
         let n = install_bytes(&zip, &root, &tx).unwrap();
         assert_eq!(n, 2, "só roms/ e assets/ contam");
-        assert_eq!(std::fs::read(root.join("roms/Demo.zip")).unwrap(), b"PK-ROM");
+        assert_eq!(
+            std::fs::read(root.join("roms/Demo.zip")).unwrap(),
+            b"PK-ROM"
+        );
         assert!(root.join("assets/cover/Demo.png").is_file());
         assert!(!root.join("LEIA-ME.txt").exists());
         assert!(!root.join("escapou.txt").exists());
@@ -404,7 +426,9 @@ mod tests {
         server.join().unwrap();
         assert_eq!(n, 2);
         assert_eq!(
-            std::fs::read(root.join("assets/cover/Demo.png")).unwrap().len(),
+            std::fs::read(root.join("assets/cover/Demo.png"))
+                .unwrap()
+                .len(),
             300_000
         );
         // o canal trouxe progresso com o tamanho vindo do Content-Length
@@ -423,6 +447,9 @@ mod tests {
 
     /// raiz temporária única por teste (sem dep de tempfile)
     fn tempfile_root(tag: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("xperience-devmenu-test-{}-{tag}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "xperience-devmenu-test-{}-{tag}",
+            std::process::id()
+        ))
     }
 }

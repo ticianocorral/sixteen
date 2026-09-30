@@ -13,7 +13,8 @@ use xperience_platform::Platform;
 
 fn main() -> anyhow::Result<()> {
     let dir = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| "/tmp".into()));
-    let plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;    let mut cab = plat
+    let plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut cab = plat
         .create_cabinet("SNES Xperience", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     cab.set_nameplate("SNES Xperience v0.14.0\nsnes9x 1.63 TaC2rea");

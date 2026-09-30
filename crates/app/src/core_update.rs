@@ -89,8 +89,8 @@ pub fn default_core_path() -> Option<std::path::PathBuf> {
 /// "1.62.3") reports no commit.
 pub fn commit_from_version(version: &str) -> Option<String> {
     let last = version.split_whitespace().next_back()?;
-    let looks_like_sha = (7..=40).contains(&last.len())
-        && last.chars().all(|c| c.is_ascii_hexdigit());
+    let looks_like_sha =
+        (7..=40).contains(&last.len()) && last.chars().all(|c| c.is_ascii_hexdigit());
     looks_like_sha.then(|| last.to_ascii_lowercase())
 }
 

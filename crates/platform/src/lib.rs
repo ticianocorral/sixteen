@@ -481,8 +481,7 @@ impl Platform {
     /// the SDL context can't cross threads). Lets example harnesses drive
     /// menus that are already inside their own loop.
     pub fn push_synthetic_click_later(&mut self, x: i32, y: i32, delay: Duration) {
-        self.scheduled_clicks
-            .push((Instant::now() + delay, x, y));
+        self.scheduled_clicks.push((Instant::now() + delay, x, y));
     }
 
     /// Dispara os cliques agendados que já venceram.
@@ -804,13 +803,16 @@ mod tests {
         last
     }
 
-    use KonamiStep::{A, B, Down, Left, Right, Up};
+    use KonamiStep::{Down, Left, Right, Up, A, B};
 
     #[test]
     fn konami_completes_on_the_exact_sequence() {
         let mut p = 0;
         assert_eq!(
-            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]),
+            feed_all(
+                &mut p,
+                &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]
+            ),
             KonamiFeed::Completed
         );
     }
@@ -820,7 +822,10 @@ mod tests {
         let mut p = 0;
         // Almost there, then a stray Down on the Left run.
         assert_eq!(
-            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, B]),
+            feed_all(
+                &mut p,
+                &[Up, Up, Down, Down, Left, Right, Left, Right, B, B]
+            ),
             KonamiFeed::Mismatch
         );
         // And the dead run doesn't finish on a lucky A.
@@ -835,7 +840,10 @@ mod tests {
     fn konami_completion_restarts_from_zero() {
         let mut p = 0;
         assert_eq!(
-            feed_all(&mut p, &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]),
+            feed_all(
+                &mut p,
+                &[Up, Up, Down, Down, Left, Right, Left, Right, B, A]
+            ),
             KonamiFeed::Completed
         );
         // Holding Up (one press after a completed code) only re-arms step 1.
