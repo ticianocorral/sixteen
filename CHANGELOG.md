@@ -7,6 +7,17 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.7] - 2026-10-07
+
+### Corrigido
+- Overrides antigos da marca (`assets/console.png` e
+  `assets/console-tag.png` na raiz de dados, da época em que essas
+  imagens vinham soltas na pasta) faziam a logo "SNES XPERIENCE"
+  continuar na tela depois do rebrand — arquivo local vence a imagem
+  embutida. Na primeira execução dessa versão eles são renomeados para
+  `.bak` (nada é apagado); overrides instalados depois disso ficam
+  intocados.
+
 ## [1.1.6] - 2026-10-07
 
 ### Modificado

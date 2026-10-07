@@ -32,6 +32,13 @@
     <category>Emulator</category>
   </categories>
   <releases>
+    <release version="1.1.7" date="2026-10-07">
+      <description>
+        <p>Overrides antigos da marca (console.png/console-tag.png da era
+        SNES Xperience) não substituem mais a logo embutida para sempre —
+        na primeira execução viram .bak.</p>
+      </description>
+    </release>
     <release version="1.1.6" date="2026-10-07">
       <description>
         <p>O app agora se chama SixteeN (era SNES Xperience), com logo nova

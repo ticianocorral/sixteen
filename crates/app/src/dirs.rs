@@ -169,6 +169,7 @@ pub fn migrate_renamed_root() {
         }
     }
     migrate_cfg_name(&config_dir());
+    migrate_brand_overrides(&assets_dir(), &config_dir());
 }
 
 fn rename_dir_best_effort(legacy: &Path, root: &Path) {
@@ -196,6 +197,32 @@ fn migrate_cfg_name(config: &Path) {
         Ok(()) => log::info!("migrado: config/xperience.cfg -> config/sixteen.cfg"),
         Err(e) => log::warn!("migrando config/xperience.cfg: {e}"),
     }
+}
+
+/// One-shot cleanup of stale brand overrides: `assets/console.png` and
+/// `assets/console-tag.png` dropped in the data root before the rename
+/// carry the old wordmark, and the local-file-wins rule (deliberate — see
+/// `console_art`) would keep it on screen forever, silently undoing the
+/// rebrand. Renamed to `.bak`, never deleted (the override feature
+/// stays); a marker in `config/` gates it so overrides the player
+/// installs after the rebrand are left alone.
+fn migrate_brand_overrides(assets: &Path, config: &Path) {
+    let marker = config.join(".rebrand-sixteen");
+    if marker.exists() {
+        return;
+    }
+    for name in ["console.png", "console-tag.png"] {
+        let src = assets.join(name);
+        let dst = assets.join(format!("{name}.bak"));
+        if !src.is_file() || dst.exists() {
+            continue;
+        }
+        match std::fs::rename(&src, &dst) {
+            Ok(()) => log::info!("migrado: assets/{name} -> {name}.bak (wordmark antigo)"),
+            Err(e) => log::warn!("migrando assets/{name}: {e}"),
+        }
+    }
+    let _ = std::fs::write(&marker, b"1");
 }
 
 #[cfg(test)]
@@ -226,6 +253,29 @@ mod tests {
         // toca em nada.
         super::migrate_cfg_name(&config);
         assert!(config.join("sixteen.cfg").is_file());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn stale_brand_overrides_are_renamed_once() {
+        let tmp = std::env::temp_dir().join(format!("sixteen-dirs-brand-{}", std::process::id()));
+        let assets = tmp.join("assets");
+        let config = tmp.join("config");
+        std::fs::create_dir_all(&assets).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(assets.join("console.png"), b"logo antiga").unwrap();
+
+        super::migrate_brand_overrides(&assets, &config);
+        assert!(!assets.join("console.png").exists());
+        assert!(assets.join("console.png.bak").is_file());
+        assert!(config.join(".rebrand-sixteen").exists());
+
+        // One-shot: um override instalado DEPOIS do rebrand fica — o marker
+        // impede a migração de tocar nele de novo.
+        std::fs::write(assets.join("console.png"), b"logo nova do jogador").unwrap();
+        super::migrate_brand_overrides(&assets, &config);
+        assert!(assets.join("console.png").is_file());
+        assert!(!assets.join("console.png.bak.bak").exists());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
