@@ -40,7 +40,9 @@ modules:
       build-args:
         - --share=network
     build-commands:
-      - cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
+      # use.sh coloca o toolchain da extensão no PATH — sem ele o sandbox
+      # não encontra o cargo.
+      - source /usr/lib/sdk/rust-stable/use.sh && cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
       - install -Dm755 target/release/sixteen /app/bin/sixteen
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.desktop -t /app/share/applications/
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.metainfo.xml -t /app/share/metainfo/
