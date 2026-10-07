@@ -1,4 +1,4 @@
-// SNES Xperience — manual: interações mínimas.
+// SixteeN — manual: interações mínimas.
 
 // Ano do rodapé.
 document.getElementById("ano").textContent = new Date().getFullYear();
@@ -25,7 +25,7 @@ alvos.forEach((el) => io.observe(el));
 const selo = document.querySelector("[data-release]");
 if (selo) {
   fetch(
-    "https://api.github.com/repos/ticianocorral/snes-xperience/releases/latest"
+    "https://api.github.com/repos/ticianocorral/sixteen/releases/latest"
   )
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((r) => {

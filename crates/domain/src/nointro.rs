@@ -1,7 +1,7 @@
 //! No-Intro DAT parsing (plan §4.1): canonical ROM titles by CRC32. No
 //! network here — the app downloads the DAT itself when missing (setup
-//! screen, `xperience_app::dat_update`, from the libretro-database mirror)
-//! or the user drops one at `xperience_app::dirs::nointro_dat_path`.
+//! screen, `sixteen_app::dat_update`, from the libretro-database mirror)
+//! or the user drops one at `sixteen_app::dirs::nointro_dat_path`.
 //! Entirely optional: without it, the catalog falls back to the SNES
 //! header's internal title or the file name, same as before.
 
@@ -171,7 +171,7 @@ mod tests {
         // contents. Thread id disambiguates them, same fix `catalog.rs`'s
         // own temp-file tests already use.
         let path = std::env::temp_dir().join(format!(
-            "xperience-nointro-test-{}-{:?}.dat",
+            "sixteen-nointro-test-{}-{:?}.dat",
             std::process::id(),
             std::thread::current().id()
         ));

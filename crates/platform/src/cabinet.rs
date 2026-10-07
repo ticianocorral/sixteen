@@ -4,7 +4,7 @@
 //! bitmap text, letterboxed images). The cabinet furniture (the chamfer ring
 //! from the window edge down to the glass) is redrawn every frame so nothing
 //! ever recreates the window. NTSC colour bleed is applied upstream
-//! (`xperience-ntsc`).
+//! (`sixteen-ntsc`).
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -76,24 +76,103 @@ const PANEL_DIM: (u8, u8, u8) = (140, 134, 124);
 /// "atenção" without shouting over the panel's own palette.
 const PANEL_WARN: (u8, u8, u8) = (228, 180, 90);
 /// Fill for a clickable panel button (`draw_button`) — a shade lighter than
-/// `PANEL_BG` so it reads as its own control, not flat background text.
+/// `PANEL_BG` so it reads as its own control, not flat background text (the
+/// in-TV shelf screen's flat buttons in `frame_image_zoom` use it too; the
+/// console's own three controls wear `draw_flat_key`'s plastic keys instead).
 const PANEL_BTN_BG: (u8, u8, u8) = (34, 32, 29);
 
-/// Power/Reset rocker-switch colours (plan revision: styled after the real
-/// console's purple switches, see `draw_rocker`) — a mid violet with a
-/// lighter bevel sliver on the thumb's top edge and a dim grey stand-in for
-/// "not interactive right now" (Reset while powered off).
+/// The console's own controls — Eject (`draw_eject_button`) and the
+/// Power/Reset thumbs (`draw_rocker`) — wear the flat matte key
+/// (`draw_flat_key`): a plain rectangle with softly rounded corners and no
+/// gloss anywhere, like the real hardware's plastic (plan revision). The
+/// palettes carry the key's body/outline plus the debossed-oval shades —
+/// `draw_rocker_thumb` presses one into the Power/Reset faces; Eject's key
+/// is plain and never reads them. `*_LIT` is a control that would do
+/// something right now, `*_DIM` inert grey for one that wouldn't. Every
+/// other panel button stays a plain flat `draw_button`.
+struct FlatKeyPalette {
+    /// Dark rim where the key meets the panel — the button's "seating".
+    outline: (u8, u8, u8),
+    /// The key's flat face colour.
+    body: (u8, u8, u8),
+    /// The oval's recessed floor.
+    floor: (u8, u8, u8),
+    /// The oval's shadowed top wall.
+    wall_dark: (u8, u8, u8),
+    /// The oval's bottom wall, catching a little of the top-down light.
+    wall_lit: (u8, u8, u8),
+    /// Label colour, tuned to hold up on the flat face.
+    text: (u8, u8, u8),
+}
+/// Power/Reset: the switch violet, same as ever.
+const ROCKER_LIT: FlatKeyPalette = FlatKeyPalette {
+    outline: (24, 16, 42),
+    body: SWITCH_PURPLE,
+    floor: SWITCH_THUMB_FLOOR,
+    wall_dark: SWITCH_THUMB_WALL_DARK,
+    wall_lit: SWITCH_THUMB_WALL_LIT,
+    text: (243, 240, 232),
+};
+/// Power/Reset inert: the same key in grey plastic.
+const ROCKER_DIM: FlatKeyPalette = FlatKeyPalette {
+    outline: (10, 10, 9),
+    body: (60, 57, 53),
+    floor: SWITCH_THUMB_FLOOR_DIM,
+    wall_dark: SWITCH_THUMB_WALL_DARK_DIM,
+    wall_lit: SWITCH_THUMB_WALL_LIT_DIM,
+    text: PANEL_DIM,
+};
+/// Eject: the cartridge's own grey plastic (plan revision: "o cinza do
+/// cartucho (mais escuro)") — sampled off the real scans the app shows in
+/// the slot (`assets/cartridge/*.png` cluster around RGB 138,132,138: a
+/// cool mid-dark grey, a step below the console's light shell). The deboss
+/// shades sit unused; the oval lives on the Power/Reset keys only.
+const EJECT_LIT: FlatKeyPalette = FlatKeyPalette {
+    outline: (62, 59, 66),
+    body: (138, 132, 138),
+    floor: (118, 112, 118),
+    wall_dark: (98, 93, 99),
+    wall_lit: (126, 120, 126),
+    text: (236, 233, 228),
+};
+/// Eject inert: a step darker so the live/inert distinction survives.
+const EJECT_DIM: FlatKeyPalette = FlatKeyPalette {
+    outline: (26, 25, 28),
+    body: (95, 91, 99),
+    floor: (80, 77, 84),
+    wall_dark: (64, 61, 67),
+    wall_lit: (88, 84, 92),
+    text: PANEL_DIM,
+};
+
+/// Power/Reset rocker-switch colours, styled after the reference photo of
+/// the real console's controls — a mid violet key riding in a dark
+/// rectangular pocket whose grey rim is visibly lighter than the panel
+/// around it.
 const SWITCH_PURPLE: (u8, u8, u8) = (107, 70, 168);
-const SWITCH_PURPLE_HI: (u8, u8, u8) = (152, 112, 214);
-const SWITCH_DIM: (u8, u8, u8) = (58, 55, 62);
 const SWITCH_TRACK_BG: (u8, u8, u8) = (24, 22, 26);
-const SWITCH_TRACK_BORDER: (u8, u8, u8) = (60, 58, 64);
+const SWITCH_TRACK_BORDER: (u8, u8, u8) = (76, 74, 82);
+/// The track's inner shadow along its top edge — light comes from above, so
+/// the recess the thumb rides in is darkest right under its lip.
+const SWITCH_TRACK_SHADOW: (u8, u8, u8) = (12, 11, 14);
+
+/// The thumb's debossed oval (plan revision: "um leve oval em baixo relevo
+/// no meio... nao deve ter brilho") — flat violet shades darker than the
+/// key's body: the recess floor, its shadowed top wall and the bottom wall
+/// that catches a little of the same top-down light. No gradient anywhere —
+/// the key itself stays the flat `SWITCH_PURPLE`. The `_DIM` set does the
+/// same in inert grey for a control that wouldn't do anything right now.
+const SWITCH_THUMB_FLOOR: (u8, u8, u8) = (81, 52, 128);
+const SWITCH_THUMB_WALL_DARK: (u8, u8, u8) = (60, 37, 99);
+const SWITCH_THUMB_WALL_LIT: (u8, u8, u8) = (95, 62, 148);
+const SWITCH_THUMB_FLOOR_DIM: (u8, u8, u8) = (44, 41, 38);
+const SWITCH_THUMB_WALL_DARK_DIM: (u8, u8, u8) = (33, 31, 29);
+const SWITCH_THUMB_WALL_LIT_DIM: (u8, u8, u8) = (52, 49, 45);
 
 /// Power LED (plan revision: "luz vermelha led indicando o power... igual o
 /// console original") — a real SNES has one lit red next to its switches
 /// whenever the console is on. `LED_ON_HI` is a small glossy highlight dot
-/// drawn on top when lit, the same "cheap bevel via a flat rect" trick
-/// `draw_rocker`'s thumb highlight already uses.
+/// drawn on top when lit.
 const LED_ON: (u8, u8, u8) = (214, 44, 40);
 const LED_ON_HI: (u8, u8, u8) = (255, 150, 140);
 const LED_OFF: (u8, u8, u8) = (56, 26, 26);
@@ -129,7 +208,7 @@ const SEAT_HIDDEN_FRAC: f32 = 0.50;
 /// app calls `Cabinet::set_nameplate` with its own version appended, and
 /// what the idle screen's panel falls back to in plain text when there's no
 /// logo image loaded (`draw_panel`'s idle branch).
-pub const BRAND: &str = "SNES Xperience";
+pub const BRAND: &str = "SixteeN";
 const BRAND_TEXT: (u8, u8, u8) = (92, 86, 78);
 
 /// Glyph cell (Noto Sans Mono, anti-aliased, rasterized once at boot into an
@@ -160,7 +239,7 @@ fn glyph_index(ch: char) -> u32 {
     }
 }
 
-/// Pixel layout of a core framebuffer. Mirrors `xperience_emulation::PixelFormat`
+/// Pixel layout of a core framebuffer. Mirrors `sixteen_emulation::PixelFormat`
 /// so the platform layer stays independent of the emulation crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelFormat {
@@ -1528,7 +1607,7 @@ impl Cabinet {
             .map(|(b, _)| *b)
     }
 
-    /// Present of every frame, through the trace watchdog (`XPERIENCE_TRACE=
+    /// Present of every frame, through the trace watchdog (`SIXTEEN_TRACE=
     /// 1`): present is where a GPU/compositor/display stall shows up — telling
     /// it apart from a slow app loop is the whole point of the trace.
     fn present_and_time(&mut self) {
@@ -3515,7 +3594,7 @@ fn draw_brand(
         return arrows;
     }
     // A '\n' in the label stacks lines (plan revision: "no nameplate colocar
-    // a versão do snes9x abaixo do snes xperience") — the block centred in
+    // a versão do snes9x abaixo do sixteen") — the block centred in
     // the chin. When the chin can't fit them all, keep only the first (the
     // app's own name/version) rather than spilling over the bezel.
     let lines: Vec<&str> = label.split('\n').collect();
@@ -4022,7 +4101,7 @@ fn draw_panel(
         // everything dim, there's no cartridge loaded to command. Purely
         // decorative here, so none of them get hit targets.
         const SWITCH_TRACK_H: i32 = 64;
-        const SWITCH_GROUP_H: i32 = SWITCH_TRACK_H + 4 + GLYPH_H as i32;
+        const SWITCH_GROUP_H: i32 = SWITCH_TRACK_H + 4;
         let footer_h = (GLYPH_H + 12) as i32;
         let limit = rect.bottom() - pad - footer_h;
         if cy + SWITCH_GROUP_H <= limit {
@@ -4045,7 +4124,7 @@ fn draw_panel(
                 SWITCH_TRACK_H as u32,
             );
             draw_rocker(canvas, font, power_track, "POWER", false, false);
-            draw_button(canvas, font, eject_rect, "EJETAR", false);
+            draw_eject_button(canvas, font, eject_rect, "EJETAR", false);
             draw_rocker(canvas, font, reset_track, "RESET", false, false);
             let led_size = 16;
             let led_top = cy + (eject_rect.y() - cy - led_size) / 2;
@@ -4176,7 +4255,7 @@ fn draw_panel(
     // Pulled out of the generic command loop below (which skips these three
     // by kind) so they get this dedicated look instead of a plain button.
     const SWITCH_TRACK_H: i32 = 64;
-    const SWITCH_GROUP_H: i32 = SWITCH_TRACK_H + 4 + GLYPH_H as i32;
+    const SWITCH_GROUP_H: i32 = SWITCH_TRACK_H + 4;
     let mut buttons = Vec::new();
     if cy + SWITCH_GROUP_H <= limit {
         cy += 14;
@@ -4207,7 +4286,7 @@ fn draw_panel(
         ));
         buttons.push((
             PanelButton::Eject,
-            draw_button(canvas, font, eject_rect, "EJETAR", !panel.powered),
+            draw_eject_button(canvas, font, eject_rect, "EJETAR", !panel.powered),
         ));
         buttons.push((
             PanelButton::Reset,
@@ -4232,7 +4311,7 @@ fn draw_panel(
             led_size,
             panel.powered,
         );
-        cy += SWITCH_TRACK_H + 4 + GLYPH_H as i32;
+        cy += SWITCH_GROUP_H;
     }
 
     // 3. Commands — the console's own buttons, not the emulator's extras
@@ -4891,6 +4970,63 @@ fn draw_panel_block(
     }
 }
 
+/// Horizontal inset of scanline `row` in a bar `h` rows tall with corner
+/// radius `radius` — quarter-circle steps, the same fake-a-circle trick
+/// `draw_led` uses, stacked into whole rows here. Clamped so a bar can never
+/// be narrower than its own radius.
+fn corner_inset(row: i32, h: i32, radius: i32) -> i32 {
+    let r = radius.min(h / 2).max(0);
+    let from_end = row.min(h - 1 - row);
+    if from_end >= r {
+        return 0;
+    }
+    let dx = r - from_end;
+    r - ((r * r - dx * dx) as f32).sqrt().floor() as i32
+}
+
+/// One flat matte key filling `rect` — the console's own plastic (plan
+/// revision: rectangular, no gloss anywhere), built entirely from flat
+/// scanline fills like the rest of this UI: a dark seating ring, softly
+/// rounded corners and a dead-flat body colour. `rect` itself is untouched
+/// beyond the fill — callers keep using it for hit-testing, so a restyle can
+/// never move a click target.
+fn draw_flat_key(canvas: &mut WindowCanvas, rect: Rect, p: &FlatKeyPalette) {
+    let (w, h) = (rect.width() as i32, rect.height() as i32);
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    // Rectangular, only softly rounded — the photo's keys are rectangles,
+    // not pills.
+    let radius = (h / 5).max(2);
+    // The seating ring: one rounded pass in the outline colour.
+    canvas.set_draw_color(Color::RGB(p.outline.0, p.outline.1, p.outline.2));
+    for row in 0..h {
+        let inset = corner_inset(row, h, radius);
+        let _ = canvas.fill_rect(Rect::new(
+            rect.x() + inset,
+            rect.y() + row,
+            (w - inset * 2).max(0) as u32,
+            1,
+        ));
+    }
+    if w < 3 || h < 3 {
+        return;
+    }
+    // The flat body one pixel inside the ring.
+    let (body_w, body_h) = (w - 2, h - 2);
+    let body_radius = (radius - 1).max(1);
+    canvas.set_draw_color(Color::RGB(p.body.0, p.body.1, p.body.2));
+    for row in 0..body_h {
+        let inset = corner_inset(row, body_h, body_radius).min(body_w / 2);
+        let _ = canvas.fill_rect(Rect::new(
+            rect.x() + 1 + inset,
+            rect.y() + 1 + row,
+            (body_w - inset * 2).max(0) as u32,
+            1,
+        ));
+    }
+}
+
 /// Draw one clickable panel button: a filled box (brighter/bordered when
 /// `lit`, flush with the panel background otherwise) with `text` centered
 /// inside — clipped to fit the box, with a trailing `...` if it doesn't
@@ -4934,6 +5070,40 @@ fn draw_button(
         tx,
         ty,
         TextStyle::new(1, fg),
+        &shown,
+        usize::MAX,
+    );
+    rect
+}
+
+/// Eject alone (this function) wears the plain grey key — the real button's
+/// own look (the reference photo: mid grey face, light moulded label),
+/// rectangular and matte like the Power/Reset keys next to it (see
+/// `draw_rocker`), just without their debossed oval. A step darker when
+/// inert. Everything else on the panel stays a plain `draw_button`. Label
+/// layout identical to `draw_button`; returns `rect` for hit-testing.
+fn draw_eject_button(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    rect: Rect,
+    text: &str,
+    lit: bool,
+) -> Rect {
+    let pal = if lit { &EJECT_LIT } else { &EJECT_DIM };
+    draw_flat_key(canvas, rect, pal);
+
+    let side_pad = 6i32;
+    let max_chars = (((rect.width() as i32 - side_pad * 2) / GLYPH_W as i32).max(1)) as usize;
+    let shown = clip_label(text, max_chars);
+    let text_w = (GLYPH_W as i32) * shown.chars().count() as i32;
+    let tx = rect.x() + (rect.width() as i32 - text_w).max(4) / 2;
+    let ty = rect.y() + (rect.height() as i32 - GLYPH_H as i32) / 2;
+    draw_text_absolute(
+        canvas,
+        font,
+        tx,
+        ty,
+        TextStyle::new(1, pal.text),
         &shown,
         usize::MAX,
     );
@@ -4996,13 +5166,17 @@ fn draw_led(canvas: &mut WindowCanvas, center_x: i32, top: i32, size: i32, lit: 
     }
 }
 
-/// One Power/Reset rocker switch (plan revision — styled after the real
-/// console's own controls, not another text row): a recessed track with a
-/// purple thumb that sits at the top when `up` (Power: on; Reset: mid-press)
-/// or the bottom otherwise, plus a label underneath. `lit` dims the whole
-/// thing the same way `draw_button` does for a control that wouldn't do
-/// anything right now (Reset while the console is off). Returns `track` for
-/// hit-testing — the whole switch body is clickable, not just the thumb.
+/// One Power/Reset rocker switch, styled after the reference photo of the
+/// real console's controls: a dark rectangular pocket with a grey rim, and a
+/// wide violet key riding in it — rectangular with softly rounded corners,
+/// its face broken only by a shallow oval pressed into the middle, the label
+/// printed inside that oval like the real switches. All flat matte colour —
+/// the old convex dome's gloss is gone (plan revision). The key sits at the
+/// top when `up` (Power: on; Reset: mid-press) or the bottom otherwise.
+/// `lit` dims the whole thing the same way `draw_button` does for a control
+/// that wouldn't do anything right now (Reset while the console is off).
+/// Returns `track` for hit-testing — the whole switch body is clickable,
+/// not just the thumb.
 fn draw_rocker(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -5029,47 +5203,107 @@ fn draw_rocker(
         SWITCH_TRACK_BG.2,
     ));
     let _ = canvas.fill_rect(inset);
+    // The recess reads because light from above leaves its top edge dark —
+    // a couple of scanlines hugging the lip, darker than the pocket floor.
+    canvas.set_draw_color(Color::RGB(
+        SWITCH_TRACK_SHADOW.0,
+        SWITCH_TRACK_SHADOW.1,
+        SWITCH_TRACK_SHADOW.2,
+    ));
+    let _ = canvas.fill_rect(Rect::new(inset.x(), inset.y(), inset.width(), 2));
 
-    let thumb_h = (inset.height() / 2).saturating_sub(3).max(1);
+    // The thumb, riding high or low with the switch's state — wide margins
+    // all round the pocket, like the photo.
+    let thumb_h = (inset.height() * 55 / 100).max(1);
     let thumb_y = if up {
-        inset.y() + 2
+        inset.y() + 3
     } else {
-        inset.bottom() - thumb_h as i32 - 2
+        inset.bottom() - thumb_h as i32 - 3
     };
     let thumb = Rect::new(
-        inset.x() + 2,
+        inset.x() + 4,
         thumb_y,
-        inset.width().saturating_sub(4),
+        inset.width().saturating_sub(8),
         thumb_h,
     );
-    let base = if lit { SWITCH_PURPLE } else { SWITCH_DIM };
-    canvas.set_draw_color(Color::RGB(base.0, base.1, base.2));
-    let _ = canvas.fill_rect(thumb);
-    if lit {
-        // A lighter sliver along the thumb's top edge — cheap stand-in for a
-        // bevel/highlight with only flat-fill rects to work with.
-        let hi = Rect::new(thumb.x(), thumb.y(), thumb.width(), thumb.height().min(3));
-        canvas.set_draw_color(Color::RGB(
-            SWITCH_PURPLE_HI.0,
-            SWITCH_PURPLE_HI.1,
-            SWITCH_PURPLE_HI.2,
-        ));
-        let _ = canvas.fill_rect(hi);
-    }
+    draw_rocker_thumb(canvas, thumb, lit);
 
+    // The label is printed on the key itself — inside the debossed oval,
+    // which shares the thumb's centre.
     let text_w = (GLYPH_W as i32) * label.chars().count() as i32;
-    let tx = track.x() + (track.width() as i32 - text_w).max(0) / 2;
-    let ty = track.bottom() + 4;
+    let tx = thumb.x() + (thumb.width() as i32 - text_w).max(0) / 2;
+    let ty = thumb.y() + (thumb.height() as i32 - GLYPH_H as i32) / 2;
     draw_text_absolute(
         canvas,
         font,
         tx,
         ty,
-        TextStyle::new(1, if lit { PANEL_TEXT } else { PANEL_DIM }),
+        TextStyle::new(
+            1,
+            if lit {
+                ROCKER_LIT.text
+            } else {
+                ROCKER_DIM.text
+            },
+        ),
         label,
         usize::MAX,
     );
     track
+}
+
+/// One Power/Reset thumb face (plan revision: "deve ser retangular, com um
+/// leve oval em baixo relevo no meio... mantenha a cor mas nao deve ter
+/// brilho") — the flat matte key of `draw_flat_key` in the switch violet
+/// (`ROCKER_DIM`'s grey when inert), plus a shallow oval pressed into the
+/// middle: its floor a darker violet, its top wall darker still (shadow) and
+/// its bottom wall a touch lighter than the floor — light from above reading
+/// the recess. The oval is an ellipse chord per scanline, the same
+/// fake-a-circle trick `corner_inset` uses.
+fn draw_rocker_thumb(canvas: &mut WindowCanvas, rect: Rect, lit: bool) {
+    let (w, h) = (rect.width() as i32, rect.height() as i32);
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    let p = if lit { &ROCKER_LIT } else { &ROCKER_DIM };
+    draw_flat_key(canvas, rect, p);
+    if w < 5 || h < 5 {
+        return;
+    }
+    let (body_w, body_h) = (w - 2, h - 2);
+
+    // The shallow oval pressed into the face — most of the key's width, a
+    // bit over half its height, dead centre. Its top ~third sits in shadow
+    // and its bottom edge catches the light, the floor between them.
+    let oval_h = (body_h * 55 / 100).max(3);
+    let oval_w = (body_w * 8 / 10).max(3);
+    let oval_left = rect.x() + 1 + body_w / 2 - oval_w / 2;
+    let oval_top = rect.y() + 1 + body_h / 2 - oval_h / 2;
+    let half_w = oval_w as f32 / 2.0;
+    let half_h = oval_h as f32 / 2.0;
+    let dark_rows = (oval_h * 3 / 10).max(1);
+    let lit_rows = (oval_h * 2 / 10).max(1);
+    for row in 0..oval_h {
+        let dy = (row as f32 + 0.5 - half_h) / half_h;
+        let half = ((1.0 - dy * dy).max(0.0).sqrt() * half_w) as i32;
+        if half <= 0 {
+            continue;
+        }
+        let (r, g, b) = if row < dark_rows {
+            p.wall_dark
+        } else if row >= oval_h - lit_rows {
+            p.wall_lit
+        } else {
+            p.floor
+        };
+        canvas.set_draw_color(Color::RGB(r, g, b));
+        let _ = canvas.fill_rect(Rect::new(
+            oval_left + oval_w / 2 - half,
+            oval_top + row,
+            (half * 2) as u32,
+            1,
+        ));
+    }
 }
 
 /// Where the pause book's two pages sit: a symmetric spread with a spine gap

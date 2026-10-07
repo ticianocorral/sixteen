@@ -12,7 +12,7 @@ use std::time::Duration;
 use serde::Deserialize;
 
 const RELEASES_API: &str =
-    "https://api.github.com/repos/ticianocorral/snes-xperience/releases/latest";
+    "https://api.github.com/repos/ticianocorral/sixteen/releases/latest";
 
 /// HEAD of the snes9x core's own repo — the same identifier a core embeds
 /// in its `library_version` ("1.63 fae2fea" is upstream version + commit).
@@ -74,7 +74,7 @@ fn core_is_stale(core_dir: &Path) -> bool {
 fn latest_snes9x_commit() -> Option<String> {
     let resp = agent()
         .get(SNES9X_COMMIT_API)
-        .set("User-Agent", "snes-xperience-update-check")
+        .set("User-Agent", "sixteen-update-check")
         .call()
         .ok()?;
     let head: GhCommit = resp.into_json().ok()?;
@@ -130,7 +130,7 @@ fn asset_for_platform(assets: &[GhAsset]) -> Option<String> {
 fn newer_release(current: &str) -> Option<AppUpdate> {
     let resp = agent()
         .get(RELEASES_API)
-        .set("User-Agent", "snes-xperience-update-check")
+        .set("User-Agent", "sixteen-update-check")
         .call()
         .ok()?;
     let release: GhRelease = resp.into_json().ok()?;
@@ -224,7 +224,7 @@ pub fn apply_update_file(path: &Path) -> Result<(), String> {
 /// Aplica, no arranque, uma atualização baixada pela tela de update — o
 /// "será atualizado ao reiniciar" (plan revision). Melhor-esforço: qualquer
 /// falha loga e mantém o arquivo para tentar de novo. Antes do SDL, na
-/// main do `xperience`.
+/// main do `sixteen`.
 pub fn apply_pending_update() {
     let Some(dir) = crate::dirs::update_dir_opt() else {
         return;
@@ -259,7 +259,7 @@ pub fn apply_pending_update() {
 #[cfg(target_os = "macos")]
 fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
     use std::process::Command;
-    let mnt = std::env::temp_dir().join("xperience-update-mnt");
+    let mnt = std::env::temp_dir().join("sixteen-update-mnt");
     let _ = std::fs::remove_dir_all(&mnt);
     std::fs::create_dir_all(&mnt).map_err(|e| e.to_string())?;
     let out = Command::new("hdiutil")
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn apply_rejects_unrelated_files_and_keeps_them() {
-        let dir = std::env::temp_dir().join("xperience-apply-test");
+        let dir = std::env::temp_dir().join("sixteen-apply-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("nao-e-update.txt");
@@ -408,7 +408,7 @@ mod tests {
 
     /// Hits the real GitHub API — not run by default (`cargo test` skips
     /// `#[ignore]`d tests), only a manual sanity check:
-    /// `cargo test -p xperience-app --lib -- --ignored hits_the_real_github_api`.
+    /// `cargo test -p sixteen-app --lib -- --ignored hits_the_real_github_api`.
     #[test]
     #[ignore]
     fn hits_the_real_github_api() {
@@ -417,7 +417,7 @@ mod tests {
     }
 
     /// Same shape as `hits_the_real_github_api`:
-    /// `cargo test -p xperience-app --lib -- --ignored hits_the_real_snes9x_commit_api`.
+    /// `cargo test -p sixteen-app --lib -- --ignored hits_the_real_snes9x_commit_api`.
     #[test]
     #[ignore]
     fn hits_the_real_snes9x_commit_api() {

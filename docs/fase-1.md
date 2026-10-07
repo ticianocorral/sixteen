@@ -31,7 +31,7 @@ No `emu-run`, **10 slots** (`0`–`9`), arquivo
 Indexado pelo **SHA1 da ROM** (plano §3.4: "Indexe pelo hash da ROM, nunca pelo
 nome do arquivo"). ROM não identificada ⇒ sem slot, o app avisa.
 
-Verificação: `cargo run -p xperience-emulation --example state_check -- <core> <rom>`
+Verificação: `cargo run -p sixteen-emulation --example state_check -- <core> <rom>`
 roda até o frame 600 por dois caminhos (direto, e com save no 300 + reload) e
 compara o hash do frame. Para o snes9x o estado tem ~820 KiB.
 
@@ -68,8 +68,8 @@ core não serializa, desliga sozinho com aviso.
 
 ## Config (`config.toml`)
 
-Ordem de busca: `--config PATH`, `$XPERIENCE_CONFIG`,
-`$HOME/.config/snes-xperience/config.toml`. Se o último não existir, um arquivo
+Ordem de busca: `--config PATH`, `$SIXTEEN_CONFIG`,
+`$HOME/.config/sixteen/config.toml`. Se o último não existir, um arquivo
 padrão comentado é escrito lá.
 
 ```toml

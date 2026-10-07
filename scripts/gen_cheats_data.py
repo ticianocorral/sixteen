@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Convert the libretro-database SNES .cht folder into a compact embedded
-data file for xperience-domain::cheats (`crates/domain/src/cheats_data.txt`).
+data file for sixteen-domain::cheats (`crates/domain/src/cheats_data.txt`).
 
 Usage:
     git clone --filter=blob:none --sparse --depth 1 \

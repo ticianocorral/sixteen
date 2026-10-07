@@ -1348,6 +1348,79 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
+name = "sixteen-app"
+version = "1.1.5"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "image",
+ "log",
+ "lopdf",
+ "md-5",
+ "serde",
+ "serde_json",
+ "sixteen-domain",
+ "sixteen-emulation",
+ "sixteen-ntsc",
+ "sixteen-platform",
+ "sixteen-ra",
+ "toml 0.8.23",
+ "ureq",
+ "winres",
+ "zip",
+]
+
+[[package]]
+name = "sixteen-domain"
+version = "1.1.5"
+dependencies = [
+ "crc32fast",
+ "log",
+ "md-5",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "sha1",
+ "thiserror",
+ "zip",
+]
+
+[[package]]
+name = "sixteen-emulation"
+version = "1.1.5"
+dependencies = [
+ "anyhow",
+ "libloading",
+ "log",
+ "thiserror",
+]
+
+[[package]]
+name = "sixteen-ntsc"
+version = "1.1.5"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "sixteen-platform"
+version = "1.1.5"
+dependencies = [
+ "log",
+ "noto-sans-mono-bitmap",
+ "sdl3",
+ "thiserror",
+]
+
+[[package]]
+name = "sixteen-ra"
+version = "1.1.5"
+dependencies = [
+ "cc",
+ "log",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1884,79 +1957,6 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
-
-[[package]]
-name = "xperience-app"
-version = "1.1.5"
-dependencies = [
- "anyhow",
- "env_logger",
- "image",
- "log",
- "lopdf",
- "md-5",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "ureq",
- "winres",
- "xperience-domain",
- "xperience-emulation",
- "xperience-ntsc",
- "xperience-platform",
- "xperience-ra",
- "zip",
-]
-
-[[package]]
-name = "xperience-domain"
-version = "1.1.5"
-dependencies = [
- "crc32fast",
- "log",
- "md-5",
- "roxmltree",
- "serde",
- "serde_json",
- "sha1",
- "thiserror",
- "zip",
-]
-
-[[package]]
-name = "xperience-emulation"
-version = "1.1.5"
-dependencies = [
- "anyhow",
- "libloading",
- "log",
- "thiserror",
-]
-
-[[package]]
-name = "xperience-ntsc"
-version = "1.1.5"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "xperience-platform"
-version = "1.1.5"
-dependencies = [
- "log",
- "noto-sans-mono-bitmap",
- "sdl3",
- "thiserror",
-]
-
-[[package]]
-name = "xperience-ra"
-version = "1.1.5"
-dependencies = [
- "cc",
- "log",
-]
 
 [[package]]
 name = "yoke"

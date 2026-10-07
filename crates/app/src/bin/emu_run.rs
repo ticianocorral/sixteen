@@ -6,15 +6,15 @@
 //!   emu-run --core <path/to/snes9x_libretro.{dylib,so,dll}> --rom <game.sfc>
 //!           [--system-dir DIR] [--save-dir DIR] [--runahead N]
 //!
-//! The core path also reads from $XPERIENCE_CORE. See docs/fase-0.md for where
+//! The core path also reads from $SIXTEEN_CORE. See docs/fase-0.md for where
 //! to get the core, docs/fase-1.md for save states / SRAM / run-ahead. The
-//! run-loop itself lives in `xperience_app::runner`, shared with `xperience`.
+//! run-loop itself lives in `sixteen_app::runner`, shared with `sixteen`.
 
 use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Result};
-use xperience_app::config::Config;
-use xperience_app::runner::{run_game, GameSpec};
+use sixteen_app::config::Config;
+use sixteen_app::runner::{run_game, GameSpec};
 
 struct Args {
     core: PathBuf,
@@ -46,7 +46,7 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args> {
-    let mut core = std::env::var_os("XPERIENCE_CORE").map(PathBuf::from);
+    let mut core = std::env::var_os("SIXTEEN_CORE").map(PathBuf::from);
     let mut rom = None;
     let mut system_dir = None;
     let mut save_dir = None;
@@ -168,7 +168,7 @@ fn parse_args() -> Result<Args> {
         }
     }
 
-    let core = core.ok_or_else(|| anyhow!("no core: pass --core or set $XPERIENCE_CORE"))?;
+    let core = core.ok_or_else(|| anyhow!("no core: pass --core or set $SIXTEEN_CORE"))?;
     let rom = rom.ok_or_else(|| anyhow!("no ROM: pass --rom <file>"))?;
     let save_dir = save_dir.unwrap_or_else(|| PathBuf::from("."));
     let system_dir = system_dir.unwrap_or_else(|| save_dir.clone());
@@ -227,6 +227,9 @@ Closing the window always quits, on or off — no ceremony.";
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // Config padrão vive na raiz do app — segue a migração do rebrand
+    // (SNES Xperience → SixteeN) antes de qualquer leitura.
+    sixteen_app::dirs::migrate_renamed_root();
     let args = parse_args()?;
 
     let cfg = Config::load(args.config.as_deref())?;
@@ -234,10 +237,10 @@ fn main() -> Result<()> {
         log::info!("config: {}", p.display());
     }
 
-    let mut platform = xperience_platform::Platform::new().map_err(|e| anyhow!(e.to_string()))?;
+    let mut platform = sixteen_platform::Platform::new().map_err(|e| anyhow!(e.to_string()))?;
     platform.set_pad_map(cfg.padmap.clone());
     let mut cabinet = platform
-        .create_cabinet("SNES Xperience", 1024, 768, false)
+        .create_cabinet("SixteeN", 1024, 768, false)
         .map_err(|e| anyhow!(e.to_string()))?;
     if cfg.fullscreen {
         cabinet.toggle_fullscreen();

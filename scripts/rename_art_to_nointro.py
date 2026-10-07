@@ -2,7 +2,7 @@
 """Rename a folder of local art (cover/logo/cartridge/backcover) to the
 No-Intro naming convention, by matching titles against a No-Intro dat — so
 the file already sits under the exact filename `find_local_art` (in
-`xperience-app`) will look for once a matching ROM gets renamed to its own
+`sixteen-app`) will look for once a matching ROM gets renamed to its own
 No-Intro name, even for a game not in the library yet ("renomear... mesmo
 dos jogos que ainda nao tem").
 

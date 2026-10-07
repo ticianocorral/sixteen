@@ -1,4 +1,4 @@
-//! The selector shelf, factored out of the `selector` binary so `xperience` can
+//! The selector shelf, factored out of the `selector` binary so `sixteen` can
 //! show it between games: a scrollable grid of covers (or a multicart-style
 //! list when no cover art is around) with a details panel, mouse and gamepad
 //! navigation only (plan revision: no keyboard shortcuts, so type-to-search
@@ -17,8 +17,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use xperience_domain::{Catalog, CatalogEntry, Order};
-use xperience_platform::{
+use sixteen_domain::{Catalog, CatalogEntry, Order};
+use sixteen_platform::{
     Cabinet, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton, ShelfPanelInfo,
 };
 
@@ -2372,7 +2372,7 @@ pub fn run(
 /// listando os jogos mais jogados em todo periodo") — the shelf's own
 /// "Histórico" button. Clicking a row launches it, same as the shelf's own
 /// grid; "Voltar" here means "back to the shelf", not all the way to idle
-/// (the caller, `xperience.rs`'s main loop, treats this call's `Pick::Back`
+/// (the caller, `sixteen.rs`'s main loop, treats this call's `Pick::Back`
 /// that way, same as it already special-cases `Pick::Settings`).
 pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) -> Result<Pick> {
     let logo_dir = crate::dirs::assets_dir().join("logo");

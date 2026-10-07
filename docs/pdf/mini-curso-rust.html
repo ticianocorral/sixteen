@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>SixteeN — Mini curso de Rust para QAs</title>
+<link rel="stylesheet" href="assets/fonts/local_PressStart2P.css">
+<link rel="stylesheet" href="assets/fonts/local_Archivo.css">
+<link rel="stylesheet" href="assets/fonts/local_ArchivoBlack.css">
+<link rel="stylesheet" href="assets/fonts/local_IBMPlexMono.css">
+<style>
+:root{
+  --papel:#f2ede3; --papel-alt:#eae3d4; --papel-sombra:#dcd4c0;
+  --tinta:#211d18; --tinta-fraca:#6b6459;
+  --roxo:#4a3f8f; --roxo-vivo:#6a5fc9; --roxo-claro:#eceafa;
+  --vermelho:#b3382e; --verde:#2e6b3f; --amarelo:#d9a522; --azul:#2e5b8f;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  --sans:"Archivo", system-ui, sans-serif;
+  --display:"Archivo Black", var(--sans);
+  --pixel:"Press Start 2P", var(--mono);
+}
+@page{ size:794px 1123px; margin:0; }
+html,body{ margin:0; padding:0; width:794px; background:var(--papel); }
+body{ font-family:var(--sans),sans-serif; color:var(--tinta); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.page{ width:794px; height:1123px; position:relative; overflow:hidden; background:var(--papel);
+       background-image:radial-gradient(#00000008 1px, transparent 1px); background-size:22px 22px;
+       page-break-after:always; display:flex; flex-direction:column; }
+.page:last-child{ page-break-after:auto; }
+.inner{ flex:1 1 auto; min-height:0; padding:30px 58px 18px; }
+@media screen{
+  html{ height:auto; display:flex; justify-content:center; background:#211d18; }
+  body{ transform-origin:top center; scale:min(1, calc(100vw / 794)); margin:0 auto; }
+  .page{ margin:18px 0; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+}
+
+/* ---------- tipografia ---------- */
+.pixel{ font-family:var(--pixel),monospace; line-height:1.5; }
+h1,h2,h3{ margin:0; }
+.sec-title{ font-family:var(--pixel),monospace; font-size:21px; color:var(--tinta); letter-spacing:1px; }
+.sec-num{ font-family:var(--pixel),monospace; font-size:11px; color:var(--papel); background:var(--roxo);
+          padding:7px 9px; display:inline-block; margin-right:12px; box-shadow:3px 3px 0 var(--tinta); }
+.sec-sub{ font-family:var(--mono),monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+          color:var(--tinta-fraca); margin-top:10px; }
+p{ margin:0 0 10px; font-size:13.5px; line-height:1.6; }
+.lead{ font-size:15px; }
+b,strong{ font-weight:700; }
+.mono{ font-family:var(--mono),monospace; }
+.up{ text-transform:uppercase; letter-spacing:.14em; }
+
+/* ---------- cabeçalho / rodapé ---------- */
+.topbar{ flex:0 0 40px; background:var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px; }
+.topbar .brand{ font-family:var(--pixel),monospace; font-size:8px; color:var(--papel); letter-spacing:1px; }
+.topbar .pg{ font-family:var(--mono),monospace; font-size:10px; color:var(--papel-alt); letter-spacing:.15em; }
+.botbar{ flex:0 0 36px; border-top:2px solid var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px;
+         font-family:var(--mono),monospace; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--tinta-fraca); }
+
+/* ---------- blocos ---------- */
+.box{ border:3px solid var(--tinta); background:#fffdf7; box-shadow:5px 5px 0 var(--tinta); padding:14px 16px; }
+.box .box-tag{ display:inline-block; font-family:var(--pixel),monospace; font-size:8px; padding:5px 7px;
+               margin:-14px 0 8px -16px; background:var(--roxo); color:var(--papel); }
+.box p:last-child{ margin-bottom:0; }
+.box.qa{ background:#e9f2e7; } .box.qa .box-tag{ background:var(--verde); }
+.box.dica{ background:#fdf6e0; } .box.dica .box-tag{ background:var(--amarelo); color:var(--tinta); }
+.box.atencao{ background:#faeae8; } .box.atencao .box-tag{ background:var(--vermelho); }
+.box.desafio{ background:var(--roxo-claro); } .box.desafio .box-tag{ background:var(--roxo-vivo); }
+
+/* ---------- código ---------- */
+.code{ background:#241f19; border:3px solid var(--tinta); box-shadow:5px 5px 0 var(--tinta);
+       margin:0; }
+.code .hd{ display:flex; justify-content:space-between; align-items:center;
+           background:#332c22; padding:5px 12px; border-bottom:2px solid var(--tinta); }
+.code .hd .f{ font-family:var(--mono),monospace; font-size:9.5px; color:#cfc6b4; letter-spacing:.06em; }
+.code .hd .lang{ font-family:var(--mono),monospace; font-size:8px; color:#8a8175; letter-spacing:.2em; text-transform:uppercase; }
+.code pre{ margin:0; padding:11px 14px; font-family:var(--mono),monospace; font-size:11px; line-height:1.62;
+           color:#e8e0d0; white-space:pre; overflow:hidden; }
+.code.sm pre{ font-size:10.5px; padding:9px 12px; }
+.k{ color:#a99bf5; }          /* keywords */
+.t{ color:#e8c15a; }          /* tipos */
+.s{ color:#8fc98f; }          /* strings */
+.n{ color:#e09a7f; }          /* números */
+.c{ color:#8a8175; font-style:italic; }  /* comentários */
+.f{ color:#8fc7e8; }          /* funções */
+.m{ color:#e88f8f; }          /* macros */
+code.k{ font-family:var(--mono),monospace; font-size:11.5px; background:var(--papel-alt);
+        border:1px solid var(--tinta-fraca); padding:1px 5px; white-space:nowrap; }
+.arq{ font-family:var(--mono),monospace; font-size:10.5px; background:var(--papel-alt);
+      border:1px dashed var(--tinta-fraca); padding:1px 7px; white-space:nowrap; }
+
+table.t8{ width:100%; border-collapse:collapse; border:3px solid var(--tinta); background:#fffdf7;
+          box-shadow:5px 5px 0 var(--tinta); }
+table.t8 th{ background:var(--roxo); color:var(--papel); font-family:var(--mono),monospace; font-size:10px;
+   letter-spacing:.12em; text-transform:uppercase; text-align:left; padding:7px 11px; border:2px solid var(--tinta); }
+table.t8 td{ border:2px solid var(--tinta); padding:6px 11px; font-size:12px; line-height:1.45; vertical-align:top; }
+table.t8 tr:nth-child(even) td{ background:var(--papel-alt); }
+.t8 code, .t8 .arq{ white-space:normal; }
+
+.steps{ margin:0; padding:0; list-style:none; counter-reset:st; }
+.steps li{ counter-increment:st; position:relative; padding:0 0 12px 44px; }
+.steps li::before{ content:counter(st, decimal-leading-zero); position:absolute; left:0; top:-2px;
+   width:30px; height:30px; border:3px solid var(--tinta); background:var(--roxo-vivo); color:#fff;
+   font-family:var(--mono),monospace; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center;
+   box-shadow:2px 2px 0 var(--tinta); }
+.steps li b{ display:block; font-size:13px; }
+.steps li span{ font-size:12px; color:var(--tinta); }
+
+.cols2{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.cols3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+
+/* cartucho da capa */
+.cart{ width:150px; background:var(--papel-alt); border:3px solid var(--tinta); border-radius:6px 6px 0 0;
+   box-shadow:5px 5px 0 var(--tinta); padding:12px 12px 0; position:relative; }
+.cart .label{ height:64px; background:var(--verde); border:2px solid var(--tinta); display:flex;
+   align-items:center; justify-content:center; font-family:var(--pixel),monospace; font-size:9px; color:#fff;
+   text-align:center; line-height:1.7; padding:6px; }
+.cart .grip{ margin-top:10px; height:26px;
+   background:repeating-linear-gradient(180deg, var(--tinta) 0 3px, transparent 3px 8px); }
+.slot{ width:190px; height:16px; background:var(--tinta); border-radius:3px; }
+
+/* crates do projeto */
+.crate{ border:3px solid var(--tinta); background:#fffdf7; box-shadow:4px 4px 0 var(--tinta); padding:9px 11px; }
+.crate .cn{ font-family:var(--mono),monospace; font-weight:600; font-size:12px; color:var(--roxo); }
+.crate .cd{ font-size:11px; line-height:1.4; margin-top:3px; }
+.crate.destaque{ background:var(--roxo-claro); }
+
+/* selo redondo */
+.selo{ width:96px; height:96px; border-radius:50%; background:var(--vermelho); border:3px solid var(--tinta);
+   box-shadow:4px 4px 0 var(--tinta); display:flex; flex-direction:column; align-items:center;
+   justify-content:center; text-align:center; color:var(--papel); transform:rotate(8deg); }
+.selo .a{ font-family:var(--pixel),monospace; font-size:8px; line-height:1.7; }
+.selo .b{ font-family:var(--mono),monospace; font-size:8px; letter-spacing:.1em; margin-top:5px; }
+</style>
+</head>
+<body>
+
+<!-- ============ PÁGINA 1 — CAPA ============ -->
+<div class="page">
+  <div class="inner" style="display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="mono up" style="font-size:10px;">Dev docs · Série “abrindo o console”</div>
+      <div class="mono up" style="font-size:10px; border:2px solid var(--tinta); padding:4px 10px; background:var(--papel-alt);">Vol. DEV-01</div>
+    </div>
+
+    <div style="margin-top:48px; text-align:center;">
+      <div style="display:inline-block;">
+        <div class="cart" style="margin:0 auto;">
+          <div class="label">RUST<br>101</div>
+          <div class="grip"></div>
+        </div>
+        <div class="slot" style="margin:8px auto 0 -8px;"></div>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:44px;">
+      <h1 class="pixel" style="font-size:30px; color:var(--roxo); text-shadow:4px 4px 0 var(--tinta); line-height:1.55;">MINI CURSO<br>DE RUST</h1>
+      <div style="margin:24px auto 0; width:480px; border-top:3px solid var(--tinta); border-bottom:3px solid var(--tinta); padding:10px 0;">
+        <div class="mono up" style="font-size:11.5px; letter-spacing:.22em;">Para quem testa com Cypress e Playwright</div>
+      </div>
+      <p class="lead" style="margin:22px auto 0; max-width:500px; font-size:14px;">
+        Você já sabe automatizar browsers. Agora vamos abrir o console e ler o
+        <b>esquemático</b>: um curso de Rust do zero usando o código-fonte real do
+        <b>SixteeN</b> como cartucho de estudos. Nada de exemplos com <span class="mono">foo</span>
+        e <span class="mono">bar</span> — cada aula lê um arquivo de verdade do emulador.
+      </p>
+    </div>
+
+    <div style="margin-top:auto;">
+      <div class="cols3" style="align-items:stretch;">
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">NÍVEL</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">Iniciante total em Rust</div>
+        </div>
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">PRÉ-REQUISITO</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">Cypress/Playwright básico</div>
+        </div>
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">CONTEÚDO</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">11 aulas + projeto final</div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:24px;">
+        <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); line-height:1.7;">
+          Edição 1.0 · Outubro de 2026<br>Acompanha o mini-curso em docs/mini-curso-rust.md
+        </div>
+        <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); text-align:right; line-height:1.7;">
+          Antes de ligar, leia a página 2.<br>Sim, a gente sabe que você não ia ler.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PÁGINA 2 — ANTES DE APERTAR POWER ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">02 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">00</span><span class="sec-title">ANTES DO POWER</span></div>
+    <div class="sec-sub">Como usar este guia</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Este curso foi escrito para <b>quem nunca escreveu Rust</b> — mas já passou horas
+      esperando um <span class="mono">cypress run</span> terminar. Cada aula apresenta um conceito e mostra
+      onde ele vive <b>no código real do emulador</b>, com o caminho do arquivo para você abrir no editor.
+    </p>
+    <p>
+      As aulas se apoiam nas anteriores: leia em ordem, na primeira passada. Trave na
+      <b>aula 8</b> (posse e empréstimo)? Faz parte — é a chefe final de Rust e todo mundo trava nela.
+    </p>
+
+    <div class="cols2" style="margin-top:16px;">
+      <div class="box qa">
+        <span class="box-tag">BOX VERDE — ANALOGIA DE QA</span>
+        <p>Traduz o conceito de Rust para o seu dia a dia de automação:
+        locators, fixtures, <span class="mono">cy.task</span>, CI, flaky tests.
+        É a ponte entre os dois mundos.</p>
+      </div>
+      <div class="box desafio">
+        <span class="box-tag">BOX ROXO — DESAFIO</span>
+        <p>Exercício curto para fazer no próprio projeto (ou num
+        <span class="mono">cargo new</span> descartável). Nenhum exige mais que 15 linhas.
+        Gabarito comentado dentro do próprio box.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <table class="t8">
+        <tr><th style="width:12%;">Aula</th><th style="width:44%;">O que você aprende</th><th>Onde no console</th></tr>
+        <tr><td><b>1</b></td><td>O que é Rust e por que um emulador o usa</td><td class="mono" style="font-size:10.5px;">README.md</td></tr>
+        <tr><td><b>2</b></td><td>Cargo (o “npm de Rust”) e o mapa do projeto</td><td class="mono" style="font-size:10.5px;">Cargo.toml</td></tr>
+        <tr><td><b>3</b></td><td>Variáveis, tipos e funções</td><td class="mono" style="font-size:10.5px;">emulation/core.rs</td></tr>
+        <tr><td><b>4</b></td><td>Structs e enums — modelando o mundo</td><td class="mono" style="font-size:10.5px;">domain/rom.rs</td></tr>
+        <tr><td><b>5</b></td><td><span class="mono">match</span> — o switch que não deixa caso faltar</td><td class="mono" style="font-size:10.5px;">domain/rom.rs</td></tr>
+        <tr><td><b>6</b></td><td><span class="mono">Option</span> e <span class="mono">Result</span> — o fim do <span class="mono">null</span></td><td class="mono" style="font-size:10.5px;">domain/rom.rs</td></tr>
+        <tr><td><b>7</b></td><td>Coleções e iteradores (map/filter/collect)</td><td class="mono" style="font-size:10.5px;">emulation/core.rs</td></tr>
+        <tr><td><b>8</b></td><td>Posse e empréstimo — a chefe final</td><td class="mono" style="font-size:10.5px;">emulation/core.rs</td></tr>
+        <tr><td><b>9</b></td><td>Módulos e crates — como o código se organiza</td><td class="mono" style="font-size:10.5px;">domain/lib.rs</td></tr>
+        <tr><td><b>10</b></td><td>Testes em Rust (sua casa, afinal)</td><td class="mono" style="font-size:10.5px;">domain/rom.rs</td></tr>
+        <tr><td><b>11</b></td><td>Chefes opcionais: unsafe, threads, macros</td><td class="mono" style="font-size:10.5px;">ntsc · app</td></tr>
+      </table>
+    </div>
+
+    <div class="box dica" style="margin-top:18px;">
+      <span class="box-tag">MINDSET ANTES DE TUDO</span>
+      <p>Em Rust, o <b>compilador é o seu CI mais exigente</b>: roda antes de tudo, bloqueia o
+      merge de qualquer bug de memória e devolve o erro <b>com a linha e a correção sugerida</b>.
+      Ele é chato pelo mesmo motivo que um bom teste é chato: para nada quebrar em produção.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Como usar o guia</span></div>
+</div>
+
+<!-- ============ PÁGINA 3 — AULA 1 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">03 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">01</span><span class="sec-title">O QUE É RUST</span></div>
+    <div class="sec-sub">E por que o console foi construído com ele</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Rust é uma linguagem <b>compilada</b>: você escreve o código, roda o compilador e ele
+      gera um programa nativo — um <span class="mono">.app</span>/<span class="mono">.exe</span> de verdade,
+      sem interpretador viajando junto, como em C++. Nada de <span class="mono">node</span> embutido.
+    </p>
+    <p>
+      A promessa dele é ousada: <b>velocidade de C++ com um compilador que recusa programas
+      com chance de erro de memória</b> antes de você apertar F5. Acessar memória já liberada,
+      pisar em ponteiro solto — em Rust, em geral, isso vira erro de <b>compilação</b>,
+      não bug de produção.
+    </p>
+
+    <div style="margin-top:14px;">
+      <table class="t8">
+        <tr><th style="width:33%;">No seu mundo (JS/TS)</th><th>No mundo Rust</th></tr>
+        <tr><td><span class="mono">node</span> interpreta seu JS em runtime</td><td><span class="mono">rustc</span> compila para código de máquina nativo</td></tr>
+        <tr><td><span class="mono">undefined is not a function</span> estoura em produção</td><td>o equivalente estoura <b>na compilação</b>, com a linha certa</td></tr>
+        <tr><td><span class="mono">null</span> e <span class="mono">undefined</span> escapam quando ninguém vê</td><td>não existem — existe <span class="mono">Option</span>, que o compilador te obriga a abrir</td></tr>
+        <tr><td><span class="mono">try/catch</span> é opcional (e vive esquecido)</td><td><span class="mono">Result</span> é contrato: a assinatura declara a falha</td></tr>
+        <tr><td>o teste E2E é a última linha de defesa</td><td>o compilador é a <b>primeira</b> — e nunca fica verde por engano</td></tr>
+      </table>
+    </div>
+
+    <div class="box qa" style="margin-top:18px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>Você conhece a diferença entre o bug que o Cypress pegou no pipeline e o que o
+      cliente pegou em produção? O compilador de Rust é o estágio de CI mais rigoroso
+      possível: roda <b>antes de tudo</b>, não deixa o merge passar e explica o erro.
+      É o TypeScript estrito elevado à enésima potência — só que caçando bugs de
+      <b>memória</b>, não só de tipo.</p>
+    </div>
+
+    <p style="margin-top:16px;"><b>Por que um emulador de SNES precisa disso?</b></p>
+    <div class="cols3">
+      <div class="crate"><div class="cn">60 fps</div><div class="cd">O loop roda 60 vezes por segundo. Código lento = jogo engasgado. Rust compila tão rápido quanto C++.</div></div>
+      <div class="crate"><div class="cn">Mundo C</div><div class="cd">O “cérebro” dos jogos (o core snes9x) é uma biblioteca C carregada em runtime. Precisa falar C sem se machucar.</div></div>
+      <div class="crate"><div class="cn">Ponteiros</div><div class="cd">Frames de vídeo, memória do cartucho, áudio — tudo é buffer. É exatamente onde C++ morde.</div></div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 1 · O que é Rust</span></div>
+</div>
+
+<!-- ============ PÁGINA 4 — AULA 2 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">04 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">02</span><span class="sec-title">CARGO É O SEU NPM</span></div>
+    <div class="sec-sub">Conhecendo o terreno do projeto</div>
+
+    <p class="lead" style="margin-top:16px;">
+      <b>Cargo</b> é a ferramenta oficial que acompanha todo projeto Rust: compila, testa,
+      baixa bibliotecas e gera documentação. Se você sabe npm, já sabe Cargo — só muda o nome.
+    </p>
+
+    <div style="margin-top:10px;">
+      <table class="t8">
+        <tr><th style="width:38%;">Você já faz (npm)</th><th>O Cargo chama de</th></tr>
+        <tr><td><span class="mono">package.json</span></td><td><span class="mono">Cargo.toml</span> — mesmo papel: nome, versão, dependências</td></tr>
+        <tr><td><span class="mono">npm install</span></td><td><span class="mono">cargo build</span> — baixa dependências e compila tudo</td></tr>
+        <tr><td><span class="mono">cypress run / npx jest</span></td><td><span class="mono">cargo test</span> — roda TODOS os testes do workspace</td></tr>
+        <tr><td><span class="mono">npm start</span></td><td><span class="mono">cargo run</span> — compila e executa o programa</td></tr>
+        <tr><td><span class="mono">package-lock.json</span></td><td><span class="mono">Cargo.lock</span> — trava versões exatas para todo mundo</td></tr>
+        <tr><td>registry do npm</td><td><span class="mono">crates.io</span> — o “npmjs” de Rust, mesmo esquema</td></tr>
+      </table>
+    </div>
+
+    <p style="margin-top:16px;">
+      Um pacote de Rust se chama <b>crate</b>. O SixteeN é um <b>workspace</b> —
+      o monorepo de Rust — com seis crates, cada um com uma responsabilidade:
+    </p>
+
+    <div class="cols3" style="margin-top:6px;">
+      <div class="crate destaque"><div class="cn">domain</div><div class="cd">O que é uma ROM, como identificá-la, catálogo, cheats. Regras do negócio.</div></div>
+      <div class="crate"><div class="cn">emulation</div><div class="cd">Conversa com os cores libretro (snes9x) carregados em tempo de execução.</div></div>
+      <div class="crate"><div class="cn">platform</div><div class="cd">Janela, teclado, mouse, áudio — e o desenho do console/TV.</div></div>
+      <div class="crate"><div class="cn">ntsc</div><div class="cd">O filtro que faz a imagem parecer TV de tubo dos anos 90.</div></div>
+      <div class="crate"><div class="cn">ra</div><div class="cd">RetroAchievements: os troféus dos jogos.</div></div>
+      <div class="crate"><div class="cn">app</div><div class="cd">Cola tudo e gera os programas (<span class="mono">sixteen</span>, <span class="mono">selector</span>…).</div></div>
+    </div>
+
+    <div class="box" style="margin-top:18px;">
+      <span class="box-tag">REPARE NO DETALHE</span>
+      <p>O crate <b>domain</b> nem sabe que janela existe. O comentário no topo do
+      <span class="arq">crates/domain/src/lib.rs</span> diz, em inglês: <i>“Domain layer:
+      ROM identity, catalogue and No-Intro naming. <b>No SDL</b>.”</i> (SDL é a biblioteca
+      gráfica — ou seja, nada de tela aqui.)</p>
+      <p>Cada crate tem <b>uma</b> responsabilidade, e o que é útil para os outros é
+      reexportado na vitrine — a aula 9 abre essa vitrine.</p>
+    </div>
+
+    <div class="box dica" style="margin-top:16px;">
+      <span class="box-tag">PRIMEIRO COMANDO (AQUECIMENTO)</span>
+      <p>Na raiz do projeto, rode <span class="mono">cargo test</span>. Deve aparecer uma lista de
+      testes e um <span class="mono">test result: ok</span>. Você acabou de compilar e validar o
+      emulador inteiro — e já viu o formato de saída do Cargo, que vai acompanhar você o curso todo.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 2 · Cargo e crates</span></div>
+</div>
+
+<!-- ============ PÁGINA 5 — AULA 3 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">05 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">03</span><span class="sec-title">VARIÁVEIS E FUNÇÕES</span></div>
+    <div class="sec-sub">Rust com picket fence — código real, direto do console</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Este método real vive em <span class="arq">crates/emulation/src/core.rs</span> e responde
+      “quantos bytes tem um pixel” conforme o formato de vídeo que o core anunciou
+      (leia por cima do <span class="mono">match</span> — aula 5):
+    </p>
+
+    <div class="code" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/emulation/src/core.rs</span><span class="lang">rust</span></div>
+      <pre><span class="k">impl</span> <span class="t">PixelFormat</span> {
+    <span class="k">pub fn</span> <span class="f">bytes_per_pixel</span>(<span class="k">self</span>) -> <span class="t">usize</span> {
+        <span class="k">match</span> <span class="k">self</span> {
+            <span class="t">PixelFormat</span>::Rgb1555 | <span class="t">PixelFormat</span>::Rgb565 => <span class="n">2</span>,
+            <span class="t">PixelFormat</span>::Xrgb8888 => <span class="n">4</span>,
+        }
+    }
+}</pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      <b>Tipos explícitos</b> depois de <span class="mono">:</span> (parâmetros) e <span class="mono">-&gt;</span>
+      (retorno); <span class="mono">usize</span> é o inteiro “tamanho natural da máquina”. O estilo é
+      <span class="mono">snake_case</span> — e o compilador <i>cobra</i> se você fugir dele. Sem
+      <span class="mono">pub</span> na frente, uma função é <b>privada</b> do arquivo. Agora variáveis, de
+      <span class="arq">crates/domain/src/rom.rs</span>:
+    </p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs</span><span class="lang">rust</span></div>
+      <pre><span class="k">let</span> header_len = <span class="k">if</span> bytes.<span class="f">len</span>() % <span class="n">1024</span> == <span class="n">512</span> { <span class="n">512</span> } <span class="k">else</span> { <span class="n">0</span> };
+<span class="k">let</span> rom = &amp;bytes[header_len..];  <span class="c">// fatia: os bytes a partir do header</span></pre>
+    </div>
+
+    <div class="cols2" style="margin-top:14px;">
+      <div class="box qa">
+        <span class="box-tag">ANALOGIA DE QA</span>
+        <p>Se em JS você já aderiu ao “<span class="mono">const</span> por padrão,
+        <span class="mono">let</span> só quando precisa” — Rust concorda <b>tão</b> forte
+        que inverte: <span class="mono">let</span> é imutável como <span class="mono">const</span>,
+        e mutabilidade se pede no balcão: <span class="mono">let mut total = 0;</span></p>
+      </div>
+      <div class="box">
+        <span class="box-tag">DOIS DETALHES QUE CONFUNDEM</span>
+        <p><b>1.</b> O <span class="mono">if</span> acima <b>produz um valor</b> (vai para
+        <span class="mono">header_len</span>) — em Rust, quase tudo é expressão; por isso não
+        existe operador ternário.<br>
+        <b>2.</b> A última expressão de uma função, <b>sem ponto-e-vírgula</b>, é o retorno.
+        <span class="mono">count()</span> sem <span class="mono">;</span> já é o <span class="mono">return</span>.</p>
+      </div>
+    </div>
+
+    <div class="box desafio" style="margin-top:8px;">
+      <span class="box-tag">DESAFIO 3 — FORMATADOR DE TAMANHO</span>
+      <p>Dentro do <span class="mono">impl RomId</span> em <span class="arq">crates/domain/src/rom.rs</span>,
+      adicione e depois rode <span class="mono">cargo check -p sixteen-domain</span>:</p>
+      <div class="code sm" style="margin-top:8px; box-shadow:3px 3px 0 var(--tinta);">
+        <pre><span class="k">pub fn</span> <span class="f">human_size</span>(&amp;<span class="k">self</span>) -> <span class="t">String</span> {
+    <span class="k">if</span> <span class="k">self</span>.rom_len >= <span class="n">1024</span> * <span class="n">1024</span> {
+        <span class="m">format!</span>(<span class="s">"{:.1} MiB"</span>, <span class="k">self</span>.rom_len <span class="k">as</span> <span class="t">f64</span> / <span class="n">1048576.0</span>)
+    } <span class="k">else</span> {
+        <span class="m">format!</span>(<span class="s">"{:.1} KiB"</span>, <span class="k">self</span>.rom_len <span class="k">as</span> <span class="t">f64</span> / <span class="n">1024.0</span>)
+    }
+}</pre>
+      </div>
+      <p style="margin-top:8px;"><span class="mono">format!</span> monta texto (<span class="mono">{:.1}</span> = uma casa
+      decimal), <span class="mono">as f64</span> converte números e <span class="mono">&amp;self</span> é “o próprio objeto”.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 3 · Variáveis e funções</span></div>
+</div>
+
+<!-- ============ PÁGINA 6 — AULA 4 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">06 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">04</span><span class="sec-title">STRUCTS E ENUMS</span></div>
+    <div class="sec-sub">Modelando o mundo do console</div>
+
+    <p class="lead" style="margin-top:16px;">
+      O tipo que representa “a identidade de uma ROM” — o que a estante guarda sobre cada
+      cartucho — é uma <b>struct</b> em <span class="arq">crates/domain/src/rom.rs</span>:
+    </p>
+
+    <div class="code" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs</span><span class="lang">rust</span></div>
+      <pre><span class="c">#[derive(Debug, Clone)]</span>           <span class="c">// código gerado de graça (abaixo)</span>
+<span class="k">pub struct</span> <span class="t">RomId</span> {
+    <span class="k">pub</span> header_len: <span class="t">usize</span>,         <span class="c">// header antigo pulado (0 ou 512)</span>
+    <span class="k">pub</span> crc32: <span class="t">String</span>,             <span class="c">// hash que identifica a ROM</span>
+    <span class="k">pub</span> internal_name: <span class="t">Option</span>&lt;<span class="t">String</span>&gt;, <span class="c">// título interno, se houver</span>
+    <span class="k">pub</span> mapper: <span class="t">Mapper</span>,            <span class="c">// chip de mapeamento do cartucho</span>
+}</pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      Cada campo tem nome, tipo e o seu próprio <span class="mono">pub</span>. Os comentários
+      <span class="mono">///</span> viram <b>documentação</b> (o <span class="mono">cargo doc</span> gera páginas
+      HTML com eles). E o atributo <span class="mono">#[derive(...)]</span> pede ao compilador para gerar
+      código entediante: <span class="mono">Debug</span> = imprimir no terminal,
+      <span class="mono">Clone</span> = copiar, <span class="mono">PartialEq</span> = comparar com
+      <span class="mono">==</span>. Detalhe elegante: se a variável tem o mesmo nome do campo
+      (<span class="mono">crc32</span>), não precisa escrever <span class="mono">crc32: crc32</span>.
+    </p>
+
+    <p style="margin-top:8px;">E o <b>enum</b> — o tipo do chip de mapeamento e do controle:</p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">rom.rs + emulation/core.rs</span><span class="lang">rust</span></div>
+      <pre><span class="k">pub enum</span> <span class="t">Mapper</span> { LoRom, HiRom, Unknown }
+
+<span class="k">pub enum</span> <span class="t">Button</span> { B, Y, Select, Start, Up, Down,
+                  Left, Right, A, X, L, R }  <span class="c">// o pad de SNES inteiro</span></pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      Um valor <span class="mono">Mapper</span> é <b>exatamente uma</b> das três variantes — nunca duas,
+      nunca nenhuma, nunca um valor inventado. Não existe <span class="mono">mapper = 17</span> torcendo para
+      ninguém notar: o compilador não deixa. Enums também têm métodos (a
+      <span class="mono">bytes_per_pixel</span> da aula 3 era um método do enum
+      <span class="mono">PixelFormat</span>).
+    </p>
+
+    <div class="box qa" style="margin-top:14px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>Em TypeScript você modelaria <span class="mono">type Mapper = 'LoRom' | 'HiRom' | 'Unknown'</span>.
+      O enum de Rust é essa união com superpoderes: cada variante pode <b>carregar dados próprios</b>
+      (você verá com os erros, na aula 6) e o compilador conhece a lista completa de casos.
+      Adicione um caso novo e ele aponta <b>todo lugar que precisa se adaptar</b> — como trocar um
+      contrato de fixture e ver o schema apontar cada teste afetado.</p>
+    </div>
+
+    <div class="box desafio" style="margin-top:14px;">
+      <span class="box-tag">DESAFIO 4 — O CHIP SUPER FX</span>
+      <p>Adicione a variante <span class="mono">SuperFx</span> ao enum <span class="mono">Mapper</span>
+      (era o chip coprocessador de jogos como <i>Star Fox</i>). Rode <span class="mono">cargo check</span>
+      no workspace inteiro. Se algum <span class="mono">match</span> não cobrir o caso novo, o compilador
+      aponta arquivo e linha exatos. Esse é o momento “uau”: mude o mundo e deixe o compilador
+      te dar a lista de tarefas.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 4 · Structs e enums</span></div>
+</div>
+
+<!-- ============ PÁGINA 7 — AULA 5 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">07 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">05</span><span class="sec-title">MATCH</span></div>
+    <div class="sec-sub">O interruptor de trem: exaustivo por lei</div>
+
+    <p class="lead" style="margin-top:16px;">
+      <span class="mono">match</span> pega um valor e escolhe um ramo conforme ele é — o
+      <span class="mono">switch</span>, mas <b>exaustivo</b>: esqueceu um caso, não compila. Este é real —
+      como o emulador decide se a ROM é LoROM ou HiROM:
+    </p>
+
+    <div class="code" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs · read_internal_header</span><span class="lang">rust</span></div>
+      <pre><span class="k">let</span> lo = <span class="f">title_at</span>(rom, LO);   <span class="c">// título no endereço do LoROM</span>
+<span class="k">let</span> hi = <span class="f">title_at</span>(rom, HI);   <span class="c">// título no endereço do HiROM</span>
+<span class="k">match</span> (<span class="f">score</span>(&amp;lo), <span class="f">score</span>(&amp;hi)) {
+    (l, h) <span class="k">if</span> h > l  => (<span class="t">Mapper</span>::HiRom, hi),   <span class="c">// o hi parece texto?</span>
+    (l, _) <span class="k">if</span> l > <span class="n">0</span>  => (<span class="t">Mapper</span>::LoRom, lo),
+    _                => (<span class="t">Mapper</span>::Unknown, <span class="t">None</span>), <span class="c">// ninguém parece</span>
+}</pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      Três novidades: <span class="mono">match (a, b)</span> casa uma <b>tupla</b> (par de valores);
+      <span class="mono">(l, h) if h &gt; l</span> é um padrão com <b>guarda</b> (uma condição extra); e
+      <span class="mono">_</span> é o “qualquer outra coisa”. Padrões também <b>desempacam</b> dados de
+      dentro — o <span class="mono">Some(s)</span> abaixo extrai o valor e batiza-o de <span class="mono">s</span>:
+    </p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs · score</span><span class="lang">rust</span></div>
+      <pre><span class="k">fn</span> <span class="f">score</span>(name: &amp;<span class="t">Option</span>&lt;<span class="t">String</span>&gt;) -> <span class="t">usize</span> {
+    <span class="k">match</span> name {
+        <span class="t">None</span> => <span class="n">0</span>,
+        <span class="t">Some</span>(s) => s.<span class="f">chars</span>().<span class="f">filter</span>(|c| c.<span class="f">is_ascii_alphanumeric</span>()).<span class="f">count</span>(),
+    }
+}</pre>
+    </div>
+
+    <div class="box qa" style="margin-top:14px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>É o <b>router de comandos</b> do seu app de testes: cada comando tem um handler. A diferença
+      é que aqui, quando amanhã surgir um comando novo e você esquecer dele, <b>o projeto nem
+      compila</b>. O maior <span class="mono">match</span> do emulador é assim: dezenas de comandos que o
+      core snes9x manda (<span class="arq">emulation/core.rs</span>, função
+      <span class="mono">environment_cb</span>), com um <span class="mono">_ =&gt; false</span> final de
+      “comando desconhecido, não sei responder”.</p>
+    </div>
+
+    <div class="box desafio" style="margin-top:14px;">
+      <span class="box-tag">DESAFIO 5 — NTSC RODA A 60, PAL RODA A 50</span>
+      <div class="code sm" style="margin-top:8px; box-shadow:3px 3px 0 var(--tinta);">
+        <pre><span class="k">enum</span> <span class="t">Regiao</span> { Ntsc, Pal }
+
+<span class="k">fn</span> <span class="f">fps</span>(regiao: <span class="t">Regiao</span>) -> <span class="t">f64</span> {
+    <span class="k">match</span> regiao {
+        <span class="t">Regiao</span>::Ntsc => <span class="n">60.0</span>,
+        <span class="t">Regiao</span>::Pal  => <span class="n">50.0</span>,   <span class="c">// Europa: 5/6 da velocidade</span>
+    }
+}</pre>
+      </div>
+      <p style="margin-top:8px;">Agora quebre de propósito: comente o caso <span class="mono">Pal</span> e
+      tente compilar — a mensagem diz <span class="mono">non-exhaustive patterns</span> e mostra o caso
+      faltando. É essa proteção que você vai sentir falta nas outras linguagens.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 5 · match</span></div>
+</div>
+
+<!-- ============ PÁGINA 8 — AULA 6 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">08 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">06</span><span class="sec-title">OPTION E RESULT</span></div>
+    <div class="sec-sub">O fim do null e das exceções surpresa</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Rust <b>não tem <span class="mono">null</span> e não tem exceções</b>. No lugar, dois enums
+      padrão que carregam dados (repare nas variantes com conteúdo):
+    </p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">definições da biblioteca padrão</span><span class="lang">rust</span></div>
+      <pre><span class="k">enum</span> <span class="t">Option</span>&lt;T&gt;  { <span class="t">Some</span>(T), <span class="t">None</span> }      <span class="c">// “pode não existir”</span>
+<span class="k">enum</span> <span class="t">Result</span>&lt;T, E&gt; { <span class="t">Ok</span>(T), <span class="t">Err</span>(E) }    <span class="c">// “pode falhar”</span></pre>
+    </div>
+
+    <p style="margin-top:12px;">
+      <span class="mono">Option</span> para “pode não existir” (o título interno da ROM — nem toda
+      tem um válido). <span class="mono">Result</span> para “pode falhar” (ler um arquivo). A assinatura
+      da função <b>declara</b> a falha e <b>qual</b> o tipo do erro:
+    </p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs</span><span class="lang">rust</span></div>
+      <pre><span class="k">pub enum</span> <span class="t">RomError</span> {
+    <span class="c">#[error("could not read ROM {path}: {source}")]
+</span>    <span class="t">Read</span> { path: <span class="t">String</span>, source: <span class="t">std::io::Error</span> },
+    <span class="c">#[error("file is too small to be a SNES ROM ({0} bytes)")]
+</span>    <span class="t">TooSmall</span>(<span class="t">usize</span>),
+}
+
+<span class="k">pub fn</span> <span class="f">from_bytes</span>(bytes: &amp;[<span class="t">u8</span>]) -> <span class="t">Result</span>&lt;<span class="k">Self</span>, <span class="t">RomError</span>&gt; {
+    <span class="k">if</span> bytes.<span class="f">len</span>() &lt; <span class="n">0x8000</span> {
+        <span class="k">return</span> <span class="t">Err</span>(<span class="t">RomError</span>::<span class="f">TooSmall</span>(bytes.<span class="f">len</span>()));
+    }
+    <span class="c">// ... calcula hashes e devolve Ok(RomId { ... })</span>
+}</pre>
+    </div>
+
+    <p style="margin-top:12px;">
+      Quem chama <b>não consegue ignorar</b> a possibilidade de erro: para chegar ao
+      <span class="mono">RomId</span>, é obrigatório passar pelo <span class="mono">Result</span>. E o
+      operador <span class="mono">?</span> é o atalho que você mais usará — de
+      <span class="mono">RomId::from_path</span>:
+    </p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs · o operador ?</span><span class="lang">rust</span></div>
+      <pre><span class="k">let</span> bytes = fs::<span class="f">read</span>(path).<span class="f">map_err</span>(|source| <span class="t">RomError</span>::<span class="f">Read</span> { ... })<span class="m">?</span>;
+<span class="k">Self</span>::<span class="f">from_bytes</span>(&amp;bytes)  <span class="c">// só chega aqui se o read deu certo</span></pre>
+    </div>
+
+    <p style="margin-top:10px;">
+      O <span class="mono">?</span> quer dizer: <i>“se deu errado, devolva o erro agora; se deu certo,
+      me dê o valor e siga”</i>. O caminho feliz se escreve como caminho feliz — sem pirâmide de
+      <span class="mono">try/catch</span>. Helpers úteis: <span class="mono">unwrap_or(padrao)</span>
+      (valor alternativo), <span class="mono">and_then(...)</span> (encadear buscas) e
+      <span class="mono">take()</span> (pegar o valor deixando vazio — o frame de vídeo usa).
+    </p>
+
+    <div class="box qa" style="margin-top:12px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>Pense em toda função perigosa devolvendo <span class="mono">{ ok, valor }</span> — e a linguagem
+      te <b>obrigando</b> a abrir esse objeto antes de usar o valor. O <span class="mono">try/catch</span>
+      de JS é opcional e vive esquecido; o <span class="mono">Result</span> de Rust é contratual.
+      O Cypress falha o teste no primeiro erro que aparece; Rust falha a <b>compilação</b> no primeiro
+      erro não tratado. Mesma filosofia, estágio mais cedo.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 6 · Option e Result</span></div>
+</div>
+
+<!-- ============ PÁGINA 9 — AULA 7 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">09 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">07</span><span class="sec-title">ITERADORES</span></div>
+    <div class="sec-sub">Sua esteira de map/filter, agora com fiscal</div>
+
+    <p class="lead" style="margin-top:16px;">
+      A coleção cavalo de batalha é o <span class="mono">Vec&lt;T&gt;</span> (lista que cresce):
+      <span class="mono">Vec&lt;u8&gt;</span> guarda os pixels de um frame, o conteúdo de uma ROM.
+      O array de tamanho fixo também existe — <span class="mono">[Button; 12]</span>, os doze botões do pad.
+      E o processamento é uma <b>esteira</b>:
+    </p>
+
+    <div class="code" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs · score, por dentro</span><span class="lang">rust</span></div>
+      <pre>s.<span class="f">chars</span>()                                   <span class="c">// 1. esteira de caracteres</span>
+ .<span class="f">filter</span>(|c| c.<span class="f">is_ascii_alphanumeric</span>())   <span class="c">// 2. só letras e números</span>
+ .<span class="f">count</span>()                                  <span class="c">// 3. consome e conta</span>
+
+<span class="c">// o mesmo esquema encaixa etapas até virar lista de novo:</span>
+<span class="k">let</span> valid_extensions = cstr.<span class="f">split</span>(<span class="s">'|'</span>)        <span class="c">// "sfc|smc|swc" → 3 nomes</span>
+    .<span class="f">filter</span>(|s| !s.<span class="f">is_empty</span>())
+    .<span class="f">map</span>(|s| s.<span class="f">to_ascii_lowercase</span>())          <span class="c">// tudo minúsculo</span>
+    .<span class="f">collect</span>::&lt;<span class="t">Vec</span>&lt;<span class="t">String</span>&gt;&gt;();               <span class="c">// esteira → Vec</span></pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      As <span class="mono">|c| ...</span> são <b>closures</b>: funções anônimas — suas conhecidas arrow
+      functions de JS. O modelo mental: a esteira só roda quando alguém consome
+      (<span class="mono">count</span>, <span class="mono">collect</span>, <span class="mono">for</span>);
+      até lá, é preguiçosa e não aloca nada. O <span class="mono">filter</span> acima não criou lista
+      intermediária nenhuma.
+    </p>
+
+    <div style="margin-top:12px;">
+      <table class="t8">
+        <tr><th style="width:40%;">Em JS você escreve</th><th>Em Rust, o equivalente</th></tr>
+        <tr><td><span class="mono">arr.map(x =&gt; ...)</span></td><td><span class="mono">iter().map(|x| ...)</span></td></tr>
+        <tr><td><span class="mono">arr.filter(x =&gt; ...)</span></td><td><span class="mono">iter().filter(|x| ...)</span></td></tr>
+        <tr><td><span class="mono">arr.find(x =&gt; ...)</span></td><td><span class="mono">iter().find(|x| ...)</span> — devolve <span class="mono">Option</span>!</td></tr>
+        <tr><td><span class="mono">arr.reduce((a,b) =&gt; ...)</span></td><td><span class="mono">iter().fold(inicial, |a,b| ...)</span></td></tr>
+        <tr><td><span class="mono">[...arr].sort()</span> (copia antes)</td><td><span class="mono">iter().sorted().collect::&lt;Vec&lt;_&gt;&gt;()</span></td></tr>
+      </table>
+    </div>
+
+    <div class="box qa" style="margin-top:14px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>É o <span class="mono">Array.prototype</span> de JS — só que com o compilador conferindo cada
+      etapa e <b>sem alocação escondida</b>. E repare no <span class="mono">find</span>: em Rust ele devolve
+      um <span class="mono">Option</span>, porque “não achei” é um resultado possível — nada de
+      <span class="mono">undefined</span> escapando pela tubulação.</p>
+    </div>
+
+    <div class="box desafio" style="margin-top:14px;">
+      <span class="box-tag">DESAFIO 7 — A ESTEIRA DO CATÁLOGO</span>
+      <p>Dado <span class="mono">let jogos = vec!["Zelda", "mario world", "F-ZERO"];</span>, escreva uma
+      única expressão que devolva um <span class="mono">Vec&lt;String&gt;</span> com os nomes em maiúsculas
+      (<span class="mono">to_uppercase()</span>) dos jogos com <b>mais de 5 caracteres</b>
+      (<span class="mono">chars().count()</span>). Esperado: <span class="mono">["MARIO WORLD", "F-ZERO"]</span>
+      — “Zelda” fica de fora: tem exatamente 5. Depois troque para <span class="mono">&gt;= 5</span> e veja
+      mudar só na borda.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 7 · Iteradores</span></div>
+</div>
+
+<!-- ============ PÁGINA 10 — AULA 8 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">10 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">08</span><span class="sec-title">POSSE E EMPRÉSTIMO</span></div>
+    <div class="sec-sub">A chefe final — vá com calma, todo mundo trava aqui</div>
+
+    <div class="box atencao" style="margin-top:16px;">
+      <span class="box-tag">A REGRA DE OURO</span>
+      <p><b>Todo valor tem exatamente um dono</b> — e quando o dono sai de cena, o valor é destruído.
+      Não existe <span class="mono">free</span> nem coletor de lixo: a memória é liberada no fim do escopo,
+      automaticamente. Quem precisa usar o valor sem ser o dono, <b>empresta</b>:</p>
+      <p style="margin-top:6px;"><span class="mono">&amp;T</span> — empréstimo <b>somente leitura</b>. Pode ter
+      quantos quiser ao mesmo tempo.&nbsp;&nbsp;·&nbsp;&nbsp;<span class="mono">&amp;mut T</span> — leitura e escrita.
+      <b>Só um</b> por vez, e nenhum <span class="mono">&amp;</span> junto.</p>
+    </div>
+
+    <p style="margin-top:14px;">
+      Por que essas duas regras bastam? Porque praticamente todo bug de memória em C/C++ é alguém
+      escrevendo num dado enquanto outro lê. Com as regras acima, isso <b>não compila</b>. Veja no
+      emulador — o frame de vídeo é o exemplo perfeito:
+    </p>
+
+    <div class="cols2" style="margin-top:6px;">
+      <div class="code sm">
+        <div class="hd"><span class="f">emulation/core.rs</span><span class="lang">rust</span></div>
+        <pre><span class="c">/// Um quadro de vídeo do core.
+/// "Owns its pixels."</span>
+<span class="k">pub struct</span> <span class="t">Frame</span> {
+    <span class="k">pub</span> width: <span class="t">u32</span>,
+    <span class="k">pub</span> height: <span class="t">u32</span>,
+    <span class="k">pub</span> pixels: <span class="t">Vec</span>&lt;<span class="t">u8</span>&gt;,  <span class="c">// o frame É O DONO</span>
+}
+
+<span class="k">impl</span> <span class="t">Drop</span> <span class="k">for</span> <span class="t">Core</span> {
+    <span class="k">fn</span> <span class="f">drop</span>(&amp;<span class="k">mut</span> <span class="k">self</span>) { <span class="c">/* desliga o core C */</span> }
+}</pre>
+      </div>
+      <div>
+        <p style="font-size:12.5px;">
+          O <span class="mono">Core</span> entrega um <span class="mono">Frame</span> para quem pede
+          (<span class="mono">take_frame</span>) — e o frame leva <b>os pixels dele</b>. Quando o frame
+          morrer, os pixels morrem com ele. Zero vazamento, garantido pelo compilador.
+        </p>
+        <p style="font-size:12.5px;">
+          E o <span class="mono">impl Drop</span> é o destrutor: quando o <span class="mono">Core</span>
+          sai de cena, ele avisa o core C sozinho. Ninguém chama
+          <span class="mono">retro_deinit</span> “à mão” no app — teardown automático, como uma boa
+          fixture <span class="mono">afterEach</span>, só que garantida pela linguagem.
+        </p>
+      </div>
+    </div>
+
+    <p style="margin-top:10px;">Nas assinaturas do <span class="mono">Core</span>, os termos do empréstimo são declarados:</p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/emulation/src/core.rs</span><span class="lang">rust</span></div>
+      <pre><span class="k">pub fn</span> <span class="f">system_name</span>(&amp;<span class="k">self</span>) -> &amp;<span class="t">str</span>    <span class="c">// “me empresta o nome, só leitura”</span>
+<span class="k">pub fn</span> <span class="f">audio</span>(&amp;<span class="k">self</span>) -> &amp;[<span class="t">i16</span>]       <span class="c">// “me empresta o áudio”</span>
+<span class="k">pub fn</span> <span class="f">run</span>(&amp;<span class="k">mut</span> <span class="k">self</span>)               <span class="c">// “preciso me MODIFICAR para rodar”</span></pre>
+    </div>
+
+    <p style="margin-top:12px; font-size:12.5px;">
+      O compilador garante que ninguém guarda o <span class="mono">&amp;[i16]</span> do áudio enquanto chama
+      <span class="mono">run()</span> — que limpa e recheia o áudio. O bug de ponteiro pendente que viraria
+      flaky test às 3h da manhã: <b>impossível por construção</b>.
+    </p>
+
+    <div class="box qa" style="margin-top:12px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>É o modelo de <b>browser context do Playwright</b> levado ao extremo: cada valor tem um dono
+      responsável pelo ciclo de vida (fixture com teardown automático). Vários podem <b>ler</b> ao mesmo
+      tempo (<span class="mono">&amp;</span>); se alguém vai <b>escrever</b> (<span class="mono">&amp;mut</span>),
+      é exclusivo — sem leitor junto. A data race que você caçaria com retry e café não compila.</p>
+    </div>
+
+    <div class="box dica" style="margin-top:6px;">
+      <span class="box-tag">SE O COMPILADOR TE XINGAR</span>
+      <p>Ele é chato como CI vermelho — e útil pelo mesmo motivo: as mensagens apontam a linha, explicam
+      a regra e sugerem a correção.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 8 · Posse e empréstimo</span></div>
+</div>
+
+<!-- ============ PÁGINA 11 — AULA 9 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">11 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">09</span><span class="sec-title">MÓDULOS E CRATES</span></div>
+    <div class="sec-sub">A vitrine do crate — exports de verdade, não convenção</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Dentro de um crate, o código se divide em <b>módulos</b> (arquivos). A “vitrine” de cada
+      crate é o <span class="mono">lib.rs</span> — ele decide o que a rua vê. Este é o do
+      <span class="mono">domain</span>, quase inteiro:
+    </p>
+
+    <div class="code" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/domain/src/lib.rs</span><span class="lang">rust</span></div>
+      <pre><span class="c">//! Domain layer: ROM identity, catalogue and No-Intro naming. No SDL.</span>
+
+<span class="k">pub mod</span> rom;         <span class="c">// existe o módulo rom — código em src/rom.rs</span>
+<span class="k">pub mod</span> library;
+
+<span class="k">pub use</span> rom::{<span class="t">Mapper</span>, <span class="t">RomError</span>, <span class="t">RomId</span>};   <span class="c">// re-exporta: vitrine</span>
+<span class="k">pub use</span> library::{scan, <span class="t">ScannedRom</span>, ROM_EXTS};</pre>
+    </div>
+
+    <p style="margin-top:14px;">
+      <span class="mono">pub mod rom;</span> declara o módulo (o arquivo <span class="mono">rom.rs</span>
+      que estudamos). <span class="mono">pub use rom::RomId;</span> <b>reexporta</b> — é por isso que os
+      outros crates escrevem <span class="mono">use sixteen_domain::RomId;</span> e não
+      <span class="mono">...::rom::RomId;</span>. O <span class="mono">//!</span> no topo é documentação do
+      módulo. Sem <span class="mono">pub</span>? Privado — invisível para fora.
+    </p>
+
+    <p style="margin-top:8px;">
+      Entre crates, a dependência é declarada no <span class="mono">Cargo.toml</span> do
+      consumidor — <span class="mono">app</span> declara <span class="mono">domain</span>,
+      <span class="mono">emulation</span>, <span class="mono">platform</span>… por <b>path</b>, igual aos
+      <span class="mono">npm workspaces</span> que você já viu em monorepos JS. E as de terceiros
+      (<span class="mono">serde</span>, <span class="mono">anyhow</span>) são versionadas uma vez só no
+      <span class="mono">Cargo.toml</span> raiz, para os seis crates usarem a mesma versão.
+    </p>
+
+    <p style="margin-top:8px;">O uso, no código do emulador:</p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">crates/app/src/runner.rs · linha 1089</span><span class="lang">rust</span></div>
+      <pre><span class="k">match</span> sixteen_domain::<span class="t">RomId</span>::<span class="f">from_bytes</span>(&amp;rom_bytes) { <span class="c">/* ... */</span> }</pre>
+    </div>
+
+    <div class="box qa" style="margin-top:14px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>É o <span class="mono">index.ts</span> de barrel + <span class="mono">exports</span> do
+      <span class="mono">package.json</span> — só que com privacidade <b>fiscalizada</b>: se você importar
+      algo que a vitrine não exportou, nem compila. Nada de alcançar arquivo interno por caminho
+      relativo e torcer.</p>
+    </div>
+
+    <div class="box desafio" style="margin-top:14px;">
+      <span class="box-tag">DESAFIO 9 — QUEM SABE O SHA-1?</span>
+      <p>Quando o app chama <span class="mono">RomId::from_bytes(...)</span>, qual dos dois crates
+      “sabe” calcular SHA-1: o <span class="mono">app</span> (que <b>usa</b>) ou o
+      <span class="mono">domain</span> (que <b>executa</b>)? Confira: procure
+      <span class="mono">sha1</span> nos dois <span class="mono">Cargo.toml</span>. Essa separação —
+      quem usa a informação não é quem sabe calcular — é o motivo do projeto estar fatiado assim.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 9 · Módulos e crates</span></div>
+</div>
+
+<!-- ============ PÁGINA 12 — AULA 10 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">12 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">10</span><span class="sec-title">TESTES</span></div>
+    <div class="sec-sub">Sua casa, afinal — unit tests em milissegundos</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Testes moram <b>no mesmo arquivo</b> do código, num módulo que <b>só existe quando se roda
+      testes</b> (<span class="mono">#[cfg(test)]</span>) — zero custo no programa final. O coração da
+      identificação de ROMs:
+    </p>
+
+    <div class="code sm" style="margin-top:8px;">
+      <div class="hd"><span class="f">crates/domain/src/rom.rs · fim do arquivo</span><span class="lang">rust</span></div>
+      <pre><span class="c">#[cfg(test)]</span>
+<span class="k">mod</span> tests {
+    <span class="k">use</span> <span class="k">super</span>::*;   <span class="c">// importa tudo do arquivo de cima</span>
+
+    <span class="c">#[test]</span>
+    <span class="k">fn</span> <span class="f">strips_copier_header</span>() {
+        <span class="k">let</span> <span class="k">mut</span> rom = <span class="m">vec!</span>[<span class="n">0u8</span>; <span class="n">0x8000</span>];  <span class="c">// ROM “nova” de 32 KiB</span>
+        <span class="c">// ... grava um título no endereço 0x7FC0 ...</span>
+        <span class="k">let</span> bare = <span class="t">RomId</span>::<span class="f">from_bytes</span>(&amp;rom).<span class="f">unwrap</span>();
+        <span class="k">let</span> <span class="k">mut</span> headered = <span class="m">vec!</span>[<span class="n">0u8</span>; <span class="n">512</span>]; <span class="c">// + 512 bytes de lixo</span>
+        headered.<span class="f">extend_from_slice</span>(&amp;rom);
+        <span class="k">let</span> hd = <span class="t">RomId</span>::<span class="f">from_bytes</span>(&amp;headered).<span class="f">unwrap</span>();
+        <span class="m">assert_eq!</span>(hd.sha1, bare.sha1);   <span class="c">// hashes IGUAIS</span>
+    }
+}</pre>
+    </div>
+
+    <div class="box dica" style="margin-top:8px;">
+      <span class="box-tag">A HISTÓRIA QUE O TESTE CONTA</span>
+      <p>Cartuchos copiados nos anos 90 vinham com <b>512 bytes de lixo</b> (header de copiadora) no
+      começo. O teste garante que, com header ou sem, o hash é o <b>mesmo</b> — é isso que faz a sua
+      ROM bater com o banco No-Intro e com o RetroAchievements.</p>
+    </div>
+
+    <p style="margin-top:12px;">
+      Rodar: <span class="mono">cargo test</span> (tudo) ou
+      <span class="mono">cargo test -p sixteen-domain strips</span> (um crate, filtrando por nome). O
+      <span class="mono">assert_eq!</span> falha mostrando <span class="mono">left</span>/<span class="mono">right</span>
+      com diff — seu <span class="mono">expect().to.equal</span>.
+    </p>
+
+    <div class="box qa" style="margin-top:6px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>São <b>unit tests</b> em milissegundos — sem browser, sem wait, sem flaky. O “E2E” aqui é abrir o
+      emulador e jogar; o <span class="mono">cargo test</span> é a base barata que roda em todo
+      <span class="mono">push</span>.</p>
+    </div>
+
+    <div class="box desafio" style="margin-top:14px;">
+      <span class="box-tag">DESAFIO 10 — TESTE O SEU human_size</span>
+      <p>Da aula 3. Dentro do módulo <span class="mono">tests</span> de
+      <span class="arq">crates/domain/src/rom.rs</span>:</p>
+      <div class="code sm" style="margin-top:8px; box-shadow:3px 3px 0 var(--tinta);">
+        <pre><span class="c">#[test]</span>
+<span class="k">fn</span> <span class="f">human_size_formats</span>() {
+    <span class="k">let</span> rom = <span class="m">vec!</span>[<span class="n">0u8</span>; <span class="n">0x8000</span>];   <span class="c">// 32 KiB de zeros</span>
+    <span class="k">let</span> id = <span class="t">RomId</span>::<span class="f">from_bytes</span>(&amp;rom).<span class="f">unwrap</span>();
+    <span class="m">assert_eq!</span>(id.<span class="f">human_size</span>(), <span class="s">"32.0 KiB"</span>);
+}</pre>
+      </div>
+      <p style="margin-top:8px;">Rode <span class="mono">cargo test -p sixteen-domain</span> — se der
+      fail, leia o diff de <span class="mono">left</span>/<span class="mono">right</span>. TDD completo no
+      emulador. (E sim, <span class="mono">.unwrap()</span> em teste é aceitável: ali você <i>quer</i> que a
+      falha estale alto.)</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 10 · Testes</span></div>
+</div>
+
+<!-- ============ PÁGINA 13 — AULA 11 ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">13 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">11</span><span class="sec-title">CHEFES OPCIONAIS</span></div>
+    <div class="sec-sub">Unsafe, threads e macros — reconhecer já basta (por enquanto)</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Você já tem o essencial. Estas são as regiões avançadas do código — a meta aqui é só
+      <b>saber que existem</b> e o que significam quando aparecerem no caminho.
+    </p>
+
+    <div class="box" style="margin-top:14px;">
+      <span class="box-tag">CHEFE 1 — FFI E UNSAFE: A FRONTEIRA COM O C</span>
+      <p>O filtro de TV conversa com uma biblioteca escrita em C — e o crate
+      <span class="mono">emulation</span> carrega o snes9x (<span class="mono">.dylib</span>/<span class="mono">.dll</span>)
+      em runtime:</p>
+      <div class="code sm" style="margin-top:8px; box-shadow:3px 3px 0 var(--tinta);">
+        <div class="hd"><span class="f">crates/ntsc/src/lib.rs</span><span class="lang">rust</span></div>
+        <pre><span class="k">extern</span> <span class="s">"C"</span> {                  <span class="c">// funções escritas em C</span>
+    <span class="k">fn</span> <span class="f">snes_ntsc_blit</span>(<span class="c">/* ... */</span>);   <span class="c">// o efeito TV de tubo</span>
+}</pre>
+      </div>
+      <p style="margin-top:8px;"><span class="mono">unsafe</span> é o bloco que diz: <i>“a partir daqui, eu assumo a
+      responsabilidade que o compilador não consegue checar”</i>. O projeto os cerca: blocos pequenos,
+      comentados com o porquê (<span class="mono">Safety: ...</span>), escondidos atrás de funções seguras.</p>
+    </div>
+
+    <div class="box qa" style="margin-top:14px;">
+      <span class="box-tag">ANALOGIA DE QA</span>
+      <p>É o <span class="mono">cy.task</span>: sai do sandbox do browser para rodar no Node — poder real,
+      com fronteira documentada. O resto do código de teste continua seguro; o risco fica isolado
+      num lugar só, explicado.</p>
+    </div>
+
+    <div class="cols2" style="margin-top:14px;">
+      <div class="box">
+        <span class="box-tag">CHEFE 2 — THREADS COM CANAIS</span>
+        <p>A checagem de update não pode travar o app esperando a internet. Roda numa thread de
+        fundo e responde por um <b>canal</b>:</p>
+        <div class="code sm" style="margin-top:8px; box-shadow:3px 3px 0 var(--tinta);">
+          <pre>std::thread::<span class="f">spawn</span>(<span class="k">move</span> || {
+    <span class="k">let</span> aviso = <span class="f">check</span>();
+    sender.<span class="f">send</span>(aviso).<span class="f">ok</span>();
+});</pre>
+        </div>
+        <p style="margin-top:8px;">Os dados <b>mudam de dono</b> ao cruzar a thread (aula 8!). A data race
+        simplesmente não compila.</p>
+      </div>
+      <div class="box">
+        <span class="box-tag">CHEFE 3 — MACROS</span>
+        <p>Você já viu <span class="mono">format!</span>, <span class="mono">vec!</span>,
+        <span class="mono">assert_eq!</span>. O <span class="mono">!</span> indica macro: código que
+        <b>escreve código</b> na compilação. O projeto define as suas — procure
+        <span class="mono">macro_rules! sym</span> em <span class="arq">emulation/core.rs</span>:
+        encurta a checagem repetitiva dos 24 símbolos que o core exporta.</p>
+        <p>E os <span class="mono">#[derive(...)]</span> da aula 4? Macros de atributo —
+        você já era fluente e nem sabia.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:16px;">
+      Último conceito do passeio: <b>traits</b> — as “interfaces” de Rust, um contrato de métodos que um
+      tipo promete ter. Você já as usou sem ver: <span class="mono">#[derive(Debug)]</span> implementa o
+      trait <span class="mono">Debug</span>, e o <span class="mono">impl Drop</span> da aula 8 implementa o
+      trait <span class="mono">Drop</span>. Quando bater num <span class="mono">impl TraitX for TipoY</span>,
+      já sabe o que é.
+    </p>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Aula 11 · Chefes opcionais</span></div>
+</div>
+
+<!-- ============ PÁGINA 14 — PROJETO FINAL ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">14 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">12</span><span class="sec-title">PROJETO FINAL</span></div>
+    <div class="sec-sub">Uma contribuição de verdade, em três degraus</div>
+
+    <p class="lead" style="margin-top:16px;">
+      Escolha o seu degrau e abra o editor. Todos cabem numa sessão de 30 minutos — e todos
+      terminam com <span class="mono">cargo test</span> verde.
+    </p>
+
+    <ul class="steps" style="margin-top:16px;">
+      <li><b>Degrau fácil — formatador de tamanho.</b>
+        <span>O método <span class="mono">human_size</span> (aula 3) + o teste (aula 10). Se ainda não
+        fez, é o seu “hello world” sério: alterar, testar, ver verde.</span></li>
+      <li><b>Degrau médio — teste para a varredura da estante.</b>
+        <span>Explore <span class="mono">scan</span> em
+        <span class="arq">crates/domain/src/library.rs</span> (a função que acha as ROMs na pasta) e
+        escreva um teste seu para ela. Primeiro contato com código que você não escreveu.</span></li>
+      <li><b>Degrau ambicioso — um preset de TV seu.</b>
+        <span>O enum <span class="mono">Preset</span> em
+        <span class="arq">crates/ntsc/src/lib.rs</span> define os sabores de imagem (Composite, RGB,
+        RF…). O arquivo tem 232 linhas e é um ótimo lugar para mexer sem medo. Que tal um
+        “Trinitron 1997”?</span></li>
+    </ul>
+
+    <p style="margin-top:14px;"><b>Os comandos do dia a dia</b> (na raiz do projeto):</p>
+
+    <div class="code sm" style="margin-top:6px;">
+      <div class="hd"><span class="f">terminal</span><span class="lang">bash</span></div>
+      <pre>cargo check                              <span class="c"># “será que compila?” (rápido)</span>
+cargo test                               <span class="c"># roda TODOS os testes</span>
+cargo test -p sixteen-domain           <span class="c"># só os testes de um crate</span>
+cargo run -p sixteen-app --bin selector   <span class="c"># abre a estante de jogos</span></pre>
+    </div>
+
+    <div style="display:flex; gap:20px; align-items:stretch; margin-top:18px;">
+      <div class="box" style="flex:1;">
+        <span class="box-tag">PRÓXIMOS NÍVEIS</span>
+        <p><b>1. The Rust Book</b> — doc.rust-lang.org/book, gratuito; depois deste curso vai parecer
+        revisão.<br>
+        <b>2. Rustlings</b> — github.com/rust-lang/rustlings; ginástica de exercícios com o compilador
+        corrigindo você.<br>
+        <b>3. Raid final:</b> leia <span class="arq">crates/platform/src/cabinet.rs</span> — o desenho
+        do console, o arquivo mais visual do projeto. Se aguentar 100 linhas sem pânico, o curso
+        cumpriu o papel.</p>
+      </div>
+      <div style="display:flex; align-items:center; padding-right:6px;">
+        <div class="selo">
+          <div class="a">CONTEÚDO<br>100%</div>
+          <div class="b">11 AULAS<br>+ PROJETO</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box dica" style="margin-top:16px;">
+      <span class="box-tag">CONQUISTAS DESBLOQUEÁVEIS</span>
+      <p><b>“Compilou de primeira”</b> — mentira, ninguém consegue, nem nós.
+      <b>“Li o erro até o fim”</b> — 90% dos problemas se resolvem aqui.
+      <b>“Teste verde no primeiro run”</b> — guarde esse dia.
+      <b>“Expliquei ownership para alguém”</b> — aí você aprendeu de verdade.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Projeto final</span></div>
+</div>
+
+<!-- ============ PÁGINA 15 — COLA DE BOLSO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN · MINI CURSO DE RUST</span><span class="pg">15 / 15</span></div>
+  <div class="inner">
+    <div><span class="sec-num">13</span><span class="sec-title">COLA DE BOLSO</span></div>
+    <div class="sec-sub">Rasgue e leve no bolso (ou favorite no editor)</div>
+
+    <div style="margin-top:14px;">
+      <table class="t8">
+        <tr><th style="width:17%;">Você quer…</th><th style="width:28%;">Em Rust</th><th style="width:30%;">Em JS/Cypress você diria</th><th>Onde ver no projeto</th></tr>
+        <tr><td>criar variável</td><td><span class="mono">let x = 5;</span> / <span class="mono">let mut x = 5;</span></td><td><span class="mono">const</span> por padrão / <span class="mono">let</span></td><td>em todo lugar</td></tr>
+        <tr><td>texto</td><td><span class="mono">String</span> (dono) / <span class="mono">&amp;str</span> (empréstimo)</td><td><span class="mono">string</span> só (e reza)</td><td class="mono" style="font-size:10.5px;">core.rs</td></tr>
+        <tr><td>lista</td><td><span class="mono">Vec&lt;T&gt;</span> / <span class="mono">[T; N]</span> fixo</td><td><span class="mono">Array</span></td><td class="mono" style="font-size:10.5px;">Frame.pixels</td></tr>
+        <tr><td>um-de-vários</td><td><span class="mono">enum</span></td><td>union de literais</td><td class="mono" style="font-size:10.5px;">Mapper, Button</td></tr>
+        <tr><td>dados com nome</td><td><span class="mono">struct</span></td><td><span class="mono">interface</span>/objeto</td><td class="mono" style="font-size:10.5px;">RomId, Frame</td></tr>
+        <tr><td>escolher por valor</td><td><span class="mono">match</span></td><td><span class="mono">switch</span> (exaustivo!)</td><td class="mono" style="font-size:10.5px;">environment_cb</td></tr>
+        <tr><td>pode não ter</td><td><span class="mono">Option&lt;T&gt;</span></td><td><span class="mono">null</span>/<span class="mono">undefined</span></td><td class="mono" style="font-size:10.5px;">RomId.internal_name</td></tr>
+        <tr><td>pode falhar</td><td><span class="mono">Result&lt;T,E&gt;</span> + <span class="mono">?</span></td><td><span class="mono">try/catch</span></td><td class="mono" style="font-size:10.5px;">RomId::from_path</td></tr>
+        <tr><td>transformar listas</td><td><span class="mono">.iter().filter().map().collect()</span></td><td><span class="mono">map/filter</span></td><td class="mono" style="font-size:10.5px;">score, title_at</td></tr>
+        <tr><td>função anônima</td><td><span class="mono">|x| x + 1</span></td><td><span class="mono">x =&gt; x + 1</span></td><td class="mono" style="font-size:10.5px;">em toda esteira</td></tr>
+        <tr><td>compartilhar</td><td><span class="mono">&amp;T</span> leitores / <span class="mono">&amp;mut T</span> escritor único</td><td>passa referência e torce</td><td class="mono" style="font-size:10.5px;">Core::run / audio</td></tr>
+        <tr><td>testar</td><td><span class="mono">#[test] fn …</span> + <span class="mono">assert_eq!</span></td><td><span class="mono">it(...)</span> + <span class="mono">expect()</span></td><td class="mono" style="font-size:10.5px;">fim de rom.rs</td></tr>
+        <tr><td>rodar</td><td><span class="mono">cargo build/run/test/check</span></td><td><span class="mono">npm …/cypress run</span></td><td class="mono" style="font-size:10.5px;">raiz do repo</td></tr>
+      </table>
+    </div>
+
+    <div class="cols2" style="margin-top:18px;">
+      <div class="box dica">
+        <span class="box-tag">OS TRÊS ERROS DO COMEÇANTE (E O REMÉDIO)</span>
+        <p><b>1.</b> Lutar contra o borrow checker → leia o erro inteiro; ele sugere a correção.<br>
+        <b>2.</b> <span class="mono">.unwrap()</span> por todo lado → em código de produção, prefira
+        <span class="mono">?</span> e <span class="mono">Result</span>.<br>
+        <b>3.</b> Querer clonar tudo para “resolver” → o empréstimo (<span class="mono">&amp;</span>)
+        quase sempre resolve sem copiar.</p>
+      </div>
+      <div class="box qa">
+        <span class="box-tag">DE UMA QA, PARA OUTRAS QAS</span>
+        <p>Você já pensa como um Rustacean: desconfia do runtime, confia no pipeline e quer o erro
+        <b>cedo e explicado</b>. Rust só leva isso ao extremo — o pipeline é o compilador, e o
+        compilador nunca fica verde por engano. Bom jogo, e bons testes.</p>
+      </div>
+    </div>
+
+    <p class="mono" style="margin-top:20px; text-align:center; font-size:10px; letter-spacing:.18em; color:var(--tinta-fraca);">
+      SIXTEEN · MINI CURSO DE RUST · O CÓDIGO-FONTE COMPLETO ESTÁ AO LADO: CRATES/
+    </p>
+  </div>
+  <div class="botbar"><span>SixteeN · Mini curso de Rust</span><span>Cola de bolso</span></div>
+</div>
+
+</body>
+</html>

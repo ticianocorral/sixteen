@@ -1,9 +1,9 @@
 //! The whole thing: idle → selector → game → idle → …, in one process, no
 //! shell glue, no installation. Portable: `roms/`, `core/`, `assets/`,
-//! `saves/`, `notes/` and a `config/` folder (xperience.cfg, nointro.dat,
+//! `saves/`, `notes/` and a `config/` folder (sixteen.cfg, nointro.dat,
 //! library.json, hashcache.json) all live in one root (see
-//! `xperience_app::dirs`) — next to the executable on Windows/Linux,
-//! `~/Documents/SNES Xperience` on macOS — drop ROMs in `roms/` and go.
+//! `sixteen_app::dirs`) — next to the executable on Windows/Linux,
+//! `~/Documents/SixteeN` on macOS — drop ROMs in `roms/` and go.
 //!
 //! The idle screen (TV off, "Inserir cartucho"/"Configurações" in place of
 //! the logo) is the app's home: it's what you see at startup, after backing
@@ -13,14 +13,14 @@
 //! (state, saves, TV to snow) and back on again, and Eject only takes once
 //! off, landing back on the idle screen (plan §3.3). "Configurações" (idle
 //! screen or shelf) opens settings (controls, run-ahead, fullscreen, snes9x
-//! core download/update) — see `xperience_app::settings`.
+//! core download/update) — see `sixteen_app::settings`.
 //!
 //! Usage:
-//!   xperience [--core path/to/snes9x_libretro.{dylib,so,dll}]
-//!             [--config xperience.cfg] [--save-dir DIR] [--system-dir DIR]
+//!   sixteen [--core path/to/snes9x_libretro.{dylib,so,dll}]
+//!             [--config sixteen.cfg] [--save-dir DIR] [--system-dir DIR]
 //!             [--order shelf|name] [--runahead N]
 //!
-//! No `--core`/`$XPERIENCE_CORE`? Looks for one already downloaded into
+//! No `--core`/`$SIXTEEN_CORE`? Looks for one already downloaded into
 //! `core/` (see the settings screen, "Núcleo") — not included in the app
 //! itself, non-commercial snes9x license (see THIRD-PARTY-NOTICES.md).
 
@@ -28,15 +28,15 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
 use anyhow::{anyhow, Context, Result};
-use xperience_app::config::Config;
-use xperience_app::core_update;
-use xperience_app::idle::{self, IdleExit};
-use xperience_app::runner::{run_game, GameExit, GameSpec};
-use xperience_app::settings;
-use xperience_app::shelf::{self, Pick, ShelfOpts};
-use xperience_app::update_check::{self, UpdateNotice};
-use xperience_domain::{Catalog, NoIntroDat, Order};
-use xperience_platform::{Cabinet, MenuMode, MenuNav, Platform, RaStatus, Screen};
+use sixteen_app::config::Config;
+use sixteen_app::core_update;
+use sixteen_app::idle::{self, IdleExit};
+use sixteen_app::runner::{run_game, GameExit, GameSpec};
+use sixteen_app::settings;
+use sixteen_app::shelf::{self, Pick, ShelfOpts};
+use sixteen_app::update_check::{self, UpdateNotice};
+use sixteen_domain::{Catalog, NoIntroDat, Order};
+use sixteen_platform::{Cabinet, MenuMode, MenuNav, Platform, RaStatus, Screen};
 
 struct Args {
     /// Explicit override; `None` means "look in `core/` at launch, and again
@@ -59,12 +59,12 @@ struct Args {
 }
 
 fn default_core_path() -> Option<PathBuf> {
-    let p = xperience_app::dirs::core_dir().join(core_update::core_file_name());
+    let p = sixteen_app::dirs::core_dir().join(core_update::core_file_name());
     p.is_file().then_some(p)
 }
 
 fn parse_args() -> Result<Args> {
-    let mut core = std::env::var_os("XPERIENCE_CORE").map(PathBuf::from);
+    let mut core = std::env::var_os("SIXTEEN_CORE").map(PathBuf::from);
     let mut config = None;
     let mut save_dir = None;
     let mut system_dir = None;
@@ -109,9 +109,9 @@ fn parse_args() -> Result<Args> {
         }
     }
 
-    let save_dir = save_dir.unwrap_or_else(xperience_app::dirs::saves_dir);
+    let save_dir = save_dir.unwrap_or_else(sixteen_app::dirs::saves_dir);
     let system_dir = system_dir.unwrap_or_else(|| save_dir.clone());
-    let notes_dir = notes_dir.unwrap_or_else(xperience_app::dirs::notes_dir);
+    let notes_dir = notes_dir.unwrap_or_else(sixteen_app::dirs::notes_dir);
     Ok(Args {
         core,
         config,
@@ -126,7 +126,7 @@ fn parse_args() -> Result<Args> {
     })
 }
 
-const HELP: &str = "xperience [--core <lib>] [--config xperience.cfg]\n\
+const HELP: &str = "sixteen [--core <lib>] [--config sixteen.cfg]\n\
        [--save-dir DIR] [--system-dir DIR] [--notes-dir DIR]\n\
        [--order shelf|name] [--runahead N]\n\
        [--debug-settings main|controls --shot out.bmp]\n\
@@ -139,7 +139,7 @@ game, the panel's Power button powers off (saves, TV to snow) and back on\n\
 again; Eject only takes once off, back to idle.\n\
 \"Configurações\" (idle screen or shelf) opens settings (controls, núcleo\n\
 snes9x, run-ahead, fullscreen, checar atualizações ao abrir) — saved\n\
-straight to xperience.cfg. Window-close on the idle screen, or closing a\n\
+straight to sixteen.cfg. Window-close on the idle screen, or closing a\n\
 game window, ends the app — no ceremony there.\n\
 \n\
 The cabinet's nameplate shows the app's own version and, once a core is\n\
@@ -151,9 +151,9 @@ failure). First run without the snes9x core or nointro.dat? The idle\n\
 screen opens on a setup page inside the TV, one download button each.\n\
 \n\
 Portable: roms/, core/, assets/ (cover/logo art, matched by ROM file name),\n\
-saves/, notes/, xperience.cfg, library.json all live in one root — next to\n\
-this executable on Windows/Linux, ~/Documents/SNES Xperience on macOS.\n\
-Drop ROMs into roms/ and go; no --core/$XPERIENCE_CORE? Use\n\
+saves/, notes/, sixteen.cfg, library.json all live in one root — next to\n\
+this executable on Windows/Linux, ~/Documents/SixteeN on macOS.\n\
+Drop ROMs into roms/ and go; no --core/$SIXTEEN_CORE? Use\n\
 the settings screen's \"Núcleo\" to download snes9x automatically, or drop\n\
 it into core/ by hand (not included — non-commercial license, see\n\
 THIRD-PARTY-NOTICES.md). An optional nointro.dat at the root gives games\n\
@@ -161,6 +161,10 @@ their canonical No-Intro name.";
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // O app mudou de nome (SNES Xperience → SixteeN) — a raiz de dados e o
+    // cfg seguem primeiro, antes de qualquer leitura/criação nos caminhos
+    // novos (criar pasta bloquearia o rename da raiz).
+    sixteen_app::dirs::migrate_renamed_root();
     // A pasta de updates mudou de lugar (plan revision 1.1.5) — o pacote
     // pendente que ficou em saves/update/ precisa estar no caminho novo
     // antes de o apply olhar pra ele.
@@ -168,20 +172,20 @@ fn main() -> Result<()> {
     // O "será atualizado ao reiniciar" (plan revision): um update baixado
     // pela tela do app vale aqui — substitui o binário/bundle antes de
     // qualquer SDL. Melhor-esforço; falha loga e segue com o atual.
-    xperience_app::update_check::apply_pending_update();
+    sixteen_app::update_check::apply_pending_update();
     let args = parse_args()?;
 
     for dir in [
-        xperience_app::dirs::roms_dir(),
-        xperience_app::dirs::core_dir(),
-        xperience_app::dirs::assets_dir().join("logo"),
-        xperience_app::dirs::assets_dir().join("cover"),
-        xperience_app::dirs::assets_dir().join("cartridge"),
-        xperience_app::dirs::assets_dir().join("backcover"),
+        sixteen_app::dirs::roms_dir(),
+        sixteen_app::dirs::core_dir(),
+        sixteen_app::dirs::assets_dir().join("logo"),
+        sixteen_app::dirs::assets_dir().join("cover"),
+        sixteen_app::dirs::assets_dir().join("cartridge"),
+        sixteen_app::dirs::assets_dir().join("backcover"),
         args.save_dir.clone(),
         args.notes_dir.clone(),
-        xperience_app::dirs::retroachievements_dir(),
-        xperience_app::dirs::config_dir(),
+        sixteen_app::dirs::retroachievements_dir(),
+        sixteen_app::dirs::config_dir(),
     ] {
         let _ = std::fs::create_dir_all(&dir);
     }
@@ -197,13 +201,13 @@ fn main() -> Result<()> {
     // sidecar, no app restart needed. The DAT is re-read each time too, so
     // a first-run download (setup screen) counts without restarting.
     let open_catalog = || {
-        let dat = NoIntroDat::load(&xperience_app::dirs::nointro_dat_path());
+        let dat = NoIntroDat::load(&sixteen_app::dirs::nointro_dat_path());
         if let Err(e) = &dat {
             log::info!("no-intro DAT not loaded ({e}) — using internal/file names");
         }
         Catalog::open(
-            &xperience_app::dirs::roms_dir(),
-            &xperience_app::dirs::library_path(),
+            &sixteen_app::dirs::roms_dir(),
+            &sixteen_app::dirs::library_path(),
             dat.ok().as_ref(),
         )
     };
@@ -214,7 +218,7 @@ fn main() -> Result<()> {
     plat.set_pad_map(cfg.padmap.clone());
     // One window for the whole session — shelf and game both draw into it.
     let mut cab = plat
-        .create_cabinet("SNES Xperience", 1280, 800, cfg.fullscreen)
+        .create_cabinet("SixteeN", 1280, 800, cfg.fullscreen)
         .map_err(|e| anyhow!(e.to_string()))?;
     // The ambient static hiss (opt-in, settings "vídeo") — gate applied once
     // here and live on every settings toggle after.
@@ -222,10 +226,10 @@ fn main() -> Result<()> {
     // RetroAchievements, uma vez para todas as telas (início, estante, jogo):
     // a logo oficial (favicon embutido) do badge e o badge em si — conta
     // configurada = "RA ATIVADO" no queixo do que for que a tela esteja na TV.
-    if let Ok(icon) = image::load_from_memory(xperience_app::RA_ICON_PNG) {
+    if let Ok(icon) = image::load_from_memory(sixteen_app::RA_ICON_PNG) {
         let icon = icon.to_rgba8();
         cab.set_image(
-            xperience_platform::RA_LOGO_IMG,
+            sixteen_platform::RA_LOGO_IMG,
             icon.width(),
             icon.height(),
             icon.as_raw(),
@@ -258,7 +262,7 @@ fn main() -> Result<()> {
             &mut cab,
             idle::RESTING_STATIC,
             core_path.is_some(),
-            xperience_app::dat_update::dat_installed(),
+            sixteen_app::dat_update::dat_installed(),
             path,
         )?;
         log::info!("wrote {} (idle preview)", path.display());
@@ -277,7 +281,7 @@ fn main() -> Result<()> {
     let mut update_rx: Option<Receiver<UpdateNotice>> = None;
     if cfg.check_updates_on_start {
         let (tx, rx) = mpsc::channel();
-        let core_dir = xperience_app::dirs::core_dir();
+        let core_dir = sixteen_app::dirs::core_dir();
         let app_version = env!("CARGO_PKG_VERSION").to_string();
         std::thread::spawn(move || update_check::check(core_dir, app_version, tx));
         update_rx = Some(rx);
@@ -296,7 +300,7 @@ fn main() -> Result<()> {
             idle_static,
             &mut update_rx,
             core_path.is_some(),
-            xperience_app::dat_update::dat_installed(),
+            sixteen_app::dat_update::dat_installed(),
         )?;
         plat.set_konami_watch(false);
         // The idle screen's own "Baixar núcleo" button may have just
@@ -311,7 +315,7 @@ fn main() -> Result<()> {
                 // O menu do devmode (plan revision: "por enquanto criar menu
                 // em branco apenas com o botão voltar") — `true` aqui é o
                 // fechamento da janela dentro dele, que encerra o app.
-                if xperience_app::devmenu::run(&mut plat, &mut cab)? {
+                if sixteen_app::devmenu::run(&mut plat, &mut cab)? {
                     break 'app;
                 }
                 continue 'app;
@@ -492,8 +496,8 @@ fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
 /// novo. Idempotente: destino já existente fica como está, nada é
 /// sobrescrito.
 fn migrate_update_out_of_saves() {
-    let old = xperience_app::dirs::saves_dir().join("update");
-    let new = xperience_app::dirs::app_root().join("update");
+    let old = sixteen_app::dirs::saves_dir().join("update");
+    let new = sixteen_app::dirs::app_root().join("update");
     let Ok(entries) = std::fs::read_dir(&old) else {
         return;
     };
@@ -518,7 +522,7 @@ fn migrate_update_out_of_saves() {
 }
 
 /// One-time, best-effort copy of real play progress (saves/notebooks) from
-/// the pre-portable `~/.local/share/snes-xperience` location, if the new
+/// the pre-portable `~/.local/share/sixteen` location, if the new
 /// folders are still empty and the old ones exist. The catalog's play-count
 /// history is deliberately NOT migrated (fresh start) — but a save state or
 /// SRAM file is actual game progress, worth not losing silently just because
@@ -526,10 +530,10 @@ fn migrate_update_out_of_saves() {
 /// Windows used `%APPDATA%`, not covered here — lower value to chase).
 fn migrate_old_data() {
     if let Some(home) = std::env::var_os("HOME") {
-        let old_base = PathBuf::from(home).join(".local/share/snes-xperience");
+        let old_base = PathBuf::from(home).join(".local/share/sixteen");
         migrate_pairs([
-            (old_base.join("saves"), xperience_app::dirs::saves_dir()),
-            (old_base.join("notes"), xperience_app::dirs::notes_dir()),
+            (old_base.join("saves"), sixteen_app::dirs::saves_dir()),
+            (old_base.join("notes"), sixteen_app::dirs::notes_dir()),
         ]);
     }
     migrate_macos_bundle_sibling();
@@ -538,27 +542,31 @@ fn migrate_old_data() {
 }
 
 /// Plan revision: "criar pasta config e colocar o cfg, o dat, library e o
-/// hash" — move `xperience.cfg`, `nointro.dat`, `library.json` e
+/// hash" — move `sixteen.cfg`, `nointro.dat`, `library.json` e
 /// `hashcache.json` da raiz do app para `config/`. Idempotente: só move
 /// quando o destino não existe (um `--config` explícito nunca é tocado —
 /// a migração só trata os nomes padrão na raiz). Roda antes do
 /// `Config::load` e da abertura do catálogo, que leem os caminhos novos.
 fn migrate_root_files_into_config() {
-    let config = xperience_app::dirs::config_dir();
-    for item in [
-        "xperience.cfg",
-        "nointro.dat",
-        "library.json",
-        "hashcache.json",
+    let config = sixteen_app::dirs::config_dir();
+    // (nome na raiz, nome em config/) — o cfg carrega o nome antigo em
+    // instalações de antes do rebrand; o novo nome cobre quem já rodou uma
+    // build SixteeN sem pasta config/.
+    for (src_name, dst_name) in [
+        ("xperience.cfg", "sixteen.cfg"),
+        ("sixteen.cfg", "sixteen.cfg"),
+        ("nointro.dat", "nointro.dat"),
+        ("library.json", "library.json"),
+        ("hashcache.json", "hashcache.json"),
     ] {
-        let src = xperience_app::dirs::app_root().join(item);
-        let dst = config.join(item);
+        let src = sixteen_app::dirs::app_root().join(src_name);
+        let dst = config.join(dst_name);
         if !src.is_file() || dst.exists() {
             continue;
         }
         match std::fs::rename(&src, &dst) {
-            Ok(()) => log::info!("migrado: {item} -> config/{item}"),
-            Err(e) => log::warn!("migrando {item} para config/: {e}"),
+            Ok(()) => log::info!("migrado: {src_name} -> config/{dst_name}"),
+            Err(e) => log::warn!("migrando {src_name} para config/: {e}"),
         }
     }
 }
@@ -570,8 +578,8 @@ fn migrate_root_files_into_config() {
 /// `retroachievements/`. Idempotente: só move quando o destino não existe
 /// (dois lados vivos = fica como está; nada do RA é sobrescrito).
 fn migrate_ra_out_of_saves() {
-    let ra = xperience_app::dirs::retroachievements_dir();
-    let saves = xperience_app::dirs::saves_dir();
+    let ra = sixteen_app::dirs::retroachievements_dir();
+    let saves = sixteen_app::dirs::saves_dir();
     for item in ["ra-cache", "ra-earned", "ra-progress", "ra-pending.jsonl"] {
         let src = saves.join(item);
         let dst = ra.join(item);
@@ -586,7 +594,7 @@ fn migrate_ra_out_of_saves() {
 }
 
 /// macOS only, and only relevant for the brief window before `dirs::app_root`
-/// moved to `~/Documents/SNES Xperience`: the very first 0.4.0 DMG builds
+/// moved to `~/Documents/SixteeN`: the very first 0.4.0 DMG builds
 /// created `roms/`/`core/`/`assets/`/`saves/`/`notes/` next to the `.app`
 /// (typically inside `/Applications`, not writable/expected for user data on
 /// this platform). If that old layout exists next to the running `.app` and
@@ -616,11 +624,11 @@ fn migrate_macos_bundle_sibling() {
         return; // dev build, not a packaged .app — nothing to migrate
     };
     migrate_pairs([
-        (old_root.join("roms"), xperience_app::dirs::roms_dir()),
-        (old_root.join("core"), xperience_app::dirs::core_dir()),
-        (old_root.join("assets"), xperience_app::dirs::assets_dir()),
-        (old_root.join("saves"), xperience_app::dirs::saves_dir()),
-        (old_root.join("notes"), xperience_app::dirs::notes_dir()),
+        (old_root.join("roms"), sixteen_app::dirs::roms_dir()),
+        (old_root.join("core"), sixteen_app::dirs::core_dir()),
+        (old_root.join("assets"), sixteen_app::dirs::assets_dir()),
+        (old_root.join("saves"), sixteen_app::dirs::saves_dir()),
+        (old_root.join("notes"), sixteen_app::dirs::notes_dir()),
     ]);
 }
 

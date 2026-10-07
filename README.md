@@ -1,4 +1,4 @@
-# SNES Xperience
+# SixteeN
 
 Emulador de SNES portátil com um console inteiro desenhado na tela —
 gabinete, tubo CRT e painel de controle de verdade — em vez de só uma
@@ -49,17 +49,17 @@ janela com o jogo. Projeto pessoal, sem fins comerciais.
 
 Pacotes prontos — DMG (macOS), zip com os `.exe` (Windows), AppImage
 (Linux), todos com SDL3 já embutido — saem automático a cada release, na
-aba [Releases](https://github.com/ticianocorral/snes-xperience/releases).
+aba [Releases](https://github.com/ticianocorral/sixteen/releases).
 
 ## Jogar
 
 Na primeira execução o app cria sozinho as pastas em `~/Documents/SNES
-Xperience` (no macOS; no Windows/Linux, ao lado do executável). Coloque
+SixteeN` (no macOS; no Windows/Linux, ao lado do executável). Coloque
 suas ROMs em `roms/` e o core do snes9x em `core/` — ou baixe-o direto
 pelo menu de configurações.
 
 ```bash
-cargo run --bin xperience
+cargo run --bin sixteen
 ```
 
 Clique em "Inserir cartucho" para abrir a estante. Solte um
@@ -80,7 +80,7 @@ cargo build && cargo test
 Sem SDL3 no sistema, compile-o junto (precisa de CMake + toolchain C):
 
 ```bash
-cargo build --features xperience-platform/vendored-sdl
+cargo build --features sixteen-platform/vendored-sdl
 ```
 
 `emu-run` roda uma ROM solta sem o resto do app:
@@ -98,12 +98,12 @@ Quatro camadas, dependências só para baixo:
 
 | Camada       | Crate                 | Responsabilidade                                                        |
 | ------------ | --------------------- | ----------------------------------------------------------------------- |
-| Apresentação | `xperience-app`       | binários (`xperience`, `emu-run`, `selector`) + `runner`/`shelf`/`settings` |
-| Domínio      | `xperience-domain`    | identificação de ROM, catálogo (JSON), DAT No-Intro, TOSEC               |
-| Emulação     | `xperience-emulation` | core libretro carregado em runtime, laço de execução                     |
-| Plataforma   | `xperience-platform`  | SDL3: o `Cabinet` (gabinete, tubo CRT, painel), áudio, gamepad           |
+| Apresentação | `sixteen-app`       | binários (`sixteen`, `emu-run`, `selector`) + `runner`/`shelf`/`settings` |
+| Domínio      | `sixteen-domain`    | identificação de ROM, catálogo (JSON), DAT No-Intro, TOSEC               |
+| Emulação     | `sixteen-emulation` | core libretro carregado em runtime, laço de execução                     |
+| Plataforma   | `sixteen-platform`  | SDL3: o `Cabinet` (gabinete, tubo CRT, painel), áudio, gamepad           |
 
-`xperience-ntsc` é um crate folha à parte (o `snes_ntsc` do blargg,
+`sixteen-ntsc` é um crate folha à parte (o `snes_ntsc` do blargg,
 vendorizado). Para o histórico completo de implementação, ver
 [`docs/plano-emulador-moldura.md`](docs/plano-emulador-moldura.md) e
 `docs/fase-0.md` … `docs/fase-4.md`.

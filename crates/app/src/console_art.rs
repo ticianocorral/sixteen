@@ -5,7 +5,7 @@
 //! same "local file wins" convention per-game art already follows; a broken
 //! override falls back to the baked-in image instead of dropping it.
 
-use xperience_platform::Cabinet;
+use sixteen_platform::Cabinet;
 
 use crate::dirs;
 
@@ -99,15 +99,16 @@ mod tests {
     #[test]
     fn built_in_brand_images_decode() {
         // The whole point of the baked-in images: they must decode and keep
-        // the wordmark's 4:1 landscape shape even after the thumbnail cap.
+        // the wordmark's wide landscape shape ("SixteeN" + the strip below
+        // it, ~2.6:1) even after the thumbnail cap.
         let logo = image::load_from_memory(DEFAULT_CONSOLE_LOGO)
             .expect("built-in console logo")
             .thumbnail(640, 640);
         let tag = image::load_from_memory(DEFAULT_CONSOLE_TAG)
             .expect("built-in console tag")
             .thumbnail(1024, 1024);
-        assert!(logo.width() > logo.height() * 4);
-        assert!(tag.width() > tag.height() * 4);
+        assert!(logo.width() > logo.height() * 2);
+        assert!(tag.width() > tag.height() * 2);
         // The wordmarks carry alpha (transparent margins around the text).
         assert!(image::load_from_memory(DEFAULT_CONSOLE_LOGO)
             .expect("logo")

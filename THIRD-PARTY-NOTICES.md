@@ -11,7 +11,7 @@ uso, cópia, modificação e distribuição — em binário e em código — par
 **não comerciais**, sem taxa, desde que o aviso de licença e o copyright
 acompanhem **todas** as cópias.
 
-Ao publicar um binário do SNES Xperience que embarque ou baixe o core do snes9x,
+Ao publicar um binário do SixteeN que embarque ou baixe o core do snes9x,
 inclua o texto integral da licença do snes9x junto do binário. O texto oficial
 está no repositório do snes9x (`snes9x.h` / `LICENSE`).
 

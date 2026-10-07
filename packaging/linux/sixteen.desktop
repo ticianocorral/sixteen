@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=SNES Xperience
+Name=SixteeN
 Comment=Personal, non-commercial SNES emulator with a CRT-TV frame
-Exec=xperience
-Icon=snes-xperience
+Exec=sixteen
+Icon=sixteen
 Categories=Game;Emulator;
 Terminal=false

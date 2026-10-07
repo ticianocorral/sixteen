@@ -17,7 +17,7 @@ pub const API_BASE: &str = "https://retroachievements.org";
 
 /// Identifies the app to the RA server in every call (third-party clients
 /// are welcome as long as they name themselves).
-const USER_AGENT: &str = concat!("snes-xperience/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("sixteen/", env!("CARGO_PKG_VERSION"));
 
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
@@ -121,7 +121,7 @@ fn cache_path(hash: &str) -> std::path::PathBuf {
 /// The RA hash of the ROM at `path` (zip-transparent) — reading a few MB
 /// just to MD5 them; only ever called once per game per shelf visit.
 pub fn hash_rom(path: &std::path::Path) -> Result<String, String> {
-    let rom = xperience_domain::library::load_rom(path).map_err(|e| e.to_string())?;
+    let rom = sixteen_domain::library::load_rom(path).map_err(|e| e.to_string())?;
     Ok(snes_ra_hash(&rom))
 }
 
@@ -292,7 +292,7 @@ fn write_cache(hash: &str, text: &str) -> Result<(), String> {
 
 // ---- fase 3: live session -------------------------------------------
 
-use xperience_ra::runtime::{Achievement, Session};
+use sixteen_ra::runtime::{Achievement, Session};
 
 /// O RA injeta um "achievement" de aviso em toda resposta para clientes
 /// que não estão no registro oficial de emuladores (`CLIENT_WARNING_ID` no
@@ -1452,7 +1452,7 @@ mod tests {
     }
 
     /// Hits the real API — manual sanity check only:
-    /// `cargo test -p xperience-app --lib ra -- --ignored`
+    /// `cargo test -p sixteen-app --lib ra -- --ignored`
     #[test]
     #[ignore]
     fn bad_token_is_rejected_by_the_real_api() {

@@ -3,7 +3,7 @@
 //! real nameplate) with the notification block in the chin's right side, and
 //! captures it headlessly via `Cabinet::capture_bmp`.
 //!
-//! Run: `cargo run -p xperience-app --example ra_osd_mock` — writes BMPs to
+//! Run: `cargo run -p sixteen-app --example ra_osd_mock` — writes BMPs to
 //! docs/mocks/ (convert with `sips -s format png` or any image tool).
 //!
 //! Now uses the real OSD queue (`Cabinet::push_osd`) that ships in-game.
@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use xperience_platform::{Cabinet, FrameRef, PanelButton, PixelFormat, Platform, DEMO_BADGE_IMG};
+use sixteen_platform::{Cabinet, FrameRef, PanelButton, PixelFormat, Platform, DEMO_BADGE_IMG};
 
 fn main() -> anyhow::Result<()> {
     let out_dir = PathBuf::from("docs/mocks");
@@ -19,12 +19,12 @@ fn main() -> anyhow::Result<()> {
 
     let plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
-        .create_cabinet("SNES Xperience", 1280, 800, false)
+        .create_cabinet("SixteeN", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     // What the app shows in-game today: nameplate with versions, the panel's
     // command rows, power on, a running session clock.
-    cab.set_nameplate("SNES Xperience v0.14.0\nsnes9x 1.63");
+    cab.set_nameplate("SixteeN v0.14.0\nsnes9x 1.63");
     cab.set_panel(
         None,
         None,

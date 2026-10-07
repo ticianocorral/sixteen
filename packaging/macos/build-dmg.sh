@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Wraps the already-built xperience binary into SNES Xperience.app and a DMG.
-# Usage: build-dmg.sh <path-to-xperience-binary> <version> <out-dmg-path>
+# Wraps the already-built sixteen binary into SixteeN.app and a DMG.
+# Usage: build-dmg.sh <path-to-sixteen-binary> <version> <out-dmg-path>
 set -euo pipefail
 
 BIN="$1"
@@ -11,11 +11,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-APP="$WORK/SNES Xperience.app"
+APP="$WORK/SixteeN.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BIN" "$APP/Contents/MacOS/xperience"
-chmod +x "$APP/Contents/MacOS/xperience"
+cp "$BIN" "$APP/Contents/MacOS/sixteen"
+chmod +x "$APP/Contents/MacOS/sixteen"
 cp "$HERE/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 sed "s/__VERSION__/$VERSION/g" "$HERE/Info.plist" > "$APP/Contents/Info.plist"
 
@@ -30,5 +30,5 @@ codesign --force --deep --sign - "$APP"
 ln -s /Applications "$WORK/Applications"
 
 rm -f "$OUT_DMG"
-hdiutil create -volname "SNES Xperience" -srcfolder "$WORK" -ov -format UDZO "$OUT_DMG"
+hdiutil create -volname "SixteeN" -srcfolder "$WORK" -ov -format UDZO "$OUT_DMG"
 echo "wrote $OUT_DMG"

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>SixteeN — Por dentro do console (guia técnico para leigos)</title>
+<link rel="stylesheet" href="assets/fonts/local_PressStart2P.css">
+<link rel="stylesheet" href="assets/fonts/local_Archivo.css">
+<link rel="stylesheet" href="assets/fonts/local_ArchivoBlack.css">
+<link rel="stylesheet" href="assets/fonts/local_IBMPlexMono.css">
+<style>
+:root{
+  --papel:#f2ede3; --papel-alt:#eae3d4; --papel-sombra:#dcd4c0;
+  --tinta:#211d18; --tinta-fraca:#6b6459;
+  --roxo:#4a3f8f; --roxo-vivo:#6a5fc9; --roxo-claro:#eceafa;
+  --vermelho:#b3382e; --verde:#2e6b3f; --amarelo:#d9a522;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  --sans:"Archivo", system-ui, sans-serif;
+  --pixel:"Press Start 2P", var(--mono);
+}
+@page{ size:794px 1123px; margin:0; }
+html,body{ margin:0; padding:0; width:794px; background:var(--papel); }
+body{ font-family:var(--sans),sans-serif; color:var(--tinta); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.page{ width:794px; height:1123px; position:relative; overflow:hidden; background:var(--papel);
+       background-image:radial-gradient(#00000008 1px, transparent 1px); background-size:22px 22px;
+       page-break-after:always; display:flex; flex-direction:column; }
+.page:last-child{ page-break-after:auto; }
+.inner{ flex:1 1 auto; min-height:0; padding:30px 58px 18px; }
+@media screen{
+  html{ height:auto; display:flex; justify-content:center; background:#211d18; }
+  body{ transform-origin:top center; scale:min(1, calc(100vw / 794)); margin:0 auto; }
+  .page{ margin:18px 0; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+}
+
+.pixel{ font-family:var(--pixel),monospace; line-height:1.5; }
+h1,h2,h3{ margin:0; }
+.sec-title{ font-family:var(--pixel),monospace; font-size:20px; color:var(--tinta); letter-spacing:1px; }
+.sec-num{ font-family:var(--pixel),monospace; font-size:11px; color:var(--papel); background:var(--roxo);
+          padding:7px 9px; display:inline-block; margin-right:12px; box-shadow:3px 3px 0 var(--tinta); }
+.sec-sub{ font-family:var(--mono),monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+          color:var(--tinta-fraca); margin-top:10px; }
+p{ margin:0 0 10px; font-size:13.5px; line-height:1.62; }
+.lead{ font-size:15px; }
+.mono{ font-family:var(--mono),monospace; }
+.up{ text-transform:uppercase; letter-spacing:.14em; }
+
+.topbar{ flex:0 0 40px; background:var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px; }
+.topbar .brand{ font-family:var(--pixel),monospace; font-size:8px; color:var(--papel); letter-spacing:1px; }
+.topbar .pg{ font-family:var(--mono),monospace; font-size:10px; color:var(--papel-alt); letter-spacing:.15em; }
+.botbar{ flex:0 0 36px; border-top:2px solid var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px;
+         font-family:var(--mono),monospace; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--tinta-fraca); }
+
+.box{ border:3px solid var(--tinta); background:#fffdf7; box-shadow:5px 5px 0 var(--tinta); padding:16px 18px; }
+.box .box-tag{ display:inline-block; font-family:var(--pixel),monospace; font-size:9px; padding:5px 7px;
+               margin:-16px 0 10px -18px; background:var(--roxo); color:var(--papel); }
+.box.dica{ background:#fdf6e0; } .box.dica .box-tag{ background:var(--amarelo); color:var(--tinta); }
+.box.tranquilo{ background:#e9f2ea; } .box.tranquilo .box-tag{ background:var(--verde); }
+.box.roxo{ background:var(--roxo-claro); } .box.roxo .box-tag{ background:var(--roxo-vivo); }
+.box p:last-child{ margin-bottom:0; }
+
+.steps{ margin:0; padding:0; list-style:none; counter-reset:st; }
+.steps li{ counter-increment:st; position:relative; padding:0 0 13px 44px; }
+.steps li::before{ content:counter(st, decimal-leading-zero); position:absolute; left:0; top:-2px;
+   width:30px; height:30px; border:3px solid var(--tinta); background:var(--roxo-vivo); color:#fff;
+   font-family:var(--mono),monospace; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center;
+   box-shadow:2px 2px 0 var(--tinta); }
+.steps li b{ display:block; font-size:13.5px; }
+.steps li span{ font-size:12.5px; color:var(--tinta); }
+
+table.t8{ width:100%; border-collapse:collapse; border:3px solid var(--tinta); background:#fffdf7;
+          box-shadow:5px 5px 0 var(--tinta); }
+table.t8 th{ background:var(--roxo); color:var(--papel); font-family:var(--mono),monospace; font-size:10.5px;
+   letter-spacing:.12em; text-transform:uppercase; text-align:left; padding:8px 12px; border:2px solid var(--tinta); }
+table.t8 td{ border:2px solid var(--tinta); padding:7px 12px; font-size:12.5px; line-height:1.5; vertical-align:top; }
+table.t8 tr:nth-child(even) td{ background:var(--papel-alt); }
+.t8 code, code.k{ font-family:var(--mono),monospace; font-size:11px; background:var(--papel-alt);
+   border:1px solid var(--tinta-fraca); padding:1px 5px; white-space:nowrap; }
+
+.cols2{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.cols3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+.shot{ border:3px solid var(--tinta); box-shadow:6px 6px 0 var(--tinta); background:#000; }
+.shot img{ display:block; width:100%; height:auto; }
+.shotcap{ font-family:var(--mono),monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+   color:var(--tinta-fraca); margin-top:10px; }
+
+/* cartões da "equipe de bastidores" */
+.team{ border:3px solid var(--tinta); background:#fffdf7; box-shadow:4px 4px 0 var(--tinta); padding:13px 15px; }
+.team .papel{ font-family:var(--pixel),monospace; font-size:8.5px; color:var(--papel); background:var(--roxo-vivo);
+   display:inline-block; padding:4px 6px; margin-bottom:9px; box-shadow:2px 2px 0 var(--tinta); }
+.team h3{ font-size:14.5px; margin-bottom:6px; }
+.team p{ font-size:12px; line-height:1.5; margin:0; }
+
+/* fluxo da jornada */
+.fluxo{ display:flex; flex-direction:column; gap:0; }
+.fluxo .etapa{ display:grid; grid-template-columns:44px 1fr; gap:14px; position:relative; padding-bottom:16px; }
+.fluxo .etapa:not(:last-child)::before{ content:""; position:absolute; left:19px; top:36px; bottom:-2px;
+   width:3px; background:var(--tinta); }
+.fluxo .n{ width:38px; height:38px; border:3px solid var(--tinta); background:var(--roxo-vivo); color:#fff;
+   font-family:var(--mono),monospace; font-weight:600; font-size:15px; display:flex; align-items:center;
+   justify-content:center; box-shadow:2px 2px 0 var(--tinta); position:relative; z-index:1; }
+.fluxo .etapa > div > b{ display:block; font-size:13.5px; margin-top:2px; }
+.fluxo .etapa p b{ display:inline; font-weight:700; }
+.fluxo .etapa p{ font-size:12.5px; margin:0; }
+
+/* glossário */
+.gl{ display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; }
+.gl .term{ border-left:4px solid var(--roxo-vivo); background:#fffdf7; padding:8px 12px 9px;
+   border-top:1px solid var(--papel-sombra); border-right:1px solid var(--papel-sombra); border-bottom:1px solid var(--papel-sombra); }
+.gl .term b{ font-size:12.5px; color:var(--roxo); display:block; margin-bottom:2px; }
+.gl .term p{ font-size:11.5px; line-height:1.5; margin:0; }
+.letra{ font-family:var(--pixel),monospace; font-size:12px; color:var(--papel); background:var(--tinta);
+   display:inline-block; padding:6px 9px; margin:0 0 12px; }
+
+/* selo */
+.selo{ width:104px; height:104px; border-radius:50%; background:var(--verde); border:3px solid var(--tinta);
+   box-shadow:4px 4px 0 var(--tinta); display:flex; flex-direction:column; align-items:center;
+   justify-content:center; text-align:center; color:var(--papel); transform:rotate(-7deg); }
+.selo .a{ font-family:var(--pixel),monospace; font-size:9px; line-height:1.7; }
+.selo .b{ font-family:var(--mono),monospace; font-size:8.5px; letter-spacing:.1em; margin-top:6px; }
+</style>
+</head>
+<body>
+
+<!-- ============ PÁGINA 1 — CAPA ============ -->
+<div class="page">
+  <div class="inner" style="display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="mono up" style="font-size:10px;">Guia técnico · sem pré-requisitos</div>
+      <div class="mono up" style="font-size:10px; border:2px solid var(--tinta); padding:4px 10px; background:var(--papel-alt);">Edição curiosa</div>
+    </div>
+
+    <div style="margin-top:84px; text-align:center;">
+      <h1 class="pixel" style="font-size:26px; color:var(--roxo); text-shadow:3px 3px 0 var(--tinta); line-height:1.7;">POR DENTRO DO<br>SIXTEEN</h1>
+      <div style="margin:30px auto 0; width:460px; border-top:3px solid var(--tinta); border-bottom:3px solid var(--tinta); padding:10px 0;">
+        <div class="mono up" style="font-size:12px; letter-spacing:.24em;">Como o console funciona de verdade</div>
+      </div>
+      <p class="lead" style="margin:24px auto 0; max-width:470px; font-size:14.5px;">
+        Um guia da parte técnica, escrito para quem <b>não é de programação</b>.
+        Nenhum conhecimento prévio é pressuposto: cada termo novo é explicado
+        na hora — e no fim tem um <b>glossário completo</b>.
+      </p>
+    </div>
+
+    <div style="display:flex; justify-content:center; margin-top:44px;">
+      <div style="display:flex; gap:16px;">
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 16px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">PRÉ-REQUISITOS</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">curiosidade (nível: qualquer)</div>
+        </div>
+        <div style="border:3px solid var(--tinta); background:var(--roxo); box-shadow:4px 4px 0 var(--tinta); padding:10px 16px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--papel);">INCLUI</div>
+          <div class="mono" style="font-size:11px; margin-top:6px; color:var(--papel);">glossário com 42 termos</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end;">
+      <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); line-height:1.7;">
+        Acompanha o Manual do Jogador<br>Versão do app 1.1 · 2026
+      </div>
+      <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); text-align:right; line-height:1.7;">
+        Promessa deste guia: nenhum parágrafo<br>vai exigir que você saiba programar.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PÁGINA 2 — O QUE É UM EMULADOR ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">02 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">01</span><span class="sec-title">O QUE É UM EMULADOR?</span></div>
+    <div class="sec-sub">Começando pelo começo</div>
+
+    <p class="lead" style="margin-top:18px;">
+      Um <b>emulador</b> é um programa que faz um computador <b>imitar outro aparelho</b>.
+      No nosso caso: imitar um Super Nintendo — a máquina inteira, com seus botões,
+      sua memória e seu jeitão de gerar imagem e som.
+    </p>
+    <p>
+      Imitar não é “rodar uma cópia do jogo”: o jogo de SNES só fala a língua do
+      hardware do SNES. O emulador é o <b>tradutor simultâneo</b> que fica no meio —
+      recebe as instruções do jogo, executa como se fosse o console, e entrega
+      imagem, som e resposta aos botões.
+    </p>
+
+    <div class="box roxo" style="margin-top:16px;">
+      <span class="box-tag">EM OUTRAS PALAVRAS</span>
+      <p style="margin-bottom:0;">O SixteeN é um <b>console de mentira, muito bem-feito</b>: um
+      aparelho desenhado na tela, que roda os jogos de verdade dentro de si —
+      com cara, som e manias de um SNES ligado na TV do canal 3.</p>
+    </div>
+
+    <div style="margin-top:22px;">
+      <table class="t8">
+        <tr><th style="width:40%;">O que ele faz</th><th>O que ele NÃO faz</th></tr>
+        <tr><td>Roda jogos de SNES (arquivos chamados <b>ROMs</b>)</td><td>Não traz nenhum jogo — cada um usa os seus</td></tr>
+        <tr><td>Se parece com um console: TV, painel, cartucho, estante</td><td>Não é um videogame físico nem liga numa TV</td></tr>
+        <tr><td>Salva progresso, aplica cheats, rastreia conquistas</td><td>Não “melhora” os jogos — roda como o original</td></tr>
+        <tr><td>Baixa sozinho o que falta para funcionar</td><td>Não precisa de internet para jogar (só no começo)</td></tr>
+      </table>
+    </div>
+
+    <div class="cols2" style="margin-top:22px;">
+      <div class="box">
+        <span class="box-tag">UMA DIVISÃO IMPORTANTE</span>
+        <p style="margin-bottom:0;">Emuladores têm duas metades: o <b>frontend</b> (a parte que você vê:
+        janelas, menus, a estante) e o <b>core</b> ou <b>núcleo</b> (o motor que roda o
+        jogo). O SixteeN é um frontend caprichado — o motor vem de fora,
+        como você vai ver na página 6.</p>
+      </div>
+      <div class="box dica">
+        <span class="box-tag">POR QUE “SNES”?</span>
+        <p style="margin-bottom:0;">SNES é a sigla em inglês para Super Nintendo
+        (<span class="mono" style="font-size:11px;">Super Nintendo Entertainment System</span>).
+        O nome do app é, literalmente, “a experiência Super Nintendo”.</p>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>O que é um emulador</span></div>
+</div>
+
+<!-- ============ PÁGINA 3 — CONSOLE DE MENTIRA ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">03 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">02</span><span class="sec-title">UM CONSOLE DE MENTIRA</span></div>
+    <div class="sec-sub">Cada peça real tem uma gêmea digital</div>
+
+    <p class="lead" style="margin-top:18px;">
+      A melhor forma de entender o app é compará-lo ao console de verdade.
+      Cada peça do aparelho antigo tem uma correspondente dentro do programa:
+    </p>
+
+    <table class="t8" style="margin-top:16px;">
+      <tr><th style="width:33%;">No console real…</th><th>No SixteeN…</th></tr>
+      <tr><td><b>A TV de tubo</b>, ligada no canal 3</td><td>Um <b>desenho na janela</b>: curvatura, brilho e ruído imitam o tubo. O app redesenha tudo a cada instante — não é um vídeo.</td></tr>
+      <tr><td><b>A placa-mãe</b>, que roda o jogo</td><td>O <b>núcleo snes9x</b>, um motor que o app carrega enquanto funciona (pág. 6).</td></tr>
+      <tr><td><b>O cartucho</b>, com o jogo gravado</td><td>O <b>arquivo de ROM</b> na pasta <code>roms/</code> — e um catálogo que conhece nome, capa e estatísticas de cada um.</td></tr>
+      <tr><td><b>O slot e as chaves</b> Power/Reset/Eject</td><td><b>Botões desenhados</b> no painel — mas que obedecem às mesmas regras do hardware: ejetar só desligado!</td></tr>
+      <tr><td><b>O controle</b> plugado na porta 1</td><td>O <b>gamepad USB/Bluetooth</b> (ou o teclado), traduzido para as “portas” do console imaginário.</td></tr>
+      <tr><td><b>A memória de bateria</b> do cartucho, que guarda o save</td><td>Um arquivo <code>sram.srm</code> por jogo, gravado sozinho a cada ~10 segundos.</td></tr>
+    </table>
+
+    <div class="box" style="margin-top:22px;">
+      <span class="box-tag">O DETALHE QUE IMPRESSIONA</span>
+      <p style="margin-bottom:0;">Nada do que você vê é uma imagem pronta ou um vídeo. Cada quadro do jogo
+      passa por um <b>filtro que imita o sinal de TV antigo</b> (pág. 5) e é desenhado
+      no “tubo” com curvatura e scanlines. Cada botão é um desenho com teste de
+      clique feito à mão. É um cenário montado quadro a quadro — por isso a
+      imersão funciona.</p>
+    </div>
+
+    <div class="cols2" style="margin-top:20px;">
+      <div class="shot"><img src="assets/screenshot.jpg" alt="Jogo rodando no tubo CRT com painel"></div>
+      <div style="display:flex; flex-direction:column; justify-content:center;">
+        <div class="shotcap" style="margin-top:0;">Fig. 1 — O jogo no “tubo” e o painel ao lado.</div>
+        <p style="font-size:12.5px; margin-top:10px;">Tudo nesta foto é desenho — do reflexo do tubo ao
+        cartucho no slot. A única coisa “de verdade” é o jogo rodando dentro,
+        frame a frame.</p>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Console de mentira</span></div>
+</div>
+
+<!-- ============ PÁGINA 4 — A JORNADA DE UM JOGO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">04 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">03</span><span class="sec-title">A JORNADA DE UM JOGO</span></div>
+    <div class="sec-sub">Do arquivo na pasta ao frame na TV</div>
+
+    <div class="cols2" style="margin-top:18px; gap:26px; align-items:start;">
+      <div class="fluxo">
+        <div class="etapa"><div class="n">1</div><div><b>O cartucho chega</b><p>Você copia o arquivo do jogo para a pasta <code>roms/</code>. Pode ser solto ou zipado — o app abre o zip em memória, sem descompactar.</p></div></div>
+        <div class="etapa"><div class="n">2</div><div><b>O app tira a impressão digital</b><p>Calcula dois <b>hashes</b> (CRC32 e SHA1) — números que identificam o conteúdo do arquivo. É a identidade do jogo, imune a renomeações.</p></div></div>
+        <div class="etapa"><div class="n">3</div><div><b>Ganha crachá e uniforme</b><p>Com o hash em mãos, o catálogo busca o nome oficial, ano e editora (DAT No-Intro ou tabela embutida), a capa em <code>assets/</code> e suas estatísticas de jogo.</p></div></div>
+        <div class="etapa"><div class="n">4</div><div><b>Entra na estante</b><p>O jogo aparece na lista, pronto para ser escolhido. Clicar nele “insere o cartucho” no slot.</p></div></div>
+        <div class="etapa"><div class="n">5</div><div><b>POWER: o núcleo assume</b><p>Os bytes da ROM vão para o snes9x, que passa a gerar quadros de vídeo e som — o jogo “vivo” dentro do app.</p></div></div>
+        <div class="etapa"><div class="n">6</div><div><b>Maquiagem de TV antiga</b><p>Cada quadro passa pelo filtro NTSC e pelo “tubo” curvo antes de aparecer; o som segue direto para as caixas. Seus saves são gravados por baixo, em silêncio.</p></div></div>
+      </div>
+      <div>
+        <div class="box">
+          <span class="box-tag">O QUE É UM “FRAME”?</span>
+          <p style="margin-bottom:0;">Um <b>frame</b> (quadro) é uma imagem solta, como uma fotografia do
+          jogo num instante. Encadeadas rápido (~60 por segundo), viram
+          movimento — igual cinema. O app trata cada frame com carinho
+          individual: recebe do núcleo, embeleza, exibe.</p>
+        </div>
+        <div class="box tranquilo" style="margin-top:16px;">
+          <span class="box-tag">E O SAVE?</span>
+          <p style="margin-bottom:0;">Dois níveis: a <b>memória de bateria</b> do jogo (o “Salvar” de dentro
+          do jogo) é gravada sozinha; e os <b>save states</b> — fotos completas do
+          instante, 10 slots por jogo — ficam por conta dos botões Salvar e
+          Carregar do painel.</p>
+        </div>
+        <div class="box dica" style="margin-top:16px;">
+          <span class="box-tag">MUDOU O NOME DO ARQUIVO?</span>
+          <p style="margin-bottom:0;">Nada se perde: a identidade do jogo é o <b>hash</b> (conteúdo), não o
+          nome. Já os saves são amarrados ao nome do arquivo — por isso o botão
+          “Renomear ROMs” das Configurações leva tudo junto ao renomear.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>A jornada de um jogo</span></div>
+</div>
+
+<!-- ============ PÁGINA 5 — A EQUIPE DE BASTIDORES ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">05 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">04</span><span class="sec-title">A EQUIPE DE BASTIDORES</span></div>
+    <div class="sec-sub">Seis módulos, seis profissões</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O programa é dividido em seis <b>módulos</b> — caixinhas de código, cada uma
+      com uma profissão bem definida. Pense numa produção de teatro:
+    </p>
+
+    <div class="cols3" style="margin-top:16px;">
+      <div class="team">
+        <span class="papel">DIREÇÃO</span>
+        <h3>app</h3>
+        <p>O diretor: comanda as telas (inicial, estante, jogo), o roteiro dos
+        cliques e as atualizações. É o módulo que “contrata” todos os outros.</p>
+      </div>
+      <div class="team">
+        <span class="papel">CENOGRAFIA</span>
+        <h3>platform</h3>
+        <p>O cenógrafo: desenha a TV de tubo, o gabinete, a estante e o livro de
+        anotações; toca os sons e lê mouse, teclado e controles.</p>
+      </div>
+      <div class="team">
+        <span class="papel">TRADUÇÃO</span>
+        <h3>emulation</h3>
+        <p>O intérprete: é quem carrega o núcleo snes9x e conversa com ele —
+        entrega a ROM, recebe quadros e som, aplica cheats e cuida dos saves.</p>
+      </div>
+    </div>
+    <div class="cols3" style="margin-top:16px;">
+      <div class="team">
+        <span class="papel">INVESTIGAÇÃO</span>
+        <h3>domain</h3>
+        <p>O detetive: identifica cada ROM pelas impressões digitais (hashes),
+        mantém o catálogo da estante e conhece os nomes oficiais dos jogos.</p>
+      </div>
+      <div class="team">
+        <span class="papel">JULGAMENTO</span>
+        <h3>ra</h3>
+        <p>O juiz de conquistas: a cada quadro, confere na memória do jogo se
+        alguma missão do RetroAchievements acabou de ser completada.</p>
+      </div>
+      <div class="team">
+        <span class="papel">MAQUIAGEM</span>
+        <h3>ntsc</h3>
+        <p>O maquiador: aplica em cada quadro o filtro que imita o sinal de TV
+        antigo — aquele charme de “video game na TV de tubo”.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:22px;" class="box roxo">
+      <span class="box-tag">E A LINGUAGEM?</span>
+      <p style="margin-bottom:0;">Tudo isso é escrito em <b>Rust</b>, uma linguagem moderna famosa por ser
+      rápida e difícil de derrubar. O app inteiro é um único programinha —
+      nada de instalar dependências, serviços ou bancos de dados. Portátil
+      de verdade: a pasta é o console.</p>
+    </div>
+
+    <div class="cols2" style="margin-top:20px;">
+      <div class="box">
+        <span class="box-tag">HÁ TAMBÉM OS “FANTASMAS”</span>
+        <p style="margin-bottom:0;">Dois componentes externos viajam embutidos: o <b>rcheevos</b> (o
+        aparelho de juiz das conquistas, feito em linguagem C) e o <b>blargg NTSC</b>
+        (o filtro de TV). Eles são bibliotecas prontas, com créditos e licenças
+        no arquivo THIRD-PARTY-NOTICES do projeto.</p>
+      </div>
+      <div class="box dica">
+        <span class="box-tag">REGRAS DA CASA</span>
+        <p style="margin-bottom:0;">A divisão é disciplinada: o cenógrafo não sabe julgar conquistas; o
+        detetive não desenha nada; cada módulo só enxerga o que precisa. É essa
+        disciplina que torna o app fácil de testar e difícil de quebrar.</p>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Equipe de bastidores</span></div>
+</div>
+
+<!-- ============ PÁGINA 6 — O CÉREBRO EMPRESTADO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">06 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">05</span><span class="sec-title">O CÉREBRO EMPRESTADO</span></div>
+    <div class="sec-sub">O núcleo snes9x e o contrato libretro</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O SixteeN <b>não sabe emular um SNES</b> — e isso é proposital. Quem roda
+      os jogos é o <b>snes9x</b>, um emulador veterano e afinado, distribuído como um
+      arquivo separado (o <b>núcleo</b>). O app carrega esse arquivo enquanto funciona,
+      como quem <b>encaixa um chip num console ligado</b>.
+    </p>
+
+    <div class="cols2" style="margin-top:16px; gap:24px;">
+      <div>
+        <table class="t8">
+          <tr><th>A conversa entre os dois</th></tr>
+          <tr><td>O app diz: “aqui está a ROM” e “o jogador apertou A”</td></tr>
+          <tr><td>O núcleo responde: “aqui está o quadro de vídeo” e “aqui está o som”</td></tr>
+          <tr><td>O app embeleza o quadro (filtro + tubo) e mostra na TV</td></tr>
+          <tr><td>O núcleo pergunta: “quer congelar o instante?” — é um save state</td></tr>
+          <tr><td>O app consulta: “como está a memória do jogo?” — é o save de bateria</td></tr>
+        </table>
+        <p class="mono" style="font-size:10px; margin-top:10px; color:var(--tinta-fraca);">
+          Esse “tombo de funções combinadas” tem nome: o contrato <b>libretro</b> —
+          um padrão que faz qualquer núcleo funcionar em qualquer frontend.
+        </p>
+      </div>
+      <div>
+        <div class="box">
+          <span class="box-tag">POR QUE NÃO VEM NO PACOTE?</span>
+          <p style="margin-bottom:0;">Licença: o snes9x não permite distribuição comercial, e o projeto
+          prefere não distribuí-lo. Por isso o app tem o botão de download —
+          você busca o núcleo direto da fonte oficial, com um clique.</p>
+        </div>
+        <div class="box tranquilo" style="margin-top:16px;">
+          <span class="box-tag">TROCA DE PEÇA COM O MOTOR LIGADO</span>
+          <p style="margin-bottom:0;">Para atualizar o núcleo sem derrubar o app, a peça nova chega num
+          arquivo temporário e <b>entra no lugar por renomeação atômica</b> — de uma
+          vez só, sem meio-estado. O mesmo truque é usado na atualização do
+          próprio app.</p>
+        </div>
+        <div class="box dica" style="margin-top:16px;">
+          <span class="box-tag">E SE EU TROCAR DE NÚCLEO?</span>
+          <p style="margin-bottom:0;">Dá para apontar outro arquivo de núcleo (opção avançada de linha de
+          comando), mas o snes9x é a escolha afinada: é nele que os testes do
+          app são feitos.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box roxo" style="margin-top:20px;">
+      <span class="box-tag">O ACABAMENTO QUE DÁ O CHARME</span>
+      <p style="margin-bottom:0;">O snes9x entrega quadros “limpos”, de computador. O filtro <b>NTSC</b> do
+      app adiciona o borrão e o tremido do sinal de TV antigo; a curvatura e as
+      scanlines do “tubo” completam a ilusão. O resultado é o jogo com a cara
+      que ele tinha na sala de casa em 1994 — e não numa janela de PC.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>O cérebro emprestado</span></div>
+</div>
+
+<!-- ============ PÁGINA 7 — ONDE MORA TUDO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">07 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">06</span><span class="sec-title">ONDE MORA TUDO</span></div>
+    <div class="sec-sub">A pasta do console — o mapa do tesouro</div>
+
+    <div class="cols2" style="margin-top:18px; gap:24px;">
+      <div>
+        <p>O app não se espalha pelo sistema: tudo vive em <b>uma pasta só</b> (criada
+        na primeira execução). Conheça o mapa:</p>
+        <table class="t8">
+          <tr><th style="width:44%;">Pasta</th><th>O que mora lá</th></tr>
+          <tr><td><code>roms/</code></td><td>Seus jogos (a “gaveta de cartuchos”)</td></tr>
+          <tr><td><code>core/</code></td><td>O núcleo snes9x baixado</td></tr>
+          <tr><td><code>assets/</code></td><td>Capas, logos, cartuchos e manuais, por jogo</td></tr>
+          <tr><td><code>saves/</code></td><td>Save de bateria, save states, cheats e tempo de jogo</td></tr>
+          <tr><td><code>notes/</code></td><td>Anotações de texto e os prints de cada jogo</td></tr>
+          <tr><td><code>retroachievements/</code></td><td>Progresso das conquistas, badges e cache</td></tr>
+          <tr><td><code>config/</code></td><td>Preferências, catálogo da estante e caches de identificação</td></tr>
+          <tr><td><code>update/</code></td><td>Pacote de atualização baixado (some após aplicar)</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="box">
+          <span class="box-tag">ONDE FICA A PASTA-MÃE</span>
+          <table class="t8" style="box-shadow:none; margin-top:4px;">
+            <tr><th>Sistema</th><th>Endereço</th></tr>
+            <tr><td>macOS</td><td><code>Documentos/SixteeN</code></td></tr>
+            <tr><td>Windows</td><td>junto do <code>sixteen.exe</code></td></tr>
+            <tr><td>Linux</td><td><code>~/.local/share/SixteeN</code></td></tr>
+          </table>
+        </div>
+        <div class="box tranquilo" style="margin-top:16px;">
+          <span class="box-tag">BACKUP EM UMA FRASE</span>
+          <p style="margin-bottom:0;"><b>Copiou a pasta, levou o console.</b> Jogos, saves, notas, artes e
+          preferências viajam juntos — não há registro escondido em lugar
+          nenhum do sistema.</p>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">SEM BANCO DE DADOS</span>
+          <p style="margin-bottom:0;">Todos os arquivos são formatos comuns e legíveis: texto, JSON, TOML,
+          PNG. Se um deles corromper, o app não trava — recria a peça vazia e
+          segue o jogo. A estante, por exemplo, se reconstrói varrendo
+          <code>roms/</code> de novo.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box dica" style="margin-top:20px;">
+      <span class="box-tag">CURIOSIDADE DE DETETIVE</span>
+      <p style="margin-bottom:0;">A “ficha” de cada jogo na estante (<code>library.json</code>) é chaveada pela
+      <b>impressão digital</b> (SHA1) do arquivo, não pelo nome. Renomeou o arquivo?
+      A ficha continua valendo. Trocou o conteúdo? Aí sim é “outro jogo”.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Onde mora tudo</span></div>
+</div>
+
+<!-- ============ PÁGINA 8 — ATUALIZAÇÕES ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">08 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">07</span><span class="sec-title">O CONSOLE QUE SE ATUALIZA</span></div>
+    <div class="sec-sub">Três peças, três mecanismos — zero janelas no meio do jogo</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O app mantém-se novo sozinho, e sempre da mesma jeito gentil: uma
+      <b>setinha verde</b> acende na tela inicial, você clica quando quiser — e nada
+      de pop-up no meio da partida.
+    </p>
+
+    <div class="cols3" style="margin-top:18px;">
+      <div class="team">
+        <span class="papel">PEÇA 1</span>
+        <h3>O próprio app</h3>
+        <p>Consulta a página de Releases no GitHub, compara versões e baixa o
+        pacote do seu sistema. Instala na hora e pede para reiniciar.</p>
+      </div>
+      <div class="team">
+        <span class="papel">PEÇA 2</span>
+        <h3>O núcleo snes9x</h3>
+        <p>Compara o número de versão que o próprio núcleo reporta com o
+        repositório oficial. Só acende a seta quando existe melhoria de
+        verdade — não a cada build noturno.</p>
+      </div>
+      <div class="team">
+        <span class="papel">PEÇA 3</span>
+        <h3>O catálogo de nomes</h3>
+        <p>O DAT No-Intro (a lista oficial de jogos) também pode ser baixado e
+        renovado pela tela de boas-vindas. É o que dá nome, ano e editora aos
+        jogos da estante.</p>
+      </div>
+    </div>
+
+    <div class="cols2" style="margin-top:22px;">
+      <div class="box">
+        <span class="box-tag">A ARTE DA TROCA DE PEÇA</span>
+        <p style="margin-bottom:8px;">Como trocar uma peça com o motor ligando? O app nunca escreve
+        “por cima” de um arquivo em uso. A peça nova chega com nome
+        temporário e <b>entra no lugar com uma renomeação atômica</b> — instantânea
+        e à prova de queda de energia.</p>
+        <p style="margin-bottom:0;">Se o app fechar antes de concluir, a peça pendente é instalada na
+        <b>próxima abertura</b>. Nada se perde.</p>
+      </div>
+      <div>
+        <div class="box tranquilo">
+          <span class="box-tag">PACOTE VIAJANTE</span>
+          <p style="margin-bottom:0;">O download da atualização fica em <code>update/</code> e some depois de
+          aplicado. No macOS, o app é trocado dentro de Aplicativos; no Linux,
+          o AppImage se substitui sozinho.</p>
+        </div>
+        <div class="box" style="margin-top:16px; background:#faeae8;">
+          <span class="box-tag" style="background:var(--vermelho);">EXCEÇÃO WINDOWS</span>
+          <p style="margin-bottom:0;">A atualização automática do <b>app</b> não está disponível no Windows —
+          a tela avisa e orienta a baixar o pacote novo no GitHub. O núcleo e o
+          DAT continuam se atualizando pela interface normalmente.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box dica" style="margin-top:20px;">
+      <span class="box-tag">DETALHE DE ACURÁCIA</span>
+      <p style="margin-bottom:0;">O número que aparece no nameplate (“snes9x 1.63 fae2fea”) é a versão
+      que o próprio núcleo declara — os números finais são o código da “foto”
+      (commit) do desenvolvimento. Por isso duas atualizações seguidas podem
+      trazer o mesmo número: significa que o snes9x não mudou nesse meio-tempo.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Atualizações</span></div>
+</div>
+
+<!-- ============ PÁGINA 9 — O JUIZ DAS CONQUISTAS ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">09 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">08</span><span class="sec-title">O JUIZ DAS CONQUISTAS</span></div>
+    <div class="sec-sub">RetroAchievements, explicado sem mistério</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O <b>RetroAchievements</b> é um serviço gratuito, feito pela comunidade, que
+      cria <b>conquistas para jogos retrô</b> — missões do tipo “termine a fase sem
+      perder vida”. O app fala com ele em quatro passos:
+    </p>
+
+    <div class="cols2" style="margin-top:16px; gap:24px;">
+      <div class="fluxo">
+        <div class="etapa"><div class="n">1</div><div><b>Identidade pela digital</b><p>O app calcula a impressão digital MD5 da sua ROM — o mesmo “hash” que o serviço usa. Jogou com a versão certa? As conquistas correspondem.</p></div></div>
+        <div class="etapa"><div class="n">2</div><div><b>Missões lidas da memória</b><p>Cada conquista é uma condição sobre a <b>memória do jogo</b> (ex.: “o byte X vale 10”). A cada quadro, o app entrega a memória real ao juiz rcheevos — quem completa, dispara.</p></div></div>
+        <div class="etapa"><div class="n">3</div><div><b>Festa na TV</b><p>Conquista desbloqueada: som, badge e o aviso deslizando no queixo. O evento é gravado no disco <b>antes</b> do aviso — se o app cair, a conquista não se perde nem duplica.</p></div></div>
+        <div class="etapa"><div class="n">4</div><div><b>Envio com rede de segurança</b><p>O ponto é enviado ao serviço por uma “assistente” em segundo plano, com 3 tentativas. Esgotadas, fica numa lista de pendências para a próxima vez.</p></div></div>
+      </div>
+      <div>
+        <div class="shot"><img src="assets/ra-notificacao.jpg" alt="Notificação de conquista"></div>
+        <div class="shotcap">Fig. 2 — O aviso de conquista: badge, nome e pontos.</div>
+        <div class="box" style="margin-top:14px;">
+          <span class="box-tag">HARDCORE × SOFTCORE</span>
+          <p style="margin-bottom:0;"><b>Hardcore</b> é o modo valendo: sem cheats, sem save states, sem
+          atalhos — e as conquistas valem o selo duro. <b>Softcore</b> é o relaxado:
+          tudo permitido, conquistas contam com selo leve. Você escolhe nas
+          Configurações; o padrão é valendo.</p>
+        </div>
+        <div class="box roxo" style="margin-top:14px;">
+          <span class="box-tag">SUA SENHA ESTÁ SEGURA</span>
+          <p style="margin-bottom:0;">Ao logar, a senha vira um <b>token</b> (chave de acesso) e só o token é
+          guardado — a senha nunca toca o disco. Apagar o token do arquivo de
+          configuração desloga a conta.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Conquistas</span></div>
+</div>
+
+<!-- ============ PÁGINA 10 — GLOSSÁRIO A–J ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">10 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">09</span><span class="sec-title">GLOSSÁRIO (1 DE 2)</span></div>
+    <div class="sec-sub">Termos técnicos em português claro — A a J</div>
+
+    <div style="margin-top:18px;" class="gl">
+      <div class="term"><b>API</b><p>“Porta de serviço”: o jeito padronizado de um programa pedir dados a um serviço pela internet.</p></div>
+      <div class="term"><b>AppImage</b><p>Formato de app para Linux em arquivo único: baixou, marcou como executável, rodou. Sem instalação.</p></div>
+      <div class="term"><b>Badge</b><p>O selinho com a arte de cada conquista, mostrado nas notificações e na estante.</p></div>
+      <div class="term"><b>Biblioteca dinâmica</b><p>Arquivo com “peças de programa” que o app carrega enquanto roda (.dylib no macOS, .dll no Windows, .so no Linux) — como encaixar um chip.</p></div>
+      <div class="term"><b>Cabeçalho de copiadora</b><p>Bloco extra de 512 bytes que hardware de cópia antigo adicionava no começo das ROMs. O app o descarta ao “tirar a digital”.</p></div>
+      <div class="term"><b>Cheat</b><p>Código que altera o jogo (vidas infinitas, fase especial…). Os do app vêm de um banco público curado, já embutido.</p></div>
+      <div class="term"><b>Commit</b><p>Uma “foto” do desenvolvimento de um programa, com código identificador. O núcleo declara a sua no próprio nome.</p></div>
+      <div class="term"><b>Core (núcleo)</b><p>O motor que emula o console. O SixteeN usa o snes9x, baixado pela interface.</p></div>
+      <div class="term"><b>CRC32</b><p>Impressão digital curta do arquivo (8 dígitos). O catálogo a usa para achar o nome oficial do jogo.</p></div>
+      <div class="term"><b>CRT</b><p>A tecnologia das TVs de tubo. O app desenha um tubo na tela — curvatura, brilho e scanlines — por nostalgia.</p></div>
+      <div class="term"><b>DAT</b><p>Arquivo-catálogo: a lista oficial de jogos com seus hashes e nomes canônicos. O do app vem do No-Intro.</p></div>
+      <div class="term"><b>DMG</b><p>O “pacote de instalação” do macOS: abre-se o arquivo e arrasta-se o app para Aplicativos.</p></div>
+      <div class="term"><b>Emulador</b><p>Programa que imita um aparelho (console, fliperama…) em um computador.</p></div>
+      <div class="term"><b>Frame (quadro)</b><p>Uma imagem solta do jogo; ~60 por segundo viram movimento. A unidade de trabalho do app.</p></div>
+      <div class="term"><b>Frontend</b><p>A parte do emulador que você vê e opera: janelas, menus, estante. O SixteeN é um frontend.</p></div>
+      <div class="term"><b>Fullscreen</b><p>Tela cheia: o app ocupa o monitor inteiro. Padrão aqui — desligável nas Configurações.</p></div>
+      <div class="term"><b>Gamepad</b><p>Controle de videogame. O app aceita até dois, USB ou Bluetooth.</p></div>
+      <div class="term"><b>GitHub</b><p>O site onde o código do projeto mora e de onde saem os Releases para download.</p></div>
+      <div class="term"><b>Hardcore / Softcore</b><p>Os dois modos de conquistas: valendo (sem cheats nem save states) ou relaxado (tudo permitido).</p></div>
+      <div class="term"><b>Hash</b><p>Número calculado a partir do conteúdo de um arquivo. Mudou o conteúdo, muda o hash: é a impressão digital.</p></div>
+    </div>
+    <p class="mono" style="font-size:9.5px; color:var(--tinta-fraca); margin-top:14px;">continua na página 11 ›</p>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Glossário A–J</span></div>
+</div>
+
+<!-- ============ PÁGINA 11 — GLOSSÁRIO J–Z ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">11 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">10</span><span class="sec-title">GLOSSÁRIO (2 DE 2)</span></div>
+    <div class="sec-sub">Termos técnicos em português claro — J a Z</div>
+
+    <div style="margin-top:14px; gap:11px 22px;" class="gl">
+      <div class="term"><b>JSON</b><p>Formato de arquivo em “listinha organizada” que programas leem com facilidade. A ficha de cada jogo é um.</p></div>
+      <div class="term"><b>Libretro</b><p>O “contrato de encaixe” entre núcleos e frontends: um padrão de funções que faz o snes9x funcionar dentro do app.</p></div>
+      <div class="term"><b>Log</b><p>O diário do programa: anota o que está fazendo enquanto faz. Sai no terminal, para quem for investigar um problema.</p></div>
+      <div class="term"><b>MD5</b><p>Impressão digital longa (32 dígitos) — a que o RetroAchievements usa para reconhecer a sua ROM.</p></div>
+      <div class="term"><b>Memória de bateria (SRAM)</b><p>A memória do cartucho que guarda o save do jogo. No app, vira o arquivo <code>sram.srm</code>, gravado sozinho.</p></div>
+      <div class="term"><b>No-Intro</b><p>Grupo que cataloga jogos com nomes oficiais e limpos. Empresta o nome ao padrão de arquivos e ao DAT do app.</p></div>
+      <div class="term"><b>NTSC</b><p>O padrão de sinal de TV colorida usado pelo SNES nas Américas e no Japão. O filtro do app imita esse sinal.</p></div>
+      <div class="term"><b>OSD</b><p>“On-screen display”: aviso desenhado sobre a imagem, como a notificação de conquista no queixo da TV.</p></div>
+      <div class="term"><b>Pixel</b><p>O pontinho que compõe imagens digitais. O jogo de SNES tem 256×224 deles — e nenhum a mais.</p></div>
+      <div class="term"><b>PNG / JPG</b><p>Formatos de imagem. Suas capas, logos e cartuchos podem ser qualquer um dos dois.</p></div>
+      <div class="term"><b>Release</b><p>Uma versão pronta para baixar de um programa, empacotada e etiquetada (ex.: “versão 1.1.5”).</p></div>
+      <div class="term"><b>Renomeação atômica</b><p>Troca de arquivo que acontece de uma vez só, sem meio-estado — o segredo das atualizações à prova de queda de energia.</p></div>
+      <div class="term"><b>ROM</b><p>O arquivo que contém o jogo — o “cartucho digital”. Formatos comuns: .sfc, .smc, .zip.</p></div>
+      <div class="term"><b>Run-ahead</b><p>Recurso que roda quadros com antecedência para reduzir o atraso entre apertar o botão e ver a reação. Desligado no hardcore.</p></div>
+      <div class="term"><b>Save state</b><p>Foto congelada do exato instante do jogo — que pode ser guardada e retomada. 10 slots por jogo.</p></div>
+      <div class="term"><b>Scanline</b><p>A linha horizontal de imagem das TVs de tubo. Desenhadas de leve no app para dar textura de época.</p></div>
+      <div class="term"><b>SDL</b><p>A caixa de ferramentas que o app usa para desenhar na tela, tocar som e ler mouse, teclado e controles.</p></div>
+      <div class="term"><b>SHA1</b><p>Outra impressão digital, ainda mais longa — é a identidade de cada jogo no catálogo da estante.</p></div>
+      <div class="term"><b>Token</b><p>Chave de acesso que substitui a senha nas conversas com um serviço. O app guarda o token, nunca a senha.</p></div>
+      <div class="term"><b>TOML</b><p>Formato de arquivo de preferências, legível por humanos. É o <code>sixteen.cfg</code>, na pasta config.</p></div>
+      <div class="term"><b>TOSEC</b><p>Outro grupo catalogador de jogos retrô. A tabela de ano e editora embutida no app é derivada dele.</p></div>
+      <div class="term"><b>ZIP</b><p>Pacote compactado. O app abre ROMs zipadas direto, sem você descompactar nada.</p></div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Glossário J–Z</span></div>
+</div>
+
+<!-- ============ PÁGINA 12 — CONTRA-CAPA ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">12 / 12</span></div>
+  <div class="inner">
+    <div><span class="sec-num">11</span><span class="sec-title">FICHA TÉCNICA</span></div>
+    <div class="sec-sub">Os créditos do filme, versão engenharia</div>
+
+    <table class="t8" style="margin-top:18px;">
+      <tr><th style="width:34%;">Peça</th><th>Crédito</th></tr>
+      <tr><td><b>Linguagem do app</b></td><td><b>Rust</b> — rápida, moderna e difícil de derrubar</td></tr>
+      <tr><td><b>Palco e som</b></td><td><b>SDL3</b> — desenha a janela, toca o áudio, lê mouse e controles</td></tr>
+      <tr><td><b>O cérebro</b></td><td><b>snes9x</b> (núcleo libretro) — baixado pela interface, não distribuído junto</td></tr>
+      <tr><td><b>O juiz</b></td><td><b>rcheevos</b> — motor de conquistas do RetroAchievements</td></tr>
+      <tr><td><b>O maquiador</b></td><td><b>snes_ntsc</b> (blargg) — o filtro de sinal de TV antigo</td></tr>
+      <tr><td><b>Licenças</b></td><td>App em MIT; filtro em LGPL; cheats do libretro-database em CC BY-SA — créditos em THIRD-PARTY-NOTICES.md</td></tr>
+      <tr><td><b>Pacotes</b></td><td>DMG (macOS), zip (Windows), AppImage (Linux) — gerados a cada release no GitHub</td></tr>
+    </table>
+
+    <div class="cols2" style="margin-top:22px;">
+      <div class="box">
+        <span class="box-tag">PARA IR MAIS FUNDO</span>
+        <p style="margin-bottom:6px;">Os companheiros deste guia, na pasta <code>docs/</code> do projeto:</p>
+        <p style="margin-bottom:6px;"><b>manual-do-usuario.md</b> — o manual completo em texto</p>
+        <p style="margin-bottom:6px;"><b>manual-tecnico.md</b> — a versão integral para quem quiser os detalhes de engenharia</p>
+        <p style="margin-bottom:0;"><b>CHANGELOG.md</b> — a história versão por versão</p>
+      </div>
+      <div class="box dica">
+        <span class="box-tag">UM ÚLTIMO SEGREDO</span>
+        <p style="margin-bottom:0;">Na tela inicial, o famoso código Konami (<b>↑ ↑ ↓ ↓ ← → ← → B A</b>)
+        abre o menu Dev, com um jogo de exemplo para testar o console
+        recém-instalado. Agora você já sabe o que ele faz — e por dentro,
+        que ele é só um download zipado com direito a pastas próprias.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:34px; border-top:3px solid var(--tinta); padding-top:24px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div class="pixel" style="font-size:13px; color:var(--roxo); line-height:1.8;">FIM DO<br>GUIA</div>
+        <p class="mono" style="font-size:9.5px; color:var(--tinta-fraca); margin-top:12px;">
+          Por dentro do SixteeN · companheiro do Manual do Jogador<br>
+          Projeto pessoal, sem fins comerciais · 2026
+        </p>
+      </div>
+      <div class="selo">
+        <div class="a">100% LIVRE<br>DE JARGÃO<br>INEXPLICADO</div>
+        <div class="b">GARANTIA DO GLOSSÁRIO</div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>Por dentro do SixteeN</span><span>Ficha técnica</span></div>
+</div>
+
+</body>
+</html>

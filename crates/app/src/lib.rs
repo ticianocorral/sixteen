@@ -1,16 +1,16 @@
-//! Shared bits for the `xperience-app` binaries.
+//! Shared bits for the `sixteen-app` binaries.
 //!
-//! - [`config`] — `xperience.cfg` (run-ahead, fullscreen, key binds).
+//! - [`config`] — `sixteen.cfg` (run-ahead, fullscreen, key binds).
 //! - [`core_update`] — download/update the snes9x core from the libretro buildbot.
 //! - [`dirs`] — the portable app layout (one root: next to the executable
-//!   on Windows/Linux, `~/Documents/SNES Xperience` on macOS).
+//!   on Windows/Linux, `~/Documents/SixteeN` on macOS).
 //! - [`devmenu`] — the dev-mode menu (Konami-code secret; blank for now).
-//! - [`idle`] — the idle/root screen (`xperience`'s home: TV off, "Inserir cartucho").
+//! - [`idle`] — the idle/root screen (`sixteen`'s home: TV off, "Inserir cartucho").
 //! - [`rom_rename`] — rename ROMs to their canonical No-Intro name (settings-screen action).
-//! - [`runner`] — the emulator run-loop (`emu-run`, and `xperience` between games).
-//! - [`settings`] — the settings screen (`xperience` only, opened with `O` on the shelf).
+//! - [`runner`] — the emulator run-loop (`emu-run`, and `sixteen` between games).
+//! - [`settings`] — the settings screen (`sixteen` only, opened with `O` on the shelf).
 //! - [`sfx`] — the console's embedded foley sounds (insert/eject/power/reset).
-//! - [`shelf`] — the selector grid (`selector`, and `xperience` between games).
+//! - [`shelf`] — the selector grid (`selector`, and `sixteen` between games).
 //! - [`update_check`] — startup checks for a newer release/snes9x core.
 
 pub mod config;
@@ -30,7 +30,7 @@ pub mod shelf;
 pub mod update_check;
 
 /// A logo oficial do RetroAchievements (o favicon do site, embutida) — o
-/// runner/bin registra no `Cabinet` com [`xperience_platform::RA_LOGO_IMG`]
+/// runner/bin registra no `Cabinet` com [`sixteen_platform::RA_LOGO_IMG`]
 /// para o badge do queixo. Vermelho/dourado/azul: a marca lida na própria
 /// TV.
 pub const RA_ICON_PNG: &[u8] = include_bytes!("../assets/ra-icon.png");

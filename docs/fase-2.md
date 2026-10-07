@@ -10,12 +10,12 @@ Progresso:
 - [x] **Navegação por gamepad**
 - [x] **Preenchimento progressivo** (placeholder → capa conforme decodifica)
 - [x] **Busca por digitação**
-- [x] **Binário `xperience` único** (estante → jogo → estante, sem shell)
+- [x] **Binário `sixteen` único** (estante → jogo → estante, sem shell)
 - [x] **Busca de metadados sob demanda** (o jogo em foco é scrapeado na hora)
 - [x] **Ficha completa** (logo `wheel` no topo quando existe; sinopse longa rola
       sozinha dentro de uma região recortada)
 
-## Catálogo (`xperience-domain`)
+## Catálogo (`sixteen-domain`)
 
 ### `library::scan(dir)`
 
@@ -26,7 +26,7 @@ calcula CRC32/MD5/SHA1 de cada um (sem header de copiadora) e devolve
 ### `Catalog` — SQLite
 
 Cache local agressivo (§4.2), aberto em
-`$HOME/.local/share/snes-xperience/catalog.db` por padrão. Duas tabelas:
+`$HOME/.local/share/sixteen/catalog.db` por padrão. Duas tabelas:
 
 | `rom` | `sha1` (PK), `crc32`, `path`, `size`, `internal_name`, `added_at`, `last_played_at`, `play_count` |
 |---|---|
@@ -70,7 +70,7 @@ library list                 [--catalog PATH] [--order shelf|name]
 ## Seletor (`selector`)
 
 Estante rolável de capas + painel de detalhes à direita, tudo desenhado numa
-camada 2D mínima (`xperience-platform::Ui`): retângulos, texto 8×8 (`font8x8`,
+camada 2D mínima (`sixteen-platform::Ui`): retângulos, texto 8×8 (`font8x8`,
 sem fonte de sistema) e imagens com letterbox. Sem OSD/menu — feio que funciona.
 
 ```bash
@@ -99,15 +99,15 @@ selector [--catalog PATH] [--order shelf|name] [--no-scrape]
 - **Saída:** imprime o caminho da ROM escolhida no stdout e sai 0; cancelou,
   sai 1. `mark_played` é chamado na escolha.
 
-O laço da estante mora em `xperience_app::shelf`; o binário `selector` é só uma
+O laço da estante mora em `sixteen_app::shelf`; o binário `selector` é só uma
 casca fina em volta dele (imprime o caminho / código de saída). O download de
-arte (`download_art`) foi para `xperience_domain::art`, compartilhado com o
+arte (`download_art`) foi para `sixteen_domain::art`, compartilhado com o
 `library scrape` em lote.
 
-## Binário `xperience` — tudo junto
+## Binário `sixteen` — tudo junto
 
 ```bash
-xperience --core <lib> [--catalog DB] [--config config.toml]
+sixteen --core <lib> [--catalog DB] [--config config.toml]
           [--save-dir DIR] [--system-dir DIR] [--order shelf|name] [--runahead N]
           [--no-scrape]
 ```
@@ -120,21 +120,21 @@ Por dentro, reaproveita os dois laços fatiados em módulos de biblioteca:
 
 | Módulo | O quê | Também usado por |
 |---|---|---|
-| `xperience_app::shelf::run` | a estante; devolve `Pick::Play(path)` ou `Pick::Quit` | `selector` |
-| `xperience_app::runner::run_game` | o laço do emulador; devolve `GameExit::ToShelf` ou `GameExit::Quit` | `emu-run` |
+| `sixteen_app::shelf::run` | a estante; devolve `Pick::Play(path)` ou `Pick::Quit` | `selector` |
+| `sixteen_app::runner::run_game` | o laço do emulador; devolve `GameExit::ToShelf` ou `GameExit::Quit` | `emu-run` |
 
 O `Platform` (SDL) é criado uma vez e emprestado (`&mut`) pra cada tela — a
 janela da estante e a do jogo são criadas e destruídas a cada troca. A distinção
 "voltar" (Esc) × "encerrar" (fechar janela / Cmd-Q) veio de um `UiEvent` novo,
 `CloseRequested`, separado do `Quit`.
 
-Padrões ficam em `~/.local/share/snes-xperience/` (`catalog.db`, `saves/`).
+Padrões ficam em `~/.local/share/sixteen/` (`catalog.db`, `saves/`).
 
 ## Fase 2 — concluída
 
 Todos os itens do §6 do plano estão feitos: varredura + catálogo, estante com
 capas, navegação por gamepad, preenchimento progressivo, busca por digitação,
-scrape sob demanda, o binário `xperience` único e a ficha completa. O que falta
+scrape sob demanda, o binário `sixteen` único e a ficha completa. O que falta
 pro projeto é a **moldura** (Fase 3): o mesmo tubo CRT do `emu-run` como janela
 sempre presente, com a estante e o jogo desenhados dentro dela.
 
@@ -225,11 +225,11 @@ executável, com um caso especial no macOS pra um `.app` empacotado (o
 binário de verdade mora em `Nome.app/Contents/MacOS/`, três níveis dentro
 do bundle — `app_root()` detecta esse padrão e sobe até a pasta que contém
 o `Nome.app`, que é onde um usuário esperaria achar `roms/` no Finder).
-`xperience.rs::main` cria `roms/`, `core/`, `assets/{cover,logo,
+`sixteen.rs::main` cria `roms/`, `core/`, `assets/{cover,logo,
 cartridge}/`, `saves/`, `notes/` no boot, e copia (uma vez, sem sobrescrever)
 `saves/`/`notes/` do local antigo se existirem e o novo ainda estiver vazio
 — proteção de progresso de jogo de verdade, diferente do play-count (esse
-começa do zero, por decisão do usuário). `config.toml` virou `xperience.cfg`
+começa do zero, por decisão do usuário). `config.toml` virou `sixteen.cfg`
 (mesma sintaxe TOML por baixo, só nome/local novos — "cfg" aqui é a
 convenção de emulador tipo RetroArch, não formato diferente).
 
@@ -239,7 +239,7 @@ linha "ScreenScraper" das configurações virou "Núcleo": baixa/atualiza o
 (`buildbot.libretro.com/nightly/<plataforma>/<arquitetura>/latest/
 snes9x_libretro.<ext>.zip` — URLs confirmadas ao vivo pra macOS arm64/
 x86_64, Windows x86_64, Linux x86_64), numa thread em segundo plano (mesmo
-padrão thread+canal que o scrape usava, agora pro download). `xperience.rs`
+padrão thread+canal que o scrape usava, agora pro download). `sixteen.rs`
 não trava mais de cara sem um core — a checagem que existia em
 `parse_args()` saiu de lá; agora o app abre normal (tela inicial → estante
 → configurações) mesmo sem núcleo nenhum, e só avisa na hora de efetivamente
@@ -254,10 +254,10 @@ O `app_root()` descrito acima (subir do bundle até o `.app`) resolvia pra
 dentro de `/Aplicativos` depois de instalar pelo DMG — não é gravável/
 esperado nesse SO escrever dados de usuário ali. `dirs::app_root()` no
 macOS agora ignora a localização do executável por completo e usa sempre
-`~/Documents/SNES Xperience` (criada no primeiro uso); a detecção de
+`~/Documents/SixteeN` (criada no primeiro uso); a detecção de
 bundle `.app`/`Contents/MacOS` saiu de `dirs.rs`. Windows/Linux não
 mudaram — continuam com a pasta ao lado do executável, que já é gravável e
-óbvia nesses dois SOs. `xperience.rs::migrate_old_data` ganhou uma segunda
+óbvia nesses dois SOs. `sixteen.rs::migrate_old_data` ganhou uma segunda
 migração, só macOS: se a raiz antiga ao lado do `.app` (mesma detecção de
 bundle, agora só usada aqui) tiver `roms/`/`core/`/`assets/`/`saves/`/
 `notes/` e a nova em `~/Documents` ainda estiver vazia, copia uma vez —

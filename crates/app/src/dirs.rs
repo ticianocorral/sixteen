@@ -1,17 +1,17 @@
 //! Portable app layout: every folder the app uses lives in one root — no
 //! database. `roms/` (drop ROMs here), `core/` (the snes9x core), `assets/`
-//! (local cover/logo art), `saves/`, `notes/`, plus `xperience.cfg` and
+//! (local cover/logo art), `saves/`, `notes/`, plus `sixteen.cfg` and
 //! `library.json` at the root.
 //!
 //! macOS special case: the `.app` on this platform ships in `/Applications`
 //! (or wherever Finder drags it, often read-only-ish and not somewhere a
 //! user expects an app to scribble folders into). So on macOS the root
-//! isn't next to the executable at all — it's `~/Documents/SNES Xperience`,
+//! isn't next to the executable at all — it's `~/Documents/SixteeN`,
 //! created on first launch, same spirit as how a normal Mac app keeps its
 //! user data.
 //!
 //! Linux special case: AppImage is a read-only container that extracts to a
-//! temp directory. So on Linux the root is `~/.local/share/SNES Xperience`
+//! temp directory. So on Linux the root is `~/.local/share/SixteeN`
 //! (following XDG directory conventions), created on first launch. This
 //! also supports regular Linux builds next to the executable.
 //!
@@ -19,7 +19,6 @@
 //! a `.exe` anywhere the user put it is already writable and exactly where
 //! they'd look for `roms/` next to it.
 
-#[cfg(not(target_os = "linux"))]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -44,21 +43,21 @@ pub fn app_root() -> PathBuf {
     }
 }
 
-/// `~/Documents/SNES Xperience` — split out from `app_root` so it can be
+/// `~/Documents/SixteeN` — split out from `app_root` so it can be
 /// unit-tested with a synthetic home directory.
 #[cfg(target_os = "macos")]
 fn macos_root_for(home: &Path) -> PathBuf {
-    home.join("Documents").join("SNES Xperience")
+    home.join("Documents").join("SixteeN")
 }
 
-/// XDG_DATA_HOME/.../SNES Xperience, falling back to ~/.local/share if unset.
+/// XDG_DATA_HOME/.../SixteeN, falling back to ~/.local/share if unset.
 #[cfg(target_os = "linux")]
 fn linux_app_root() -> PathBuf {
     let data_home = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(|| PathBuf::from("."));
-    data_home.join("SNES Xperience")
+    data_home.join("SixteeN")
 }
 
 pub fn roms_dir() -> PathBuf {
@@ -111,7 +110,7 @@ pub fn config_dir() -> PathBuf {
 }
 
 pub fn config_path() -> PathBuf {
-    config_dir().join("xperience.cfg")
+    config_dir().join("sixteen.cfg")
 }
 
 /// Play counts / added-at / last-played-at, keyed by ROM hash — the only
@@ -130,6 +129,75 @@ pub fn nointro_dat_path() -> PathBuf {
     config_dir().join("nointro.dat")
 }
 
+/// The data root under the app's previous name ("SNES Xperience"), when
+/// this platform ever had one — Windows always kept the exe-relative root,
+/// so there's nothing to migrate there.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn legacy_app_root() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        Some(home.join("Documents").join("SNES Xperience"))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let data_home = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+        Some(data_home.join("SNES Xperience"))
+    }
+}
+
+/// One-time migration for the app's rename (SNES Xperience → SixteeN): the
+/// data root moves to the new name while the new one doesn't exist yet, and
+/// `config/xperience.cfg` becomes `sixteen.cfg` inside whichever root we
+/// end up in (Windows included — its root never moved, the cfg name did).
+/// Best-effort and idempotent: a failed move logs and the app starts fresh
+/// in the new location; both sides already in place means nothing happens.
+/// Call once at startup, before anything reads [`app_root`] — the create-
+/// dir-on-first-launch passes would otherwise block the folder rename.
+pub fn migrate_renamed_root() {
+    let root = app_root();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if !root.exists() {
+        if let Some(legacy) = legacy_app_root() {
+            if legacy.is_dir() {
+                rename_dir_best_effort(&legacy, &root);
+            }
+        }
+    }
+    migrate_cfg_name(&config_dir());
+}
+
+fn rename_dir_best_effort(legacy: &Path, root: &Path) {
+    if let Some(parent) = root.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::rename(legacy, root) {
+        Ok(()) => log::info!("migrado: {} -> {}", legacy.display(), root.display()),
+        Err(e) => log::warn!(
+            "migrando a raiz do app ({} -> {}): {e}",
+            legacy.display(),
+            root.display()
+        ),
+    }
+}
+
+/// `xperience.cfg` → `sixteen.cfg` inside `config/` — same file, new name.
+fn migrate_cfg_name(config: &Path) {
+    let old = config.join("xperience.cfg");
+    let new = config.join("sixteen.cfg");
+    if !old.is_file() || new.exists() {
+        return;
+    }
+    match std::fs::rename(&old, &new) {
+        Ok(()) => log::info!("migrado: config/xperience.cfg -> config/sixteen.cfg"),
+        Err(e) => log::warn!("migrando config/xperience.cfg: {e}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -143,12 +211,48 @@ mod tests {
         assert!(!dir.starts_with(super::saves_dir()));
     }
 
+    #[test]
+    fn renamed_cfg_migrates_once() {
+        let tmp = std::env::temp_dir().join(format!("sixteen-dirs-cfg-{}", std::process::id()));
+        let config = tmp.join("config");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(config.join("xperience.cfg"), "# t\n").unwrap();
+
+        super::migrate_cfg_name(&config);
+        assert!(config.join("sixteen.cfg").is_file());
+        assert!(!config.join("xperience.cfg").exists());
+
+        // Idempotente: rodar de novo com só o nome novo não explode nem
+        // toca em nada.
+        super::migrate_cfg_name(&config);
+        assert!(config.join("sixteen.cfg").is_file());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn legacy_root_moves_when_the_new_one_is_still_missing() {
+        let tmp = std::env::temp_dir().join(format!("sixteen-dirs-root-{}", std::process::id()));
+        let legacy = tmp.join("SNES Xperience");
+        let root = tmp.join("SixteeN");
+        std::fs::create_dir_all(legacy.join("saves")).unwrap();
+        std::fs::write(legacy.join("saves").join("game.srm"), b"x").unwrap();
+
+        super::rename_dir_best_effort(&legacy, &root);
+        assert!(root.join("saves").join("game.srm").is_file());
+        assert!(!legacy.exists());
+
+        // Raiz nova já existente nunca é sobrescrita — mas isso é decisão
+        // do chamador (`migrate_renamed_root` só chama com a raiz ausente);
+        // aqui cobrimos só o move em si, que é best-effort.
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
-    fn macos_root_is_documents_snes_xperience() {
+    fn macos_root_is_documents_sixteen() {
         assert_eq!(
             super::macos_root_for(Path::new("/Users/rex")),
-            Path::new("/Users/rex/Documents/SNES Xperience")
+            Path::new("/Users/rex/Documents/SixteeN")
         );
     }
 
@@ -165,7 +269,7 @@ mod tests {
                         std::env::var("HOME").unwrap_or_default()
                     ))
             )
-            .join("SNES Xperience")
+            .join("SixteeN")
         );
     }
 }

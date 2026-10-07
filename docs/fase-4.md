@@ -33,7 +33,7 @@ próximos incrementos.
 lugar nenhum, nem no queixo nem no painel — pedido do usuário, não uma volta
 ao texto original do plano.*
 
-## Painel lateral (`xperience-platform::cabinet`)
+## Painel lateral (`sixteen-platform::cabinet`)
 
 Uma coluna de **widgets normais**, não deformada pelo tubo (plano §2: "4.
 painel lateral, em widgets normais") — desenhada direto na janela, como o
@@ -86,7 +86,7 @@ logo/título — cresce ou encolhe com a altura do título (uma ou duas linhas).
 ## Marca no gabinete
 
 Fora da lista do §3.2 (que é sobre a tela do *jogo*): um selo "SNES
-Xperience" discreto, impresso no queixo à esquerda do tubo — o pingente que
+SixteeN" discreto, impresso no queixo à esquerda do tubo — o pingente que
 uma TV de verdade tem no gabinete. Por ser parte do móvel, não da partida,
 aparece em todo lugar onde o queixo existe: estante, jogo, chuvisco de
 console desligado. `draw_brand`, chamada logo depois da malha do friso em
@@ -145,14 +145,14 @@ guardar legível; "como se fazia no papel" pede nitidez, não atmosfera.
 Indexado pelo **hash da ROM** (`rom_hash`, o mesmo SHA1 dos saves/estados,
 plano §3.4) — nome de arquivo trocado ou re-dump não orfanam o caderno.
 Markdown solto, legível fora do app, com as capturas numa pasta ao lado do
-`.md` — dá pra abrir num editor de texto qualquer sem o SNES Xperience por
+`.md` — dá pra abrir num editor de texto qualquer sem o SixteeN por
 perto.
 
-`xperience_emulation::Core` não precisou de nada novo — `runner::frame_to_rgb8`
+`sixteen_emulation::Core` não precisou de nada novo — `runner::frame_to_rgb8`
 decodifica RGB565/RGB1555/XRGB8888 na mão (o `Frame` bruto do core, os
 mesmos formatos que a NTSC e o `Cabinet` já entendiam, só que sem passar
 por nenhum dos dois). `GameSpec::notes_dir` é novo, ao lado de `save_dir`/
-`system_dir` (`xperience`: `~/.local/share/snes-xperience/notes/`;
+`system_dir` (`sixteen`: `~/.local/share/sixteen/notes/`;
 `emu-run`: `<save-dir>/notes` por padrão, `--notes-dir` sobrescreve).
 
 No painel, item 5 (§3.2) fica entre cheats e o relógio: cabeçalho "notas"
@@ -193,7 +193,7 @@ continua valendo — só o conteúdo daquela linha específica mudou.*
 Fora da numeração do plano — pedido direto do usuário antes de seguir a
 Fase 4, porque sem ele ligar o ScreenScraper e popular o catálogo com
 capas/fichas dependia de exportar `SS_DEVID`/`SS_DEVPASSWORD` na mão toda
-vez. `O` na estante abre `xperience_app::settings::run`, três listas
+vez. `O` na estante abre `sixteen_app::settings::run`, três listas
 achatadas (sem menu dentro de menu): **Controles** (as 27 ações
 rebindáveis, `describe()` do `KeyMap`), **ScreenScraper** (ativado, Dev
 ID, Dev Password), e a raiz com Run-ahead/Tela cheia/atalhos pros dois
@@ -229,7 +229,7 @@ continua carregando normal (a seção é opcional na leitura).
   abaixo dele
 - `emu-run --shot --shot-off --logo`: painel + comandos + cartucho continuam
   visíveis durante o chuvisco de console desligado
-- Selo "SNES Xperience" no queixo, à esquerda: visível no jogo, no chuvisco
+- Selo "SixteeN" no queixo, à esquerda: visível no jogo, no chuvisco
   de console desligado e na estante (não é sobre a tela do jogo, é sobre o
   gabinete)
 - `selector --frames --shot`: estante segue funcionando — o painel do jogo
@@ -256,13 +256,13 @@ continua carregando normal (a seção é opcional na leitura).
   "1 captura salva." à esquerda, a tela do Capcom/Disney grande e legível à
   direita — sem tubo, sem NTSC, só a imagem
 - fmt / clippy / 15 suítes — verdes, na entrega da tela de pausa
-- `xperience --debug-settings main|controls|screenscraper --shot out.bmp`:
+- `sixteen --debug-settings main|controls|screenscraper --shot out.bmp`:
   as três telas renderizam pelo tubo, cabeçalho + linhas + cursor `>` +
   rodapé de dicas certos; `controles` lista as 27 ações e corta na 21ª
   (a rolagem existe, não dava pra fotografar rolado sem estender o preview);
   `screenscraper` mostra "(vazio)" nos dois campos e o texto explicativo
   quebrado em duas linhas
-- Lançamento real (`xperience` de verdade, 3 s, sem `--debug-settings`):
+- Lançamento real (`sixteen` de verdade, 3 s, sem `--debug-settings`):
   sobe, carrega o `config.toml` existente de antes desta mudança sem erro
   de parse (a seção `[screenscraper]` é opcional), fecha limpo
 - fmt / clippy / 22 testes (+6 novos: `char_for_key`/modo de `poll_menu`
@@ -281,7 +281,7 @@ usuário, não vou inventar senha de jogo.
 
 Três pedidos do usuário, fora da numeração original do plano:
 
-1. **Tela inicial (TV off + "Inserir cartucho").** `xperience` não pula mais
+1. **Tela inicial (TV off + "Inserir cartucho").** `sixteen` não pula mais
    direto pra estante. `crates/app/src/idle.rs` (novo módulo, mesmo padrão de
    `shelf.rs`/`settings.rs`) desenha `Cabinet::present_static` sem nenhum
    painel de jogo montado (`Cabinet::new` já nasce com `panel: None`) — nesse
@@ -290,7 +290,7 @@ Três pedidos do usuário, fora da numeração original do plano:
    raiz** do app agora: aparece na abertura, depois de Ejetar
    (`GameExit::Ejected`, renomeado de `GameExit::ToShelf`) e no Esc da
    estante (`shelf::Pick::Back`, novo — distinto de `Pick::Quit`, que hoje só
-   dispara ao fechar a janela). `xperience::main` ganhou um laço externo
+   dispara ao fechar a janela). `sixteen::main` ganhou um laço externo
    (`'app`) em volta do laço estante↔jogo que já existia, alternando com
    `idle::run`.
 2. **Cartucho no console removido.** O desvio da Fase 3 (cartucho no queixo
@@ -300,7 +300,7 @@ Três pedidos do usuário, fora da numeração original do plano:
    `CART_SHELL`/`CART_RIM` saíram de `cabinet.rs`; `GameSpec.cartridge_label`,
    `Pick::Play.texture` e o `--cartridge-label` do `emu-run` saíram junto — a
    mídia `texture` do ScreenScraper continua sendo raspada e cacheada no
-   catálogo (`xperience_domain`), só ficou sem consumidor visual.
+   catálogo (`sixteen_domain`), só ficou sem consumidor visual.
 3. **Comandos viram botões clicáveis.** A legenda de texto "Desligar Esc /
    Ejetar E / Reset Backspace" virou três caixas clicáveis (`draw_button`,
    cabinet.rs), acesas ou apagadas conforme fazem algo *agora* —
@@ -324,7 +324,7 @@ Três pedidos do usuário, fora da numeração original do plano:
    jogo — um hit-test só pros dois lugares.
 
 Verificado com um exemplo headless descartável (`Cabinet` puro, sem core/ROM
-— `cargo run -p xperience-platform --example panel_preview`, apagado depois
+— `cargo run -p sixteen-platform --example panel_preview`, apagado depois
 de conferir): tela inicial com o botão no lugar do logo, cartucho ausente em
 todos os estados, e os três botões acendendo/apagando junto com
 `set_powered(true/false)`, exatamente como descrito acima. `cargo build`/
@@ -343,7 +343,7 @@ partida (antes só Power/Ejetar/Reset eram clicáveis; Pausar, save/load
 state, slot, turbo, screenshot, nota e cheats ainda dependiam de tecla).
 Mudança grande, em várias camadas:
 
-- **`xperience-platform::input`**: `KeyMap` perdeu o campo `ui`/`bind_ui`/
+- **`sixteen-platform::input`**: `KeyMap` perdeu o campo `ui`/`bind_ui`/
   `ui_for` inteiro — só sobrou `pad` (as 12 teclas de gameplay, D-pad/
   botões, que continuam por padrão porque nem todo mundo tem gamepad
   plugado pra *jogar*). `UiEvent` perdeu `ToggleFullscreen`/`CheatNext`/
@@ -396,7 +396,7 @@ Mudança grande, em várias camadas:
   serviria sem teclado) — o rótulo virou só "N games". Ganhou dois botões
   no rodapé da ficha, "Voltar" e "Configuracoes" (`Pick::Back`/
   `Pick::Settings` por clique, além do gamepad Back que já existia).
-- **`config.rs`**: `[keyboard]` de um `xperience.cfg` antigo com uma ação
+- **`config.rs`**: `[keyboard]` de um `sixteen.cfg` antigo com uma ação
   removida (`eject`, `pause`, ...) não trava mais o app — vira
   `log::warn!` e segue (era `bail!`); só teclas de gameplay continuam
   bindáveis.
@@ -587,7 +587,7 @@ ROM/core/arte reais dele, via `computer-use`) antes do próximo:
   disso — agora o ramo `None` de `draw_panel` desenha a logo do console
   (`assets/console.png`, novo — `Cabinet::set_console_logo`, chave de
   textura reservada `PANEL_CONSOLE_LOGO_IMG`; sem o arquivo, cai pro texto
-  "SNES Xperience", mesma regra de fallback do logo por jogo) no lugar do
+  "SixteeN", mesma regra de fallback do logo por jogo) no lugar do
   logo do jogo, "Inserir cartucho" (mesmo botão de sempre, só que agora do
   tamanho do slot de cartucho, 150px) no lugar da arte de cartucho, e
   "Configuracoes" foi realocado pro rodapé do painel (`rect.bottom() -
@@ -597,7 +597,7 @@ ROM/core/arte reais dele, via `computer-use`) antes do próximo:
   Power/Ejetar/Reset/Pausar/etc. de qualquer forma — só ficou mais óbvio
   agora que o resto do layout ficou parecido com o do jogo).
 
-Verificado ao vivo em `/Applications/SNES Xperience.app` (o binário `.app`
+Verificado ao vivo em `/Applications/SixteeN.app` (o binário `.app`
 empacotado registra janela de verdade nas ferramentas de automação; o
 binário cru de dev, rodado em background pelo shell, não — mesma limitação
 já documentada nesta revisão): fluxo completo inserir → ligar → desligar →
@@ -757,7 +757,7 @@ dois sentidos com uma `slots.json` fabricada à mão: slot fixado -> painel
 mostra "notas"/"N slot(s) fixado(s)" com a miniatura; mesmo slot com
 `pinned: false` (mas ainda com imagem no disco) -> seção some por
 completo. Essas duas capturas precisaram da janela 1280×800 de
-`xperience.rs` (trocada de volta pra 1024×768 depois) — a pequena e
+`sixteen.rs` (trocada de volta pra 1024×768 depois) — a pequena e
 não-16:9 de `emu-run` já é conhecida por cortar as últimas linhas do
 painel (ver revisão anterior), e o botão Cheats novo empurrou o bloco de
 notas pra fora da área visível nela. Build/test (13 suítes)/clippy
@@ -801,7 +801,7 @@ saber a chave certa, e não há como fazer isso pros ~2400 jogos da base
 sem possuir cada cartucho. A única chave que o app já tem de graça, pro
 número que for de jogos, é o nome do arquivo da ROM — a mesma string que
 `saves/`/`notes/` já usam (`title`, calculado uma vez em `run_game`).
-`xperience_domain::cheats::for_title` (doc comment reescrito) casa em
+`sixteen_domain::cheats::for_title` (doc comment reescrito) casa em
 duas etapas: exato (case-insensitive) primeiro — um arquivo nomeado do
 jeito usual da cena, `Titulo (Regiao).sfc`, bate direto com o mesmo nome
 que o `libretro-database` usa; se isso não achar nada, uma etapa mais
@@ -1156,7 +1156,7 @@ desenhava tudo, painel incluso, como conteúdo de jogo.
 
 Correção: replicar a mesma divisão pro caminho da estante, sem tocar no
 caminho 2D genérico (`frame_2d`/`capture_2d`/`frame_2d_fade_in`, que
-`settings.rs` e a tela idle de `xperience.rs` continuam usando como
+`settings.rs` e a tela idle de `sixteen.rs` continuam usando como
 estavam — só a estante precisava mudar). `paint_2d` virou
 `paint_2d_avail(bg, draw, avail_w)` recebendo a largura disponível;
 `paint_2d` chama com a largura cheia (comportamento antigo, intacto),
@@ -1208,7 +1208,7 @@ up/down) já funcionava desde sempre; só faltava qualquer pista visual
 de que havia mais linhas abaixo.
 
 Verificado com o binário `selector --shot`, usando a biblioteca real de
-ROMs (`~/Documents/SNES Xperience`, sem tocar em `library.json` — só
+ROMs (`~/Documents/SixteeN`, sem tocar em `library.json` — só
 lido — e com um `nointro.dat` temporário casando o CRC32 real de
 `Aladdin.sfc`, removido depois do teste): painel flutuando fora do tubo
 com texto nítido e capa/cartucho corretos; painel do Aladdin mostrando
@@ -1224,7 +1224,7 @@ threads)/clippy (`-D warnings`)/fmt limpos.
 ## Revisão (2026-09-17, continuação): ícone/logo novos, versão na plaqueta, checagem de atualização
 
 Pedido do usuário em duas partes: (1) recortar uma arte fornecida (o
-controle roxo/cinza com o wordmark "SNES XPERIENCE") pra usar como ícone
+controle roxo/cinza com o wordmark "SIXTEEN") pra usar como ícone
 do app e logo dentro dele; (2) mostrar a versão do app e do snes9x onde
 o nome do app já aparece na TV, checar ao abrir se o snes9x está
 desatualizado (avisando com uma modal se estiver) e se há uma versão
@@ -1245,9 +1245,9 @@ como pontinhos escuros isolados no fundo depois do chaveamento ingênuo.
 *Ícone do app*: `packaging/icon_1024.png` (mestre, 1024×1024) regenerado
 a partir do recorte; `packaging/macos/AppIcon.icns` via `iconutil`
 (iconset com os 10 tamanhos padrão), `packaging/windows/AppIcon.ico`
-via `Pillow` (multi-tamanho 16..256) e `packaging/linux/snes-xperience.png`
+via `Pillow` (multi-tamanho 16..256) e `packaging/linux/sixteen.png`
 (256×256) — os três já eram referenciados por `build-dmg.sh`/`build.rs`
-(Windows)/`snes-xperience.desktop`, então só o conteúdo mudou, nada de
+(Windows)/`sixteen.desktop`, então só o conteúdo mudou, nada de
 código.
 
 *Logo interno*: aqui a decisão foi diferente da convenção que a fase 4
@@ -1267,11 +1267,11 @@ algo em vez de texto puro. Verificado nos dois sentidos: com o
 temporariamente movido de lado (mostrou o novo padrão) — restaurado
 logo em seguida, `diff` confirmando que nada mais no arquivo mudou.
 
-**Versão na plaqueta.** `draw_brand` (o texto "SNES Xperience" impresso
+**Versão na plaqueta.** `draw_brand` (o texto "SixteeN" impresso
 no rodapé da tela em *todo* contexto — jogo, estante, idle) tinha o
 texto fixo na constante `BRAND`. Virou um campo `Cabinet::nameplate`
 (inicializado com `BRAND`, texto agora `pub` e reexportado de
-`xperience_platform` pra o crate `app` não duplicar a string), com
+`sixteen_platform` pra o crate `app` não duplicar a string), com
 `Cabinet::set_nameplate` pra sobrescrever — nove pontos de chamada de
 `draw_brand` espalhados pelos caminhos `present_frame`/`present_static`/
 `frame_2d`/`frame_shelf` (e suas variantes `capture_*`) precisaram do
@@ -1287,8 +1287,8 @@ A versão do snes9x vem de `Core::system_version()` — já existia (lê
 carregada de verdade. `Core::load` só resolve símbolos e lê essa info
 (não chama `retro_init`), então dá pra "espiar" a versão na hora de
 montar o texto do nameplate e descartar o `Core` — sem custo real,
-sem efeito colateral. Formato final: `"SNES Xperience v0.9.0"` sem
-núcleo, `"SNES Xperience v0.9.0 - snes9x 1.63 890b5d4"` com um
+sem efeito colateral. Formato final: `"SixteeN v0.9.0"` sem
+núcleo, `"SixteeN v0.9.0 - snes9x 1.63 890b5d4"` com um
 instalado (o snes9x embute o hash do commit na própria string de
 versão). Recalculado depois de qualquer volta da tela de configurações
 (um download de núcleo pode ter acabado de acontecer).
@@ -1596,10 +1596,10 @@ principal já ensina.
 
 O ponto mais delicado foi o que "Voltar" significa em cada tela: o
 enum `Pick` já é usado pela estante principal, onde `Pick::Back` quer
-dizer "sai da estante, volta pra tela idle" (`xperience.rs`'s `'app:
+dizer "sai da estante, volta pra tela idle" (`sixteen.rs`'s `'app:
 loop`). Reaproveitar o mesmo enum pro histórico faria um "Voltar" de lá
 significar a mesma coisa por engano — pularia a estante inteira,
-voltando direto pra idle. Resolvido em `xperience.rs`: o novo braço
+voltando direto pra idle. Resolvido em `sixteen.rs`: o novo braço
 `Pick::History` (dentro do `match` que já trata `Pick::Settings` do
 jeito parecido) chama `shelf::run_history` e trata o `Pick` *que ele
 devolve* com seu próprio sub-`match` local — `Pick::Back` (do
@@ -1671,7 +1671,7 @@ crash em produção. Corrigido nas três funções: contagem por
 crash, quebra de linha certa, nenhuma palavra cortada ao meio).
 
 **O texto em si.** Passei arquivo por arquivo (`cabinet.rs`, `shelf.rs`,
-`settings.rs`, `idle.rs`, `runner.rs`, `xperience.rs`, e o gerador de
+`settings.rs`, `idle.rs`, `runner.rs`, `sixteen.rs`, e o gerador de
 infos do DAT em `catalog.rs`), separando strings realmente desenhadas
 na tela (via `d.text`/`draw_button`/`draw_text_wrapped_absolute`/etc.)
 de comentários de documentação (que às vezes citam o pedido original do
@@ -1730,7 +1730,7 @@ adição) não tem esse problema — é chaveado por SHA1, que não muda com
 o rename.
 
 **Módulo novo, `rom_rename.rs`.** `rename_to_nointro(roms_dir, dat_path,
-saves_dir, notes_dir, assets_dir)`: usa `xperience_domain::library::scan`
+saves_dir, notes_dir, assets_dir)`: usa `sixteen_domain::library::scan`
 (a mesma função que o catálogo já usa) pra listar as ROMs já com
 CRC32 calculado, casa cada uma contra o DAT carregado
 (`NoIntroDat::lookup`), e pula quem já está com o nome certo (`old_stem
@@ -1846,7 +1846,7 @@ dois têm a mesma informação — testado com um ano diferente do DAT
 sobrepondo o do TOSEC; e nenhum dos dois retorna nada pra um CRC32 que
 nenhuma fonte conhece), todos usando o CRC32 real de Chrono Trigger
 (US) como referência estável. Confirmado visualmente contra a
-biblioteca real do usuário (`~/Documents/SNES Xperience`, sem
+biblioteca real do usuário (`~/Documents/SixteeN`, sem
 `nointro.dat` presente): `selector --filter Aladdin --frames 3 --shot`
 mostra "lançamento 1993" / "editora Capcom" no painel, vindo só do
 TOSEC embutido. Build/clippy (`-D warnings`)/fmt/test (18 domain, up de
@@ -1883,7 +1883,7 @@ com o arquivo do usuário.
 binário:**
 
 1. **Instalado como o `nointro.dat` de verdade do usuário**
-   (`~/Documents/SNES Xperience/nointro.dat`) — a funcionalidade de DAT
+   (`~/Documents/SixteeN/nointro.dat`) — a funcionalidade de DAT
    opcional já existia (plano original, Parte 4) mas nunca tinha um dat
    de verdade carregado; agora "Renomear ROMs pro padrão No-Intro" (da
    revisão 7) também passa a funcionar de verdade, e o painel ganha
@@ -1953,8 +1953,8 @@ ejetar o cartucho.
 
 **Tela cheia por padrão.** Só o valor default de `Config::load` mudou
 (`fullscreen: false` → `true`) — o toggle em Configurações e o próprio
-formato do `xperience.cfg` continuam idênticos. Só afeta uma instalação
-nova (sem `xperience.cfg` ainda): o arquivo do usuário já tinha
+formato do `sixteen.cfg` continuam idênticos. Só afeta uma instalação
+nova (sem `sixteen.cfg` ainda): o arquivo do usuário já tinha
 `fullscreen = true` gravado de um teste anterior, então nada mudou pra
 ele nesta revisão especificamente, mas qualquer instalação futura (ou
 uma pasta de app nova) já abre em tela cheia sem precisar entrar em

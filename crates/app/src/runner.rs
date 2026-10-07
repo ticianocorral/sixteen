@@ -1,5 +1,5 @@
 //! The emulator run-loop, factored out of the `emu-run` binary so the unified
-//! `xperience` binary can call it between selector visits. Presentation is fixed:
+//! `sixteen` binary can call it between selector visits. Presentation is fixed:
 //! RF NTSC + CRT-tube warp (see docs/fase-0.md).
 
 use std::collections::HashMap;
@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
-use xperience_emulation::{Button, Core, Frame as EmuFrame, PixelFormat as EmuFormat};
-use xperience_ntsc::{NtscFilter, Preset};
-use xperience_platform::{
+use sixteen_emulation::{Button, Core, Frame as EmuFrame, PixelFormat as EmuFormat};
+use sixteen_ntsc::{NtscFilter, Preset};
+use sixteen_platform::{
     Cabinet, FrameRef, PanelButton, PixelFormat as PlatFormat, Platform, UiEvent, MAX_PORTS,
 };
 
@@ -99,8 +99,8 @@ pub struct GameSpec {
     pub debug_cart_anim: Option<std::path::PathBuf>,
 }
 
-const PAD: [(Button, xperience_platform::PadButton); 12] = {
-    use xperience_platform::PadButton as P;
+const PAD: [(Button, sixteen_platform::PadButton); 12] = {
+    use sixteen_platform::PadButton as P;
     [
         (Button::B, P::B),
         (Button::Y, P::Y),
@@ -265,7 +265,7 @@ pub(crate) fn pace_frame(next: &mut Instant, frame_time: Duration) {
     *next += frame_time;
     let now = Instant::now();
     if *next <= now {
-        if xperience_platform::trace_enabled() {
+        if sixteen_platform::trace_enabled() {
             let late = now - *next;
             if late > Duration::from_millis(2) {
                 log::warn!(
@@ -630,7 +630,7 @@ fn save_cheat_state(path: &Path, state: &[bool]) {
 
 /// `(description, on)` pairs for the panel — cheap enough to rebuild on every
 /// toggle/navigate, there are only ever a handful.
-fn cheat_rows(defs: &[xperience_domain::CheatDef], state: &[bool]) -> Vec<(String, bool)> {
+fn cheat_rows(defs: &[sixteen_domain::CheatDef], state: &[bool]) -> Vec<(String, bool)> {
     defs.iter()
         .zip(state)
         .map(|(d, &on)| (d.desc.to_string(), on))
@@ -1064,7 +1064,7 @@ fn show_text_slot(cab: &mut Cabinet, notes_dir: &Path, title: &str, slot: u8, me
 }
 
 /// Load the core + ROM and run until the player leaves, drawing into `cab` (the
-/// one persistent window). `plat` and `cab` both outlive the call so `xperience`
+/// one persistent window). `plat` and `cab` both outlive the call so `sixteen`
 /// can reuse them for the next screen.
 pub fn run_game(
     plat: &mut Platform,
@@ -1084,9 +1084,9 @@ pub fn run_game(
     // `load_rom` transparently extracts the ROM inside a .zip (plan
     // revision: "add suporte a roms em formato zip") — the core gets raw
     // ROM bytes either way.
-    let rom_bytes = xperience_domain::library::load_rom(&spec.rom)
+    let rom_bytes = sixteen_domain::library::load_rom(&spec.rom)
         .with_context(|| format!("reading ROM {}", spec.rom.display()))?;
-    match xperience_domain::RomId::from_bytes(&rom_bytes) {
+    match sixteen_domain::RomId::from_bytes(&rom_bytes) {
         Ok(id) => log::info!(
             "rom: {} bytes (+{} header), crc32={} sha1={} name={:?} {:?}",
             id.rom_len,
@@ -1153,11 +1153,11 @@ pub fn run_game(
     // --- cheats: the full libretro-database slice for this title (plan
     // §4.4, revision) --- Matched by the ROM's own title (same string
     // saves/notes are keyed by), not the cartridge header any more — see
-    // `xperience_domain::cheats`'s doc comment for why. Empty if nothing in
+    // `sixteen_domain::cheats`'s doc comment for why. Empty if nothing in
     // the database lines up with it. Loaded before the side panel below,
     // since its command legend needs to know whether to show the Cheats
     // button at all (plan revision).
-    let cheat_defs = xperience_domain::cheats_for_title(&title);
+    let cheat_defs = sixteen_domain::cheats_for_title(&title);
     let cheat_path = cheat_state_path(&spec.save_dir, &title);
     let mut cheat_state = load_cheat_state(&cheat_path, cheat_defs.len());
     // RetroAchievements hardcore (plan fase 3): cheats stay off entirely.
@@ -2137,7 +2137,7 @@ pub fn run_game(
             // speculative run-ahead frames mutate the state further.
             if let (true, Some(ra)) = (powered, &mut ra_session) {
                 let mut unlocks = Vec::new();
-                core.with_memory(xperience_emulation::MEMORY_SYSTEM_RAM, |ram| {
+                core.with_memory(sixteen_emulation::MEMORY_SYSTEM_RAM, |ram| {
                     unlocks = ra.tick(ram);
                 });
                 for unlock in unlocks {
@@ -2324,11 +2324,11 @@ mod tests {
         note_slot_path, note_text_slot_path, read_text_slot, rom_title, save_cheat_state,
         save_note_image, save_text_slot, sram_file, state_file, total_playtime_secs, EmuFrame,
     };
-    use xperience_emulation::PixelFormat as EmuFormat;
+    use sixteen_emulation::PixelFormat as EmuFormat;
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("xperience-test-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sixteen-test-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -2346,7 +2346,7 @@ mod tests {
 
     #[test]
     fn missing_file_defaults_everything_off() {
-        let path = std::env::temp_dir().join("xperience-cheat-test-missing.cheats");
+        let path = std::env::temp_dir().join("sixteen-cheat-test-missing.cheats");
         assert_eq!(load_cheat_state(&path, 2), vec![false, false]);
     }
 

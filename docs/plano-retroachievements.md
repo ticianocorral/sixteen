@@ -1,4 +1,4 @@
-# Plano — RetroAchievements no SNES Xperience
+# Plano — RetroAchievements no SixteeN
 
 Conquistas do [RetroAchievements](https://retroachievements.org) no app: login
 na configuração, identificação do jogo pelo hash da ROM, avaliação das
@@ -20,7 +20,7 @@ conquistas no painel (só leitura), sem o runtime de desbloqueio.
   do queixo, com badge 64×64 e truncagem para não colidir com o nameplate.
   A fase 4 substitui o `demo_osd` por uma fila de OSD com tempo; a função de
   desenho (`draw_demo_chin_osd`) migra quase intacta (perde o "demo").
-- **Acesso à RAM do core**: `xperience_emulation::Core` já resolve
+- **Acesso à RAM do core**: `sixteen_emulation::Core` já resolve
   `retro_get_memory_data/size` (`sys.rs`) — é o mesmo caminho que o SRAM
   usa. Falta expor `RETRO_MEMORY_SYSTEM_RAM` (WRAM) num formato que o
   avaliador consiga ler por frame sem cópia.
@@ -36,7 +36,7 @@ conquistas no painel (só leitura), sem o runtime de desbloqueio.
 - Campo "usuário" e "token de web API" na seção conquistas (o RA não aceita
   login por senha em clientes de terceiros: o usuário gera o token em
   *Settings → Web API* no site). Campos no `Config`, persistidos no
-  `xperience.cfg` como o resto — o token é sensível, o arquivo já é local.
+  `sixteen.cfg` como o resto — o token é sensível, o arquivo já é local.
 - Botão "testar login" que chama `API_GetUserProfile` numa thread e mostra
   "ok (usuário)" / erro no próprio botão, mesmo padrão de feedback do
   "Baixar núcleo".

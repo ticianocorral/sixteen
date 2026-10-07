@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use xperience_emulation::Core;
+use sixteen_emulation::Core;
 
 fn version_at(path: &std::path::Path) -> String {
     Core::load(path)
@@ -27,7 +27,7 @@ fn main() {
         std::process::exit(2);
     }
     let (older, newer) = (&args[1], &args[2]);
-    let dir = std::env::temp_dir().join("xperience-core-probe");
+    let dir = std::env::temp_dir().join("sixteen-core-probe");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let probe = dir.join("core.dylib");

@@ -13,20 +13,20 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use xperience_platform::{Cabinet, MenuMode, MenuNav, Platform, Screen};
+use sixteen_platform::{Cabinet, MenuMode, MenuNav, Platform, Screen};
 
 use crate::dirs;
 
 /// URL do pacote de exemplo (`exemplo-platformer-example.zip`: o
 /// platformer open source + `roms/` + `assets/` dele, commitado no repositório
 /// para demonstrar o emulador). É o arquivo cru do próprio repo — o repo
-/// precisa estar público e o push em dia. `XPERIENCE_EXEMPLO_ZIP_URL`
+/// precisa estar público e o push em dia. `SIXTEEN_EXEMPLO_ZIP_URL`
 /// sobrepõe (servidor local nos testes).
 pub const EXEMPLO_ZIP_URL: &str =
-    "https://raw.githubusercontent.com/ticianocorral/snes-xperience/main/exemplo-platformer-example.zip";
+    "https://raw.githubusercontent.com/ticianocorral/sixteen/main/exemplo-platformer-example.zip";
 
 fn exemplo_zip_url() -> String {
-    std::env::var("XPERIENCE_EXEMPLO_ZIP_URL").unwrap_or_else(|_| EXEMPLO_ZIP_URL.to_string())
+    std::env::var("SIXTEEN_EXEMPLO_ZIP_URL").unwrap_or_else(|_| EXEMPLO_ZIP_URL.to_string())
 }
 
 /// Progress/result reported by the install worker thread.
@@ -448,7 +448,7 @@ mod tests {
     /// raiz temporária única por teste (sem dep de tempfile)
     fn tempfile_root(tag: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
-            "xperience-devmenu-test-{}-{tag}",
+            "sixteen-devmenu-test-{}-{tag}",
             std::process::id()
         ))
     }

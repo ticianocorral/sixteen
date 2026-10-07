@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Convert a TOSEC SNES "Games" datfile into a compact embedded data file
-for xperience-domain::tosec (`crates/domain/src/tosec_data.txt`).
+for sixteen-domain::tosec (`crates/domain/src/tosec_data.txt`).
 
 TOSEC dats have no per-game <year>/<publisher> XML fields (unlike a
 Logiqx/No-Intro dat with those as real child elements) — the TOSEC naming

@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use std::sync::mpsc;
 
 use anyhow::Result;
-use xperience_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen, UpdateArrow};
+use sixteen_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen, UpdateArrow};
 
 use crate::core_update::{self, CoreUpdateMsg};
 use crate::update_check::UpdateNotice;
@@ -725,11 +725,11 @@ fn draw_setup(
     let center_x = |s: &str, scale: u32| (w - s.chars().count() as i32 * CELL * scale as i32) / 2;
 
     d.text(
-        center_x("bem-vindo ao snes xperience", 3),
+        center_x("bem-vindo ao sixteen", 3),
         h * 12 / 100,
         3,
         SETUP_TEXT,
-        "bem-vindo ao snes xperience",
+        "bem-vindo ao sixteen",
     );
     d.text(
         center_x("para jogar, faltam dois downloads", 1),

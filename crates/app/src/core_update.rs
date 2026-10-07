@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-/// The core file's name on this platform — what `xperience` looks for in
+/// The core file's name on this platform — what `sixteen` looks for in
 /// `core/` at launch, and what a download is saved as.
 pub fn core_file_name() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -57,7 +57,7 @@ pub enum CoreUpdateMsg {
 /// versao do snes9x, onde esta o nome do app na tv") — the app's own
 /// version on the first line and, if a core is installed, the core's
 /// version on a second line below it (`draw_brand` splits on '\n'). Lives
-/// here rather than in `xperience` so the idle screen can rebuild it the
+/// here rather than in `sixteen` so the idle screen can rebuild it the
 /// moment a setup-screen download finishes — the nameplate used to stay
 /// without the snes9x line until the player left the screen.
 /// `Core::load` only resolves symbols and reads that info (no `retro_
@@ -66,17 +66,17 @@ pub enum CoreUpdateMsg {
 pub fn nameplate_text(core_path: Option<&std::path::Path>) -> String {
     let app_version = env!("CARGO_PKG_VERSION");
     let core_version = core_path
-        .and_then(|p| xperience_emulation::Core::load(p).ok())
+        .and_then(|p| sixteen_emulation::Core::load(p).ok())
         .map(|c| c.system_version().to_string())
         .filter(|v| !v.is_empty());
     match core_version {
-        Some(v) => format!("{} v{app_version}\nsnes9x {v}", xperience_platform::BRAND),
-        None => format!("{} v{app_version}", xperience_platform::BRAND),
+        Some(v) => format!("{} v{app_version}\nsnes9x {v}", sixteen_platform::BRAND),
+        None => format!("{} v{app_version}", sixteen_platform::BRAND),
     }
 }
 
-/// The default core location, resolved the same way `xperience` does at
-/// startup (`--core`/`$XPERIENCE_CORE` aside) — used to refresh the
+/// The default core location, resolved the same way `sixteen` does at
+/// startup (`--core`/`$SIXTEEN_CORE` aside) — used to refresh the
 /// nameplate after an in-screen download.
 pub fn default_core_path() -> Option<std::path::PathBuf> {
     let p = crate::dirs::core_dir().join(core_file_name());
@@ -99,7 +99,7 @@ pub fn commit_from_version(version: &str) -> Option<String> {
 /// (no `retro_init`), so it's read-only and cheap; safe to call from a
 /// background thread (`update_check` does).
 pub fn core_commit(core_path: &std::path::Path) -> Option<String> {
-    let core = xperience_emulation::Core::load(core_path).ok()?;
+    let core = sixteen_emulation::Core::load(core_path).ok()?;
     commit_from_version(core.system_version())
 }
 
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn install_replaces_and_leaves_no_temp() {
-        let dir = std::env::temp_dir().join("xperience-core-update-test");
+        let dir = std::env::temp_dir().join("sixteen-core-update-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         install_core_bytes(&dir, b"antiga").unwrap();

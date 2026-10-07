@@ -7,7 +7,7 @@ Progresso:
 
 - [x] **Gabinete atrás do tubo** — a tela do jogo fica recuada num gabinete
       escuro; a imagem é a coisa mais clara do quadro (§3.2)
-- [x] **Janela única** — `xperience` cria um `Cabinet` e desenha estante *ou*
+- [x] **Janela única** — `sixteen` cria um `Cabinet` e desenha estante *ou*
       jogo no vão da tela, sem recriar janela na troca
 - [x] **Estante pelo tubo** — o 2D vai pra um buffer do tamanho do vão e é
       deformado pela mesma malha CRT do jogo
@@ -22,7 +22,7 @@ Progresso:
 - [x] **Comandos do console** — desligar / ejetar / reset com trava de ejeção
       (§3.3), pelo teclado (Esc / `E` / Backspace)
 
-## `Cabinet` (`xperience-platform::cabinet`)
+## `Cabinet` (`sixteen-platform::cabinet`)
 
 Uma janela só pro app todo. `Ui` e `Video` viraram um tipo só, `Cabinet`. Todo
 quadro limpa com a cor do recuo, desenha o conteúdo deformado pelo tubo e por
@@ -136,7 +136,7 @@ Pedido do usuário, feito depois da Fase 4 já estar em andamento — ver
   fazia na transição de Ejetar, mas só pra dimmear os botões do painel (Fase
   4), não pra esconder um objeto no queixo. O texto acima sobre "cartucho
   ainda visível no slot" ao desligar não é mais verdade — o queixo mostra só
-  `draw_brand` (a etiqueta "SNES Xperience", que nunca foi o cartucho).
+  `draw_brand` (a etiqueta "SixteeN", que nunca foi o cartucho).
 - **Ejetar não abre mais a estante direto** — volta pra uma tela inicial
   nova (`crates/app/src/idle.rs`, TV off + botão "Inserir cartucho" no
   lugar do logo/título do painel), e só ativar esse botão é que abre a
@@ -193,7 +193,7 @@ altura, já que o glifo novo não é mais quadrado. O atlas também passou a
 cobrir Latin-1 Supplement além do Basic Latin (`GLYPH_FIRST`..`GLYPH_LAST`
 = `0x20..=0xFF`, um bloco contíguo), então acentos (`á ã ç é õ ...`) agora
 renderizam — antes viravam `?` (por isso o app evitava acento em toda
-cópia PT-BR até aqui, ver `xperience_domain::cheats`).
+cópia PT-BR até aqui, ver `sixteen_domain::cheats`).
 
 Escolha de fonte: `noto-sans-mono-bitmap` em vez de rasterizar um TTF na
 hora (ex.: `fontdue`) ou depender de `SDL_ttf`/FreeType (dependência C

@@ -394,7 +394,7 @@ assinatura.
 
 *Revisão (2026-09-14): "portátil" passou a valer pros dados também, não só
 pro binário — `roms/`, `core/`, `assets/`, `saves/`, `notes/`,
-`xperience.cfg` e `library.json` ficam numa raiz só, ao lado do executável
+`sixteen.cfg` e `library.json` ficam numa raiz só, ao lado do executável
 em vez de `~/.local/share`/`~/.config`. O núcleo do snes9x, que este plano
 já previa nunca embarcar (§1), agora tem um botão no próprio app pra baixar
 do buildbot do libretro, em vez de só "solte o arquivo na pasta".*
@@ -402,7 +402,7 @@ do buildbot do libretro, em vez de só "solte o arquivo na pasta".*
 *Revisão (2026-09-14, patch 0.4.1): "ao lado do executável" não serve no
 macOS — resolvia pra dentro de `/Aplicativos` depois do DMG, onde o SO não
 espera dados de usuário. A raiz no macOS virou fixa,
-`~/Documents/SNES Xperience`, independente de onde o `.app` está; Windows/
+`~/Documents/SixteeN`, independente de onde o `.app` está; Windows/
 Linux continuam ao lado do executável. Ver `docs/fase-2.md`, seção
 "Revisão (patch 0.4.1)", pelo detalhe.*
 

@@ -4,15 +4,15 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use xperience_app::dirs;
-use xperience_app::shelf::{self, ShelfOpts};
-use xperience_domain::{Catalog, NoIntroDat, Order};
-use xperience_platform::Platform;
+use sixteen_app::dirs;
+use sixteen_app::shelf::{self, ShelfOpts};
+use sixteen_domain::{Catalog, NoIntroDat, Order};
+use sixteen_platform::Platform;
 
 fn main() -> anyhow::Result<()> {
     let mut plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
-        .create_cabinet("SNES Xperience", 1280, 800, false)
+        .create_cabinet("SixteeN", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let dat = NoIntroDat::load(&dirs::nointro_dat_path()).ok();
     let catalog = Catalog::open(&dirs::roms_dir(), &dirs::library_path(), dat.as_ref())

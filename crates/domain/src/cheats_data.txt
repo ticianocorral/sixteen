@@ -3374,7 +3374,7 @@ C	Infinite Time	3CC4-A4DF
 C	Infinite Lives	C2C5-6FDF
 G	Ancient Magic - Bazoe! Mahou Sekai (Japan)
 C	No Random Battles	7E1B4E00
-C	65525 Gold/Experience	7E1EFCFF+7E1EFDFF
+C	65525 Gold/Esixteen	7E1EFCFF+7E1EFDFF
 C	Infinite/Max Gold	7E11DC7F+7E11DD96+7E11DE98
 C	Level 99, Char. 1	7E11EA63
 C	Lv. 99 Char. 2	7E125263
@@ -4347,7 +4347,7 @@ C	1st Name Digit	7E252E00
 C	2nd Name Digit	7E252F00
 C	3rd Name Digit	7E253000
 C	4th Name Digit	7E253100
-C	Experience	7E0C1300
+C	Esixteen	7E0C1300
 C	Strength	7E0C1D00
 C	Agility	7E0C2100
 C	Vitality	7E0C3900+7E0C2C00
@@ -4369,10 +4369,10 @@ C	Herbs	7E0C8500
 C	Magic Keys	7E0C8600
 C	Damage Done To Enemies (No Higher Than FD)	7E104900
 C	4th Name Digit	7E253100
-C	Experience	7E0C1300+7E0C1200+7E0C1100
+C	Esixteen	7E0C1300+7E0C1200+7E0C1100
 C	Vitality	7E0C3900
 C	Maximum HP	7E0C2C00+7E0C2D00
-C	Experience	7E0C1700+7E0C1500+7E0C1600
+C	Esixteen	7E0C1700+7E0C1500+7E0C1600
 C	Stregnth	7E0C2000
 C	Agility	7E0C2200
 C	Vitality	7E0C3A00
@@ -4390,7 +4390,7 @@ C	Item Slot 7	7E0CCE00
 C	Item Slot 8	7E0CCF00
 C	Item Slot 9	7E0CD000
 C	Item Slot 10	7E0CD100
-C	Experience	7E0C1900+7E0C1A00+7E0C1B00
+C	Esixteen	7E0C1900+7E0C1A00+7E0C1B00
 C	Agility	7E0C2300
 C	Vitality	7E0C3B00
 C	Maximum HP?	7E0C3000+7E0C3100
@@ -6856,7 +6856,7 @@ C	Moon (Usagi) Starts With 15 Speed Instead of 5	DE38-57DF
 C	Moon (Usagi) Starts With 50 Speed Instead of 5	7438-57DF
 C	Moon (Usagi) Starts With 9 Evade Instead of 3	DB3A-5FDF
 C	Moon (Usagi) Starts With 30 Evade Instead of 3	F33A-5FDF
-C	Moon (Usagi) Only Needs 1 Experience Point (Instead of 10) To Get To Level 2	DF32-5D6F
+C	Moon (Usagi) Only Needs 1 Esixteen Point (Instead of 10) To Get To Level 2	DF32-5D6F
 G	Bishoujo Senshi Sailor Moon - Another Story (Japan) (Action Replay) (diff)
 C	Infinite Yen	7E1F167F+7E1F1796+7E1F1898
 C	Infinite HP Moon 1	7E0B91E7+7E0B9203
@@ -9722,7 +9722,7 @@ C	3° Weapon Max Power	7E0AA004
 C	Infinite Health	7E0091FF
 C	INN	7E0A28F4+7E0A2901
 G	Chrono Trigger (USA)
-C	Experience After Battle Modifier	7EB28C00+7EB28D00
+C	Esixteen After Battle Modifier	7EB28C00+7EB28D00
 C	Tech Point After Battle Modifier	7EB2DB00+7EB2DC00
 C	Infinite Speed Boosts	7E009A03
 C	Instantly enable Next Speed Boost	7E00BA00
@@ -10442,7 +10442,7 @@ C	Crono Magic Defense Stats Modifier	7EE60263
 C	Crono Will Be Equipped With Shiva Edge As A Weapon	D3D4-745D
 C	Crono Level Stats Modifier	7EE60263
 C	Crono Will Be Equipped With Power Seal As An Accessory	85D4-748D
-C	Crono Experience Stats Modifier	7EE60263
+C	Crono Esixteen Stats Modifier	7EE60263
 C	Crono Head Stats Modifier	7EE60263
 C	Crono Body Stats Modifier	7EE60263
 C	Crono Weapon Stats Modifier	7EE60263
@@ -10458,7 +10458,7 @@ C	Marle Hit Ratio Stats Modifier	7EE60263
 C	Marle Evade Stats Modifier	7EE60263
 C	Marle Magic Defense Stats Modifier	7EE60263
 C	Marle Level Stats Modifier	7EE60263
-C	Marle Experience Stats Modifier	7EE60263
+C	Marle Esixteen Stats Modifier	7EE60263
 C	Marle Head Stats Modifier	7EE60263
 C	Marle Body Stats Modifier	7EE60263
 C	Marle Weapon Stats Modifier	7EE60263
@@ -10489,7 +10489,7 @@ C	Lucca Hit Ratio Stats Modifier	7EE60263
 C	Lucca Evade Stats Modifier	7EE60263
 C	Lucca Magic Defense Stats Modifier	7EE60263
 C	Lucca Level Stats Modifier	7EE60263
-C	Lucca Experience Stats Modifier	7EE60263
+C	Lucca Esixteen Stats Modifier	7EE60263
 C	Lucca Head Stats Modifier	7EE60263
 C	Lucca Body Stats Modifier	7EE60263
 C	Lucca Weapon Stats Modifier	7EE60263
@@ -10521,7 +10521,7 @@ C	Robo Hit Ratio Stats Modifier	7EE60263
 C	Robo Evade Stats Modifier	7EE60263
 C	Robo Magic Defense Stats Modifier	7EE60263
 C	Robo Level Stats Modifier	7EE60263
-C	Robo Experience Stats Modifier	7EE60263
+C	Robo Esixteen Stats Modifier	7EE60263
 C	Robo Head Stats Modifier	7EE60263
 C	Robo Body Stats Modifier	7EE60263
 C	Robo Weapon Stats Modifier	7EE60263
@@ -10553,7 +10553,7 @@ C	Frog Hit Ratio Stats Modifier	7EE60263
 C	Frog Evade Stats Modifier	7EE60263
 C	Frog Magic Defense Stats Modifier	7EE60263
 C	Frog Level Stats Modifier	7EE60263
-C	Frog Experience Stats Modifier	7EE60263
+C	Frog Esixteen Stats Modifier	7EE60263
 C	Frog Head Stats Modifier	7EE60263
 C	Frog Body Stats Modifier	7EE60263
 C	Frog Weapon Stats Modifier	7EE60263
@@ -10585,7 +10585,7 @@ C	Ayla Hit Ratio Stats Modifier	7EE60263
 C	Ayla Evade Stats Modifier	7EE60263
 C	Ayla Magic Defense Stats Modifier	7EE60263
 C	Ayla Level Stats Modifier	7EE60263
-C	Ayla Experience Stats Modifier	7EE60263
+C	Ayla Esixteen Stats Modifier	7EE60263
 C	Ayla Head Stats Modifier	7EE60263
 C	Ayla Body Stats Modifier	7EE60263
 C	Ayla Weapon Stats Modifier	7EE60263
@@ -10617,7 +10617,7 @@ C	Magus Hit Ratio Stats Modifier	7EE60263
 C	Magus Evade Stats Modifier	7EE60263
 C	Magus Magic Defense Stats Modifier	7EE60263
 C	Magus Level Stats Modifier	7EE60263
-C	Magus Experience Stats Modifier	7EE60263
+C	Magus Esixteen Stats Modifier	7EE60263
 C	Magus Head Stats Modifier	7EE60263
 C	Magus Body Stats Modifier	7EE60263
 C	Magus Weapon Stats Modifier	7EE60263
@@ -10912,7 +10912,7 @@ C	Hit	7E260F00
 C	Evade	7E261000
 C	Magic Defense	7E261100
 C	Level	7E261200
-C	Experience	7E261300+7E261400
+C	Esixteen	7E261300+7E261400
 C	XP Needed To Level Up	7E262B00+7E262C00
 C	Skill Points Needed To Gain Next Tech	7E262D00+7E262E00
 C	1st Name Digit	7E2C23A0
@@ -10939,7 +10939,7 @@ C	Hit	7E265F00
 C	Evade	7E266000
 C	Magic Defense	7E266100
 C	Level	7E266200
-C	Experience	7E266300+7E266400
+C	Esixteen	7E266300+7E266400
 C	XP Needed To Level Up	7E267B00+7E267C00
 C	Skill Points Needed To Gain Next Tech	7E267D00+7E267E00
 C	Name	7E2C2900
@@ -10960,7 +10960,7 @@ C	Hit	7E26AF00
 C	Evade	7E26B000
 C	Magic Defense	7E26B100
 C	Level	7E26B200
-C	Experience	7E26B300+7E26B400
+C	Esixteen	7E26B300+7E26B400
 C	XP Needed To Level Up	7E26CB00+7E26CC00
 C	Skill Points Needed To Gain Next Tech	7E26CD00+7E26CE00
 C	Name	7E2C2F00
@@ -10981,7 +10981,7 @@ C	Hit	7E274F00
 C	Evade	7E275000
 C	Magic Defense	7E275100
 C	Level	7E275200
-C	Experience	7E275300+7E275400
+C	Esixteen	7E275300+7E275400
 C	XP Needed To Level Up	7E276B00+7E276C00
 C	Skill Points Needed To Gain Next Tech	7E276D00+7E276E00
 C	Name	7E2C3B00
@@ -11000,7 +11000,7 @@ C	Hit	7E26FF00
 C	Evade	7E270000
 C	Magic Defense	7E270100
 C	Level	7E270200
-C	Experience	7E270300+7E270400
+C	Esixteen	7E270300+7E270400
 C	XP Needed To Level Up	7E271B00+7E271C00
 C	Skill Points Needed To Gain Next Tech	7E271D00+7E271E00
 C	Name	7E2C3500
@@ -11019,7 +11019,7 @@ C	Hit	7E279F00
 C	Evade	7E27A000
 C	Magic Defense	7E27A100
 C	Level	7E27A200
-C	Experience	7E27A300+7E27A400
+C	Esixteen	7E27A300+7E27A400
 C	XP Needed To Level Up	7E27BB00+7E27BC00
 C	Skill Points Needed To Gain Next Tech	7E27BD00+7E27BE00
 C	Name	7E2C4100
@@ -11038,7 +11038,7 @@ C	Hit	7E27EF00
 C	Evade	7E27F000
 C	Magic Defense	7E27F100
 C	Level	7E27F200
-C	Experience	7E27F300+7E27F400
+C	Esixteen	7E27F300+7E27F400
 C	XP Needed To Level Up	7E280B00+7E280C00
 C	Skill Points Needed To Gain Next Tech	7E280D00+7E280E00
 C	Name	7E2C4700
@@ -12924,12 +12924,12 @@ C	1 Max HP	7E18D001+7E18D100
 C	0 Current HP	7E185200+7E185300
 C	1 Max HP	7E18D201+7E18D300
 G	Dai-4-ji Super Robot Taisen (Japan) (Game Genie)
-C	Extra Experience	CB3C-D76A+EE3C-D7AA+EE38-DDDA
+C	Extra Esixteen	CB3C-D76A+EE3C-D7AA+EE38-DDDA
 C	Alternate Code	CB38-D7DA+EE38-D70A+EE38-D76A
 C	Press 'B' Over An Enemy To Give It 0 HP	B336-4FD6
 G	Dai-4-ji Super Robot Taisen (Japan)
 C	Press 'B' Over An Enemy To Give It 0 HP	B336-4FD6
-C	Extra Experience	CB3C-D76A+EE3C-D7AA+EE38-DDDA
+C	Extra Esixteen	CB3C-D76A+EE3C-D7AA+EE38-DDDA
 C	Alternate Code	CB38-D7DA+EE38-D70A+EE38-D76A
 G	Daikaijuu Monogatari (Japan)
 C	No Random Battles	7E030202
@@ -15418,7 +15418,7 @@ C	Intelligence	7E393400
 C	Luck	7E393500
 C	Max Hp	7E392900+7E392A00
 C	Max Mp	7E392D00+7E392E00
-C	Experience	7E392600+7E392700+7E392800
+C	Esixteen	7E392600+7E392700+7E392800
 C	2nd Item Slot	7E392600+7E392700+7E392800
 C	3rd Item Slot	7E392600+7E392700+7E392800
 C	4th Item Slot	7E392600+7E392700+7E392800
@@ -15441,7 +15441,7 @@ C	Intelligence	7E397000
 C	Luck	7E397100
 C	Max Hp	7E396500+7E396600
 C	Max Mp	7E396900+7E396A00
-C	Experience	7E396200+7E396300+7E396400
+C	Esixteen	7E396200+7E396300+7E396400
 C	1st Item Slot	7E396200+7E396300+7E396400
 C	2nd Item Slot	7E396200+7E396300+7E396400
 C	3rd Item Slot	7E396200+7E396300+7E396400
@@ -15465,7 +15465,7 @@ C	Intelligence	7E39AC00
 C	Luck	7E39AD00
 C	Max Hp	7E39A100+7E39A200
 C	Max Mp	7E39A500+7E39A600
-C	Experience	7E399E00+7E399F00+7E39A000
+C	Esixteen	7E399E00+7E399F00+7E39A000
 C	1st Item Slot	7E399E00+7E399F00+7E39A000
 C	2nd Item Slot	7E399E00+7E399F00+7E39A000
 C	3rd Item Slot	7E399E00+7E399F00+7E39A000
@@ -15489,7 +15489,7 @@ C	Intelligence	7E39E800
 C	Luck	7E39E900
 C	Max Hp	7E39DD00+7E39DE00
 C	Max Mp	7E39E100+7E39E200
-C	Experience	7E39DA00+7E39DB00+7E39DC00
+C	Esixteen	7E39DA00+7E39DB00+7E39DC00
 C	1st Item Slot	7E39DA00+7E39DB00+7E39DC00
 C	2nd Item Slot	7E39DA00+7E39DB00+7E39DC00
 C	3rd Item Slot	7E39DA00+7E39DB00+7E39DC00
@@ -15570,7 +15570,7 @@ C	Intelligence	7E204900
 C	Luck	7E204A00
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E204E00+7E204F00
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E205000
-C	Experience	7E204B00+7E204C00+7E204D00
+C	Esixteen	7E204B00+7E204C00+7E204D00
 C	All Field Spells Known	7E2063FF
 C	Most Battle Spells Known	7E2064FF
 C	Last 4 Battle Spells Known	7E2065FF
@@ -15595,7 +15595,7 @@ C	Intelligence	7E207300
 C	Luck	7E207400
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E207800+7E207900
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E207A00
-C	Experience	7E207500+7E207600+7E207700
+C	Esixteen	7E207500+7E207600+7E207700
 C	All Field Spells Known	7E208EFF
 C	Most Battle Spells Knows	7E208FFF
 C	Last 4 Battle Spells Known	7E2090FF
@@ -15620,7 +15620,7 @@ C	Intelligence	7E209D00
 C	Luck	7E209E00
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E20A200+7E20A300
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E20A400
-C	Experience	7E209F00+7E20A000+7E20A100
+C	Esixteen	7E209F00+7E20A000+7E20A100
 C	All Field Spells Known	7E20B7FF
 C	Most Battle Spells Known	7E20B8FF
 C	Last 4 Battle Spells Known	7E20B9FF
@@ -15645,7 +15645,7 @@ C	Intelligence	7E20C700
 C	Luck	7E20C800
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E20CC00+7E20CD00
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E20CE00
-C	Experience	7E20C900+7E20CA00+7E20CB00
+C	Esixteen	7E20C900+7E20CA00+7E20CB00
 C	All Field Spells Known	7E20E2FF
 C	Most Battle Spells Known	7E20E3FF
 C	Last 4 Battle Spells Known	7E20E4FF
@@ -15672,7 +15672,7 @@ C	Intelligence	7E20F100
 C	Luck	7E20F200
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E20F600+7E20F700
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E20F800
-C	Experience	7E20F300+7E20F400+7E20F500
+C	Esixteen	7E20F300+7E20F400+7E20F500
 C	All Field Spells Known	7E210BFF
 C	Most Battle Spells Known	7E210CFF
 C	Last 4 Battle Spells Known	7E210DFF
@@ -15699,7 +15699,7 @@ C	Intelligence	7E211B00
 C	Luck	7E212C00
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E212000+7E212100
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E212200
-C	Experience	7E211D00+7E211E00+7E211F00
+C	Esixteen	7E211D00+7E211E00+7E211F00
 C	All Field Spells Known	7E2135FF
 C	Most Battle Spells Known	7E2136FF
 C	Last 4 Battle Spells Known	7E2137FF
@@ -15725,7 +15725,7 @@ C	Intelligence	7E214500
 C	Luck	7E214600
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E214A00+7E214B00
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E214C00
-C	Experience	7E214700+7E214800+7E214900
+C	Esixteen	7E214700+7E214800+7E214900
 C	All Field Spells Known	7E215FFF
 C	Most Battle Spells Known	7E2160FF
 C	Last 4 Battle Spells Known	7E2161FF
@@ -15752,7 +15752,7 @@ C	Intelligence	7E216F00
 C	Luck	7E217000
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E217400+7E217500
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E217600
-C	Experience	7E217100+7E217200+7E217300
+C	Esixteen	7E217100+7E217200+7E217300
 C	All Field Spells Known	7E2189FF
 C	Most Battle Spells Known	7E218AFF
 C	Last 4 Battle Spells Known	7E218BFF
@@ -15776,7 +15776,7 @@ C	Intelligence	7E233B00
 C	Luck	7E233C00
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E234000+7E234100
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E234200
-C	Experience	7E233D00+7E233E00+7E233F00
+C	Esixteen	7E233D00+7E233E00+7E233F00
 C	All Command Spells Known	7E234AFF
 C	All Battle Spells/skills Known	7E234BFF
 C	Monster Type	7E235D01
@@ -15787,7 +15787,7 @@ C	Intelligence	7E235400
 C	Luck	7E235500
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E235900+7E235A00
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E235B00
-C	Experience	7E235600+7E235700+7E235800
+C	Esixteen	7E235600+7E235700+7E235800
 C	All Command Spells Known	7E2364FF
 C	All Battle Spells/skills Known	7E2365FF
 C	Monster Type	7E237801
@@ -15798,7 +15798,7 @@ C	Intelligence	7E236F00
 C	Luck	7E237000
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E237400+7E237500
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E237600
-C	Experience	7E237100+7E237200+7E237300
+C	Esixteen	7E237100+7E237200+7E237300
 C	All Command Spells Known	7E237EFF
 C	All Battle Spells/skills Known	7E237FFF
 C	Monster Activator	7E239101
@@ -15809,7 +15809,7 @@ C	Intelligence	7E238800
 C	Luck	7E238900
 C	Max Hp [Don't Go Higher Than 999 Dec]	7E238D00+7E238E00
 C	Max Mp [Don't Go Higher Than 99 Dec]	7E238F00
-C	Experience	7E238A00+7E238B00+7E238C00
+C	Esixteen	7E238A00+7E238B00+7E238C00
 C	All Command Spells Known	7E2397FF
 C	All Battle Spells/skills Known	7E2398FF
 G	Dragon Quest VI - Maboroshi no Daichi (Japan) (Action Replay) (diff)
@@ -15984,7 +15984,7 @@ C	All Physical Attacks Are Misses	DD62-540C
 C	One Attack To Kill All Enemies	4A62-540C
 C	Infinite 98 Thief Keys In Sack	7E400562
 C	Sprite	7E400D00
-C	Experience	7E402600+7E402700+7E402800
+C	Esixteen	7E402600+7E402700+7E402800
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E402600+7E402700+7E402800
 C	Max Hp	7E403000+7E403100
 C	Max Mp	7E403400
@@ -16027,7 +16027,7 @@ C	Magic Slot 18	7E45EE00
 C	Magic Slot 19	7E45EF00
 C	Magic Slot 20	7E45F000
 C	Sprite	7E400E00
-C	Experience	7E405000+7E405100+7E405200
+C	Esixteen	7E405000+7E405100+7E405200
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E405000+7E405100+7E405200
 C	Max Hp	7E405A00+7E405B00
 C	Max Mp	7E405E00
@@ -16075,7 +16075,7 @@ C	Magic Slot 18	7E460200
 C	Magic Slot 19	7E460300
 C	Magic Slot 20	7E460400
 C	Sprite	7E400F00
-C	Experience	7E407A00+7E407B00+7E407C00
+C	Esixteen	7E407A00+7E407B00+7E407C00
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E407A00+7E407B00+7E407C00
 C	Max Hp	7E408400+7E408500
 C	Max Mp	7E408800
@@ -16122,7 +16122,7 @@ C	Magic Slot 18	7E461600
 C	Magic Slot 19	7E461700
 C	Magic Slot 20	7E461800
 C	Sprite	7E401000
-C	Experience	7E40A400+7E40A500+7E40A600
+C	Esixteen	7E40A400+7E40A500+7E40A600
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E40A400+7E40A500+7E40A600
 C	Max Hp	7E40AE00+7E40AF00
 C	Max Mp	7E40B200
@@ -16170,7 +16170,7 @@ C	Magic Slot 18	7E462A00
 C	Magic Slot 19	7E462B00
 C	Magic Slot 20	7E462C00
 C	Sprite	7E401100
-C	Experience	7E40CE00+7E40CF00+7E40D000
+C	Esixteen	7E40CE00+7E40CF00+7E40D000
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E40CE00+7E40CF00+7E40D000
 C	Max Hp	7E40D800+7E40D900
 C	Max Mp	7E40DC00
@@ -16217,7 +16217,7 @@ C	Magic Slot 18	7E463D00
 C	Magic Slot 19	7E463E00
 C	Magic Slot 20	7E463F00
 C	Sprite	7E401200
-C	Experience	7E40F800+7E40F900+7E40FA00
+C	Esixteen	7E40F800+7E40F900+7E40FA00
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E40F800+7E40F900+7E40FA00
 C	Job	7E41FF00
 C	Max Hp	7E410200+7E410300
@@ -16266,7 +16266,7 @@ C	Magic Slot 18	7E465100
 C	Magic Slot 19	7E465200
 C	Magic Slot 20	7E465300
 C	Sprite	7E401300
-C	Experience	7E412200+7E412300+7E412400
+C	Esixteen	7E412200+7E412300+7E412400
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E412200+7E412300+7E412400
 C	Max Hp	7E412C00+7E412D00
 C	Max Mp	7E413000
@@ -16314,7 +16314,7 @@ C	Magic Slot 18	7E466500
 C	Magic Slot 19	7E466600
 C	Magic Slot 20	7E466700
 C	Sprite	7E401400
-C	Experience	7E414C00+7E414D00+7E414E00
+C	Esixteen	7E414C00+7E414D00+7E414E00
 C	Status (0: Dead - 1: POISON - 2: Envenomed - 3: ??? - 4: Sleep)	7E414C00+7E414D00+7E414E00
 C	Max Hp	7E415600+7E415700
 C	Max Mp	7E415800
@@ -16398,15 +16398,15 @@ C	Infinite HP	7E13CD0F+7E13CE27
 C	Max HP	7E13CF0F+7E13D027
 C	Infinite MP	7E13D10F+7E13D227
 C	Max MP	7E13D30F+7E13D427
-C	65,000 Experience	7E13D5E8+7E13D6FD
+C	65,000 Esixteen	7E13D5E8+7E13D6FD
 G	Dragon Slayer - Eiyuu Densetsu (Japan)
 C	Infinite HP	7E13CD0F+7E13CE27
 C	Max HP	7E13CF0F+7E13D027
 C	Infinite MP	7E13D10F+7E13D227
 C	Max MP	7E13D30F+7E13D427
-C	65,000 Experience	7E13D5E8+7E13D6FD
+C	65,000 Esixteen	7E13D5E8+7E13D6FD
 G	Dragon View (USA) (Action Replay)
-C	Max Experience	7E7095E7+7E709603
+C	Max Esixteen	7E7095E7+7E709603
 C	Max Money (Jade)	7E21310F+7E213227
 C	Max Attack Power	7E98E9FF
 C	Max Defence Power	7E98EAFF
@@ -16441,7 +16441,7 @@ C	Free 'X' Button L.2 Sword Attack	C266-4CAA
 C	Free 'X' Button L.1 Hauza Attack	C262-4C0A
 C	Free 'X' Button L.2 Hauza Attack	C26A-460A
 C	Infinite Magic For Rings	C237-4116
-C	Max Experience	7E7095E7+7E709603
+C	Max Esixteen	7E7095E7+7E709603
 C	Max Money [Jade]	7E21310F+7E213227
 C	Max Attack Power	7E98E9FF
 C	Max Defence Power	7E98EAFF
@@ -16708,7 +16708,7 @@ C	Max Evade	7E4D0863
 C	Max Hit	7E4D0A63
 C	999 ATTK	7E4D020F+7E4D0327
 C	999 Def	7E4D040F+7E4D0527
-C	Current Experience Mod	7E4CF200+7E4CF300+7E4CF400
+C	Current Esixteen Mod	7E4CF200+7E4CF300+7E4CF400
 C	Char 1 pic&name mod	7E474A00
 C	Char 2 pic&name mod	7E474C00
 C	Char 3 pic&name mod	7E474E00
@@ -17285,12 +17285,12 @@ C	Raise Level Quickly	7E018347
 C	Start with 4 shields	7123-A4A7+3D23-A7D7
 C	Start with 5 shields	2B23-A4A7+B823-A7D7
 C	Infinite shields	C263-6FAF
-C	Start at experience level 2	D42E-A7A7
-C	Start at experience level 3	D72E-A7A7
-C	Start at experience level 4	D02E-A7A7
-C	Start at experience level 5	D92E-A7A7
-C	Advancing experience levels is easier	4D21-6F0F
-C	Advancing experience levels is much easier	DA21-6F0F
+C	Start at esixteen level 2	D42E-A7A7
+C	Start at esixteen level 3	D72E-A7A7
+C	Start at esixteen level 4	D02E-A7A7
+C	Start at esixteen level 5	D92E-A7A7
+C	Advancing esixteen levels is easier	4D21-6F0F
+C	Advancing esixteen levels is much easier	DA21-6F0F
 C	Keep current score when game is continued	C223-AFD7+C223-AFA7
 C	2 credits	DF2E-AF67+CB2E-AF07+DD2E-AFA7
 C	3 credits	D42E-AF67+CB2E-AF07+DD2E-AFA7
@@ -17311,7 +17311,7 @@ C	Start At Stage 3	D437-DDDD+CB34-D7AD+DD37-DD0D
 C	Start At Stage 4	D737-DDDD+CB34-D7AD+DD37-DD0D
 C	Start At Stage 5	D037-DDDD+CB34-D7AD+DD37-DD0D
 C	Start At Stage 6	D937-DDDD+CB34-D7AD+DD37-DD0D
-C	Infinite Experience Bar	7E018364
+C	Infinite Esixteen Bar	7E018364
 C	Start On Level	7E010600
 C	Start With Satellite Formation	7E01F700
 C	Always Play In Config â�� Sound Mode	7E13A800
@@ -19046,30 +19046,30 @@ C	Release Date	7E999400
 C	Get Lots of Money (After Battle)	7E9990FF+7E9991FF
 C	Infinite/Max Health	7E99AF99+7E99B099
 C	Infinite/Max Magic	7E99B199+7E99B299
-C	Experience Modifier	7E99BB64
+C	Esixteen Modifier	7E99BB64
 C	Infinite/Max Health	7E99E199+7E99E299
 C	Infinite/Max Magic	7E99E399+7E99E499
-C	Experience Modifier	7E99ED00
+C	Esixteen Modifier	7E99ED00
 C	Infinite/Max Health	7E9DC999+7E9DCA99
 C	Infinite/Max Magic	7E9DCB99+7E9DCC99
-C	Experience Modifier	7E9DD500
+C	Esixteen Modifier	7E9DD500
 C	Infinite/Max Health	7E9CCF99+7E9CD099
 C	Infinite/Max Magic	7E9CD199+7E9CD299
-C	Experience Modifier	7E9CDB00
+C	Esixteen Modifier	7E9CDB00
 C	Infinite/Max HP	7E9B0D99+7E9B0E99
 C	Infinite/Max Magic	7E9B0F99+7E9B1099
-C	Experience Modifier	7E9B1900
+C	Esixteen Modifier	7E9B1900
 C	Infinite/Max HP	7E9C0799+7E9C0899
 C	Infinite/Max Magic	7E9C0899+7E9C0999
 C	Infinite/Max HP	7E9A1399+7E9A1499
 C	Infinite/Max Magic	7E9A1599+7E9A1699
-C	Experience Modifier	7E9A1F00
-C	Elf Sorcerer Experience Modifier	7E9E3964
-C	Priest Experience Modifier	7E9BE100
-C	Shane Experience Modifier	7E9C1300
-C	Shishima Experience Modifier	7E9D0D00
-C	Jeda Experience Modifier	7E9CA900
-C	Jenny Experience Modifier	7E9B4B00
+C	Esixteen Modifier	7E9A1F00
+C	Elf Sorcerer Esixteen Modifier	7E9E3964
+C	Priest Esixteen Modifier	7E9BE100
+C	Shane Esixteen Modifier	7E9C1300
+C	Shishima Esixteen Modifier	7E9D0D00
+C	Jeda Esixteen Modifier	7E9CA900
+C	Jenny Esixteen Modifier	7E9B4B00
 C	Enemy 1 Health Modifiers	7E192E00+7E193000
 C	Enemy 1 Magic Modifiers	7E192F00+7E193100
 C	Enemy 2 Health Modifiers	7E182E00+7E183000
@@ -19186,7 +19186,7 @@ C	Gives You The Second And Third Row of Items In Your Items Menu	7E0EA5FF+7E0EA6
 C	All Weapons	7E1032FF+7E1033FF
 C	Have All Spells	7E1038FF+7E1039FF
 C	Have Maximum Level	7E101029
-C	Have Maximum Experience	7E10117F+7E101296+7E101398
+C	Have Maximum Esixteen	7E10117F+7E101296+7E101398
 C	9999 HP	7E10140F+7E101527
 C	9999 Maximum HP	7E10160F+7E101727
 C	Infinite 99 White MP	7E101863
@@ -19676,7 +19676,7 @@ C	Infinite Items In 1st Slot	7E074063
 C	Get Items By Using Items In The First Slot	01A6F244
 C	Infinite Magic	038532BD
 C	Infinite Hit Points	03CAE6BD
-C	Tons of Items And Experience Code	03ED4E01
+C	Tons of Items And Esixteen Code	03ED4E01
 C	Gain 65,000 Exp. Points After Battle, Plus The Normal Exp.	03EE21EE
 C	Infinite Gold	01C702AD+01C707AE
 C	Infinite HP (Player 1)	7E2087:FF+7E2088:FF
@@ -19708,8 +19708,8 @@ C	Instant Battles	7E06ABFF
 C	No Monsters; Auto-Win Battle (There Are Actually A Lot of These)	7E180102+7E180008
 C	Battle Lucrative Egg	7E180103+7E1800FE
 C	Max GP	7E16A07F+7E16A196+7E16A298
-C	Massive Experience Each Battle - Six/Seven Digits (Version 1)	7E00B303
-C	Massive Experience Each Battle - Six/Seven Digits (Version 2)	7E359303
+C	Massive Esixteen Each Battle - Six/Seven Digits (Version 1)	7E00B303
+C	Massive Esixteen Each Battle - Six/Seven Digits (Version 2)	7E359303
 C	No Random Battles	7E068600
 C	Fix Babil Tower Bug	7E1283FF
 G	Final Fantasy II (USA) (Rev 1)
@@ -19734,7 +19734,7 @@ C	Don't Display Status Image Player 1	7E2EC300
 C	Always Display The Turn Gauge	7E3B0400
 C	Always Run	7E11DF20
 C	No Random Encounters	7E1F6E00
-C	Experience After Battle	7E2F35FF+7E2F36E7+7E2F3776
+C	Esixteen After Battle	7E2F35FF+7E2F36E7+7E2F3776
 C	Save Anywhere	7E020180
 C	Have All Espers	7E1A69FF+7E1A6AFF+7E1A6BFF+7E1A6CFF
 C	Enemy 1 No Health	7E3BFC00+7E3BFD00
@@ -21417,7 +21417,7 @@ C	Raise Physical Damage, Raise Magical Damage(2nd), Raise HP By 50%, Raise MP By
 C	Pre-Emptive Strikes More Often, No Back Attacks or Pincer Attacks, Commands Changed	2813-5547
 C	Raise Steal Success Rate, Raise Magic Damage(1st), Physical Attacks Always Successful, More	E713-5517
 C	Muliple Attacks(Offering), Randomly Counterattack, Randomly Avoid Attacks, More	5E13-55C7
-C	Cast 'Shell' When Near Death, Cast 'Safe' When Near Death, Double Experience Won	D813-5537
+C	Cast 'Shell' When Near Death, Cast 'Safe' When Near Death, Double Esixteen Won	D813-5537
 C	No Random Battles + Have Dash	4713-5937
 C	Fewer Random Battles + Have Dash	4F13-5937
 C	Characters Will Do STRANGE Things In Battle	A29D-54D8
@@ -21520,7 +21520,7 @@ C	Gain Nearly 1,000,000 Exp. Per Fight!	D793-54D8
 C	Casts Flare After A Battle, Blackout	AA92-E768
 C	Level 99 After One Battle	AA23-54D8
 C	Over 5 Million Exp Per Fight!	1793-54D8
-C	Gain No Experience (For Expert Players Only!)	AA2A-54D8
+C	Gain No Esixteen (For Expert Players Only!)	AA2A-54D8
 C	Learn All Spells After One Battle	3037-54A6
 C	1000x EXP And GP After A Battle!  A Great Code!	0D39-0766
 C	Repeat Battle Ending (Turn Off To Exit)	132C-E4D8
@@ -22128,7 +22128,7 @@ C	Raise Physical Damage, Raise Magical Damage(2nd), Raise HP By 50%, Raise MP By
 C	Pre-Emptive Strikes More Often, No Back Attacks or Pincer Attacks, Commands Changed	2813-5547
 C	Raise Steal Success Rate, Raise Magic Damage(1st), Physical Attacks Always Successful, More	E713-5517
 C	Multiple Attacks(Offering), Randomly Counterattack, Randomly Avoid Attacks, More	5E13-55C7
-C	Cast 'Shell' When Near Death, Cast 'Safe' When Near Death, Double Experience Won	D813-5537
+C	Cast 'Shell' When Near Death, Cast 'Safe' When Near Death, Double Esixteen Won	D813-5537
 C	No Random Battles Have Dash	4713-5937
 C	Fewer Random Battles Have Dash	4F13-5937
 C	Can Edit Anyone's Commands From Status Window	DDF2-7DDE+DD4A-8D0A
@@ -22172,7 +22172,7 @@ C	Raise Physical Damage, Raise Magical Damage(2nd), Raise HP By 50%, Raise MP By
 C	Pre-Emptive Strikes More Often, No Back Attacks Or Pincer Attacks, Commands Changed	2813-5547
 C	Raise Steal Success Rate, Raise Magic Damage(1st), Physical Attacks Always Successful, More	E713-5517
 C	Muliple Attacks(Warrior's Proof), Randomly Counterattack, Randomly Avoid Attacks, More	5E13-55C7
-C	Cast 'Shell' When Near Death, Cast 'Protect' When Near Death, Double Experience Won	D813-5537
+C	Cast 'Shell' When Near Death, Cast 'Protect' When Near Death, Double Esixteen Won	D813-5537
 C	No Random Battles + Have Dash	4713-5937
 C	Fewer Random Battles + Have Dash	4F13-5937
 G	Final Fantasy IV (Japan) (Action Replay)
@@ -23649,7 +23649,7 @@ C	Raise Physical Damage, Raise Magical Damage(2nd), Raise HP By 50%, Raise MP By
 C	Pre-Emptive Strikes More Often, No Back Attacks or Pincer Attacks, Commands Changed	2813-5547
 C	Raise Steal Success Rate, Raise Magic Damage(1st), Physical Attacks Always Successful, More	E713-5517
 C	Muliple Attacks(Warrior's Proof), Randomly Counterattack, Randomly Avoid Attacks, More	5E13-55C7
-C	Cast 'Shell' When Near Death, Cast 'Protect' When Near Death, Double Experience Won	D813-5537
+C	Cast 'Shell' When Near Death, Cast 'Protect' When Near Death, Double Esixteen Won	D813-5537
 C	No Random Battles + Have Dash	4713-5937
 C	Fewer Random Battles + Have Dash	4F13-5937
 C	Level 91:MP Gained	7E060011
@@ -25012,7 +25012,7 @@ C	Don't Display Status Image Player 1	7E2EC300
 C	Always Display The Turn Gauge	7E3B0400
 C	Always Run	7E11DF20
 C	No Random Encounters	7E1F6E00
-C	Experience After Battle	7E2F35FF+7E2F36E7+7E2F3776
+C	Esixteen After Battle	7E2F35FF+7E2F36E7+7E2F3776
 C	Save Anywhere	7E020180+7E020280
 G	Final Fight (USA)
 C	Infinite Life	7E0D1450
@@ -28454,7 +28454,7 @@ C	Start With $250 Gold Instead of $50	ECED-D400
 C	Start With About $1,000 Gold Instead of $50	D0ED-D460
 C	Start With About $10,000 Gold	45ED-D460
 C	Start With About $50,000 Gold	A0ED-D460
-C	You Only Need 2 Experience Points (Instead of 18) To Reach Level 2	D4EC-D7D0
+C	You Only Need 2 Esixteen Points (Instead of 18) To Reach Level 2	D4EC-D7D0
 C	Start With 50 Health Instead of 25	74EC-DFD0
 C	Start With 100 Health	10EC-DFD0
 C	Start With 250 Health	ECEC-DFD0
@@ -30256,22 +30256,22 @@ C	Infinite Energy	C927-DF6F
 C	One Hit Kills	DDA6-07DF
 C	Never Miss	DDA4-070F+6DAD-04DF
 G	Kidou Senshi Z Gundam - Away to the Newtype (Japan) (Game Genie)
-C	Experience Is At 100	10F2-9AEC
-C	Experience Is At 255	EEF2-9AEC
-C	Experience Is At 9999	37F2-9AEC+D7F2-927C
-C	Experience Is At 65535	EEF2-9AEC+EEF2-927C
+C	Esixteen Is At 100	10F2-9AEC
+C	Esixteen Is At 255	EEF2-9AEC
+C	Esixteen Is At 9999	37F2-9AEC+D7F2-927C
+C	Esixteen Is At 65535	EEF2-9AEC+EEF2-927C
 C	You Have 0 Up Grade Points	DDFC-FE5B
 C	You Have 100 Up Grade Points	10FC-FE5B
 C	You Have 255 Up Grade Points	EEFC-FE5B
 G	Kidou Senshi Z Gundam - Away to the Newtype (Japan)
-C	Experience Is At 100	7E19D364
-C	Experience Is At 255	7E19D3FF
-C	Experience Is At 9999	7E19D3E7+7E19D403
-C	Experience Is At 65535	7E19D3FF+7E19D4FF
+C	Esixteen Is At 100	7E19D364
+C	Esixteen Is At 255	7E19D3FF
+C	Esixteen Is At 9999	7E19D3E7+7E19D403
+C	Esixteen Is At 65535	7E19D3FF+7E19D4FF
 C	You Have 0 Up Grade Points	7E14AD00
 C	You Have 100 Up Grade Points	7E14AD64
 C	You Have 255 Up Grade Points	7E14ADFF
-C	Experience Is At 9999	7E19D3E3+7E19D403
+C	Esixteen Is At 9999	7E19D3E3+7E19D403
 G	Kidou Soukou Dion (Japan) (En)
 C	Infinite Health	7E0B4805
 C	Fly through Enemies	7E0A504C
@@ -30751,7 +30751,7 @@ C	Jump Modifier (Player 1)	7E0B7100
 C	Enable 2-Player Same Character Cheat	7E5C7001
 C	Enable 2-Player Same Character Cheat	DD49-E7D1
 C	Freeze Timer	7E1F9886
-C	Always get the EP (Experience Points) Bonus from Food Items along with the HP Bonus when at less than full HP	DD90-87D4
+C	Always get the EP (Esixteen Points) Bonus from Food Items along with the HP Bonus when at less than full HP	DD90-87D4
 C	Level-up 2x faster	D46F-540F
 C	Invincibility against Slime Enemies - Both Players	DD53-7DDE
 C	Invincibility against Mummies - Both Players	6D09-7DAE
@@ -31742,7 +31742,7 @@ G	Kuusou Kagaku Sekai Gulliver Boy (Japan)
 C	Hit Anywhere	DD6E-4FD6+DD69-14D6
 C	Invincibility	6D67-C4A6
 C	Infinite Health	C288-C469
-C	Pick Up Experience With Any Player	6DB6-CD00+DDB5-CF00
+C	Pick Up Esixteen With Any Player	6DB6-CD00+DDB5-CF00
 C	Attack Bar Always Full	DDCC-1DA5
 C	Quick Level Up	DDB2-47A9
 C	Infinite Bombs P2	7E1A9B09
@@ -31762,7 +31762,7 @@ C	Have Knife	7E1AA801
 G	Kyuuyaku Megami Tensei (Japan)
 C	No Random Encounters	7E042000
 G	La Wares (Japan)
-C	Super experience	7E1183FF
+C	Super esixteen	7E1183FF
 C	Max Strength	7E0905FF
 C	Max Attack	7E0901FF
 C	Max Endurance	7E0921FF
@@ -31782,7 +31782,7 @@ C	Infinite Maximum MP	7E0522FF
 C	Always Have High Str	7E052502
 C	Always Have High Def	7E052702
 C	Always Have High Gold	7E0529FF
-C	Have Maximum Experience	7E052AFF+7E052BFF
+C	Have Maximum Esixteen	7E052AFF+7E052BFF
 C	Shop Item 1 Free	7E045C00+7E045D00
 C	Shop Item 2 Free	7E045E00+7E045F00
 C	Shop Item 3 Free	7E046000+7E046100
@@ -31847,7 +31847,7 @@ C	Infinite Maximum MP	7E0522FF
 C	Always Have High Str	7E052502
 C	Always Have High Def	7E052702
 C	Always Have High Gold	7E0529FF
-C	Have Maximum Experience	7E052AFF+7E052BFF
+C	Have Maximum Esixteen	7E052AFF+7E052BFF
 C	Shop Item 1 Free	7E045C00+7E045D00
 C	Shop Item 2 Free	7E045E00+7E045F00
 C	Shop Item 3 Free	7E046000+7E046100
@@ -34852,11 +34852,11 @@ C	No HP Lost When Walking Over Swamp Ground	0196B400
 C	More HP Lost When Walking Over Swamp Ground	0196B404
 C	Move Around Caves And World Map Quicker (Except When Leaving A Vehicle - For Example, The Boat)	1982920
 C	No Enemies But You Can't Enter Or Exit Towns Or Caves Or Towers (Just Turn The Effects Off Then Exit And Turn It On Again)	01B45698
-C	Gain 6-Digit Experience And Enemies Leave Might Shield	01F5DA0D
-C	Gain 6-Digit Experience And Enemies Leave Zirco Shield	01F5DA47
-C	Gain 6-Digit Experience And Enemies On Doom Island Leave Might Bow	01F5DA71
+C	Gain 6-Digit Esixteen And Enemies Leave Might Shield	01F5DA0D
+C	Gain 6-Digit Esixteen And Enemies Leave Zirco Shield	01F5DA47
+C	Gain 6-Digit Esixteen And Enemies On Doom Island Leave Might Bow	01F5DA71
 C	Enemies Leave Might Armors 70% of Time	01F5DA7B
-C	Get High Experience (Varies) And Enemies Will Leave Might Helmets 70% of The Time	01F5DA7D
+C	Get High Esixteen (Varies) And Enemies Will Leave Might Helmets 70% of The Time	01F5DA7D
 C	Gold Orcs Leave Might Swords, Others Leaves Different Items of Their Own At 70% Rate	01F5DA82
 C	Enemies Leave Different Items. The Efreets (Big Fire Monster) Leave Might Bows	01F5DA85
 C	Immune To All Petrifying Effects (Stone, Poison, Confused, Etc.)	08B91280
@@ -34989,11 +34989,11 @@ C	Infinite Gold	7E14CF7F+7E14D096+7E14D198
 C	Shopkeepers Don't Charge For Purchases (Some Shops Only)	95A8-67A4
 C	Move Around Caves And World Map Quicker (Except When Leaving A  Vehicle - For Example, The Boat)	D0B8-6FD9
 C	No Enemies But You Can't Enter Or Exit Towns Or Caves Or Towers (Just Turn The Effects Off Then Exit And Turn It On Again)	B689-DF69
-C	Gain 6-Digit Experience And Enemies Leave Might Shield	D2E2-0469
-C	Gain 6-Digit Experience And Enemies Leave Zirco Shield	05E2-0469
-C	Gain 6-Digit Experience And Enemies On Doom Island Leave Might Bow	5FE2-0469
+C	Gain 6-Digit Esixteen And Enemies Leave Might Shield	D2E2-0469
+C	Gain 6-Digit Esixteen And Enemies Leave Zirco Shield	05E2-0469
+C	Gain 6-Digit Esixteen And Enemies On Doom Island Leave Might Bow	5FE2-0469
 C	Enemies Leave Might Armors 70% of Time	58E2-0469
-C	Get High Experience (Varies) And Enemies Will Leave Might Helmets 70% of The Time	52E2-0469
+C	Get High Esixteen (Varies) And Enemies Will Leave Might Helmets 70% of The Time	52E2-0469
 C	Gold Orcs Leave Might Swords, Others Leaves Different Items of Their Own At 70% Rate	64E2-0469
 C	Enemies Leave Different Items. The Efreets (Big Fire Monster) Leave Might Bows	69E2-0469
 C	Immune To All Petrifying Effects (Stone, Poison, Confused, Etc.)	6D8F-0DC4
@@ -37234,9 +37234,9 @@ C	Red Wolf Main Cannon	7E8940FF
 C	Red Wolf S-E Ammo	7E8950FF
 C	Money	7E9102FF+7E9103FF+7E9104FF+7E9105FF
 C	No Encounter	7E068520
-C	Lots of Experience Points (Hero)	7E8014FF+7E801501
-C	Lots of Experience Points (Mechanic)	7E8114FF+7E811501
-C	Lots of Experience Points (Soldier)	7E8214FF+7E821501
+C	Lots of Esixteen Points (Hero)	7E8014FF+7E801501
+C	Lots of Esixteen Points (Mechanic)	7E8114FF+7E811501
+C	Lots of Esixteen Points (Soldier)	7E8214FF+7E821501
 G	Metal Morph (USA) (Action Replay)
 C	Have Shield/Invincible	7E038703
 C	Infinite Continues	7E003A05
@@ -43471,8 +43471,8 @@ C	Chezni Starts With 997 Speed And 997 Attack Speed	08F696CF
 C	Chezni Starts With 72 Defense, 60 Endurance	08F6973C
 C	No Money Needed In Toolhouse And Weapon	0DBABA9C
 C	Get Good Items After Battles	C1ECDEC2
-C	Over 65,000 Experience Points A Battle For The Character Leading The Group	7E15FBFF+7E15FCFF
-C	Over 65,000 Experience Points For The Second Character	7E1621FF+7E1622FF
+C	Over 65,000 Esixteen Points A Battle For The Character Leading The Group	7E15FBFF+7E15FCFF
+C	Over 65,000 Esixteen Points For The Second Character	7E1621FF+7E1622FF
 C	No Random Battles	7E186809
 C	Infinite High Gold	7E17C30E
 G	Paladin's Quest (USA) (Game Genie)
@@ -43968,8 +43968,8 @@ C	Chezni Starts With 5400 Hit Points	EEEB-6DCF
 C	Chezni Starts With 007 Power (Equivalent Of 1007)	AEEB-6F4F
 C	Chezni Starts With 997 Speed And 997 Attack Speed	AEEB-6FCF
 C	Get Good Items After Battles	A432-7765
-C	Over 65,000 Experience Points A Battle For The Character Leading The Group	7E15FBFF+7E15FCFF
-C	Over 65,000 Experience Points For The Second Character	7E1621FF+7E1622FF
+C	Over 65,000 Esixteen Points A Battle For The Character Leading The Group	7E15FBFF+7E15FCFF
+C	Over 65,000 Esixteen Points For The Second Character	7E1621FF+7E1622FF
 C	9999 Current HP	7E15FE0F+7E15FF27
 C	9999 Maximum HP	7E16000F+7E160127
 C	999 Power/Attack	7E1602E7+7E160303
@@ -46666,10 +46666,10 @@ C	Akane Starts With 24 Speed Instead of 8	F6A0-DD6D
 C	Akane Starts With 80 Speed Instead of 8	9DA0-DD6D
 C	Akane Starts With 29 Defense (Instead of 13) And 24 Strength (Instead of 8)	F6A0-DDAD
 C	Akane Starts With 85 Defense (Instead of 13) And 80 Strength (Instead of 8)	9DA0-DDAD
-C	Ranma Starts With 100 Experience Points Instead of 0	108E-A407
-C	Ranma Starts With 250 Experience Points Instead of 0	EC8E-A407
-C	Ranma Starts With 1,024 Experience Points Instead of 0	D08E-A467
-C	Ranma Starts With 10,240 Experience Points Instead of 0	468E-A467
+C	Ranma Starts With 100 Esixteen Points Instead of 0	108E-A407
+C	Ranma Starts With 250 Esixteen Points Instead of 0	EC8E-A407
+C	Ranma Starts With 1,024 Esixteen Points Instead of 0	D08E-A467
+C	Ranma Starts With 10,240 Esixteen Points Instead of 0	468E-A467
 G	Ranma 1-2 - Chougi Ranbu Hen (Japan)
 C	Ranma Moves Faster	D7B4-0DA9+EABF-04D9
 C	Ranma Jumps Faster	E8B7-07D9+D0B7-0769
@@ -49146,25 +49146,25 @@ C	First Character's Shield	7E0C1785
 C	First Character's Armour	7E0C1844
 C	First Character's Helmet	7E0C1944
 C	First Character's Accessory	7E0C1A44
-C	First Character's Experience Left To 1	7E0C0601+7E0C0700
+C	First Character's Esixteen Left To 1	7E0C0601+7E0C0700
 C	Second Character's Weapon	7E0C9644
 C	Second Character's Shield	7E0C9744
 C	Second Character's Armour	7E0C9844
 C	Second Character's Helmet	7E0C9944
 C	Second Character's Accessory	7E0C9A44
-C	Second Character's Experience Left To 1	7E0C8601+7E0C8700
+C	Second Character's Esixteen Left To 1	7E0C8601+7E0C8700
 C	Third Character's Weapon	7E0D1644
 C	Third Character's Shield	7E0D1744
 C	Third Character's Armour	7E0D1844
 C	Third Character's Helmet	7E0D1944
 C	Third Character's Accessory	7E0D1A44
-C	Third Character's Experience Left To 1	7E0D0601+7E0D0700
+C	Third Character's Esixteen Left To 1	7E0D0601+7E0D0700
 C	Fourth Character's Weapon	7E0D9644
 C	Fourth Character's Shield	7E0D9744
 C	Fourth Character's Armour	7E0D9844
 C	Fourth Character's Helmet	7E0D9944
 C	Fourth Character's Accessory	7E0D9A44
-C	Fourth Character's Experience Left To 1	7E0D8601+7E0D8700
+C	Fourth Character's Esixteen Left To 1	7E0D8601+7E0D8700
 C	Infinite Ragu	7E091B3F+7E091C42+7E091D0F+7E091E00
 C	Always Sprinting	7E075D80+7E075F80
 C	Infinite HP (Character 1)	7E0C08E7+7E0C0903
@@ -50286,7 +50286,7 @@ C	Start With 255 HP	EE86-CFEB+EEBB-17ED
 C	Gain Levels?	6D85-C759
 C	Dog (Greyhound) Gains A Level For Every Enemy Killed	558D-C759
 C	Dog Levels Up After Battle	678D-C759
-C	Hero Gains More Experience	6D8D-6759
+C	Hero Gains More Esixteen	6D8D-6759
 C	Boy Level Up Only Once After Killing An Enemy	DE81-C759
 C	Different Dog Levels Up Code	EE8D-C759
 C	Level & Status Of Save Game 4 Is Switched With Save Game 1's Stats	0081-CDE9
@@ -50352,7 +50352,7 @@ C	Items Are Free In Item Shops	8E68-C4E8+8E6A-CD58
 C	Ingredients Are Free In Ingredient Shops	8E6E-1778+8E6D-CD88
 C	Equipment Is Free In Armory Shops	8E66-34E8+8E6B-3D58
 C	Items In Nobilia Market Bough With Jewels Are Free	8E20-1DEF
-C	Hero Gains More Experience Points	6D8D-6759
+C	Hero Gains More Esixteen Points	6D8D-6759
 C	Boy Gain A Level After Killing A Enemy	7835-0978
 C	Boy Starts With 99 Of All Alchemy Ingredients	2AB6-9366
 C	It Makes 2 Players To Play (Caution Graphics May Mess Up)	79A6-B323
@@ -50495,7 +50495,7 @@ C	Monsters Always Drop Items	DD65-116F
 C	Have Key to Unlock Doors in Ivor Tower	7E235301
 C	Boy only Untouchable	ADAD-C47A+6BAD-C45A+03AD-C48A+2DAD-C4EA
 G	Secret of Evermore (USA, Europe) (Action Replay)
-C	Hero Gains More Experience Points	0DB60D80
+C	Hero Gains More Esixteen Points	0DB60D80
 C	Boy Gain A Level After Killing A Enemy	1EED743B
 C	Boy Starts With 99 Of All Alchemy Ingredients	72918ADC
 C	It Makes 2 Players To Play (Caution Graphics May Mess Up)	77CA8B35
@@ -50547,7 +50547,7 @@ C	Max Hit Percentage	7EE197FF
 C	Max Defense	7EE1A5E7+7EE1A603
 C	Max Evade Percentage	7EE1A463
 C	Max Magic Defense	7EE1A903+7EE1A8E7
-C	Max Experience	7EE18D7F+7EE18E96+7EE18F98
+C	Max Esixteen	7EE18D7F+7EE18E96+7EE18F98
 C	Infinite HP	7EE58288
 C	Infinite MP	7EE38663+7EE58663
 C	% meter never goes down	7EE5ED00
@@ -50559,7 +50559,7 @@ C	Infinite HP	7EE382E7+7EE38303
 C	Max Hp	7EE384E7+7EE38503
 C	Infinite MP	7EE58663
 C	Max Magic	7EE38763
-C	Max Experience	7EE38D7F+7EE38E96+7EE38F98
+C	Max Esixteen	7EE38D7F+7EE38E96+7EE38F98
 C	Max Strenght	7EE388FF
 C	Max Agility	7EE389FF
 C	Max Constitution	7EE38A63
@@ -50698,7 +50698,7 @@ C	Walk Thru Walls Sprite	7EE40BFF
 C	Infinite HP	7EE582E7+7EE58303
 C	Max Hp	7EE584E7+7EE58503
 C	Max Magic	7EE58763
-C	Max Experience	7EE58D7F+7EE58E96+7EE58F98
+C	Max Esixteen	7EE58D7F+7EE58E96+7EE58F98
 C	Max Strenght	7EE588FF
 C	Max Agility	7EE589FF
 C	Max Constitution	7EE58A63
@@ -50998,9 +50998,9 @@ C	Evade%	7EE1A4FF
 C	Defense	7EE1A5FF+7EE1A6FF
 C	Magic Defense	7EE1A8FF+7EE1A9FF
 C	Max Magic Defense	7EE1A903+7EE1A8E7
-C	Max Experience	7EE18D7F+7EE18E96+7EE18F98
+C	Max Esixteen	7EE18D7F+7EE18E96+7EE18F98
 C	Main Attack Maxed Out	7EE18DFF+7EE18EFF+7EA1E4FF+7EE198FF
-C	Max Experience	7EE38D7F+7EE38E96+7EE38F98
+C	Max Esixteen	7EE38D7F+7EE38E96+7EE38F98
 C	Strength	7EE388FF
 C	Agility	7EE389FF
 C	Constitution	7EE38AFF
@@ -51357,11 +51357,11 @@ C	Infinite Mana 3rd Character	7FF3F463
 C	Adds 255 Luc (See Note)	7E2C24FF
 C	Adds 65,280 Luc	7E2C25FF
 C	Adds 16,711,680 Luc	7E2C26FF
-C	264,000,000 Experience - Player 1	7FEDFEFF
-C	264,000,000 Experience - Player 2	7FF0FEFF
-C	264,000,000 Experience - Player 3	7FF3FEFF
-C	255 Experience Player 1	7FEDFFFF
-C	65280 Experience Player 1	7FED00FF
+C	264,000,000 Esixteen - Player 1	7FEDFEFF
+C	264,000,000 Esixteen - Player 2	7FF0FEFF
+C	264,000,000 Esixteen - Player 3	7FF3FEFF
+C	255 Esixteen Player 1	7FEDFFFF
+C	65280 Esixteen Player 1	7FED00FF
 C	Character 2 Levels Up Per Every Kill	7FFA00FF
 C	Character 3 Levels Up Per Every Kill	7FFD00FF
 C	Edit Level of Charged Weapon - Player 1	7FEDFC04+7FEEED04+7FEE0C04
@@ -51901,14 +51901,14 @@ C	Core Shield Always Active	7E0588FF+7E0589FF
 G	Shin Megami Tensei (Japan) (Game Genie)
 C	Have Enough Pts. To Max Out Characters	C4C3-CF03
 C	Ignore Distributable Points	DD6B-D7D5
-C	Max Level, Experience Points In 1 Battle	D9A8-6DD9
+C	Max Level, Esixteen Points In 1 Battle	D9A8-6DD9
 C	Buy Or Sell An Item To Get Maximum Money	DCBC-A78E
 C	Win A Battle With Low Magnetite To Get Maximum Magnetite	D9AB-ADA9
 C	Magnetite Isn't Drained While Demons Are Summoned	BAA9-0467
 G	Shin Megami Tensei (Japan)
 C	Have enough Pts. to max out characters	C4C3-CF03
 C	Ignore Distributable Points	DD6B-D7D5
-C	Max Level, Experience Points In 1 Battle	D9A8-6DD9
+C	Max Level, Esixteen Points In 1 Battle	D9A8-6DD9
 C	Buy or Sell An Item To Get Maximum Money	DCBC-A78E
 C	Win A Battle With Low Magnetite To Get Maximum Magnetite	D9AB-ADA9
 C	Magnetite Isn't Drained While Demons Are Summoned	BAA9-0467
@@ -52157,9 +52157,9 @@ C	Temporarily Show Full Map In Automapper	FEED-6FDD
 C	Hero's Max HP	7E103000+7E103100
 C	Heros Variable HP	7E102E00+7E102F00
 C	The Magic Number: Modifiers Attack Damage, Amount of Spoils	7E0A5400
-C	Experience Per Battle Player (First Slot)	7E05D600
-C	Experience Per Battle Player (Second Slot)	7E05DA00
-C	Experience Per Battle Player (Three Slot)	7E05DC00
+C	Esixteen Per Battle Player (First Slot)	7E05D600
+C	Esixteen Per Battle Player (Second Slot)	7E05DA00
+C	Esixteen Per Battle Player (Three Slot)	7E05DC00
 C	MP Modifier (Slot Two)	7E10F200
 C	No Random Battles (Building)	7E045100+7E0ED5FF+7E0ED746+7E0ED887+7E0ED91A
 C	Have 999 Sword Power	7E101EE7+7E101F03
@@ -54078,7 +54078,7 @@ C	Encounters	7E02DBFF+7E02DCFF
 C	Max HP	7E743100+7E743200
 C	Current HP	7E743300+7E743400
 C	Max MP	7E743700+7E743800
-C	Experience	7E748BFF+7E748CFF+7E748DFF+7E748EFF
+C	Esixteen	7E748BFF+7E748CFF+7E748DFF+7E748EFF
 C	Str	7E743C00+7E743D00
 C	Int	7E745A00+7E745B00
 C	Agl	7E744E00+7E744F00
@@ -54098,7 +54098,7 @@ C	Level Modifier	7E743B00
 C	Max HP	7E753100+7E753200
 C	Current HP	7E753300+7E753400
 C	Max MP	7E753700+7E753800
-C	Experience	7E758BFF+7E758CFF+7E758DFF+7E758EFF
+C	Esixteen	7E758BFF+7E758CFF+7E758DFF+7E758EFF
 C	Str	7E753C00+7E753D00
 C	Int	7E755A00+7E755B00
 C	Agl	7E754E00+7E754F00
@@ -54118,7 +54118,7 @@ C	Level Modifier	7E753B00
 C	Max HP	7E763100+7E763200
 C	Current HP	7E763300+7E763400
 C	Max MP	7E763700+7E763800
-C	Experience	7E768BFF+7E768CFF+7E768DFF+7E768EFF
+C	Esixteen	7E768BFF+7E768CFF+7E768DFF+7E768EFF
 C	Str	7E763C00+7E763D00
 C	Int	7E765A00+7E765B00
 C	Agl	7E764E00+7E764F00
@@ -54138,7 +54138,7 @@ C	Level Modifier	7E763B00
 C	Max HP	7E773100+7E773200
 C	Current HP	7E773300+7E773400
 C	Max MP	7E773700+7E773800
-C	Experience	7E778BFF+7E778CFF+7E778DFF+7E778EFF
+C	Esixteen	7E778BFF+7E778CFF+7E778DFF+7E778EFF
 C	Str	7E773C00+7E773D00
 C	Int	7E775A00+7E775B00
 C	Agl	7E774E00+7E774F00
@@ -54158,7 +54158,7 @@ C	Level Modifier	7E773B00
 C	Max HP	7E783100+7E783200
 C	Current HP	7E783300+7E783400
 C	Max MP	7E783700+7E783800
-C	Experience	7E788BFF+7E788CFF+7E788DFF+7E788EFF
+C	Esixteen	7E788BFF+7E788CFF+7E788DFF+7E788EFF
 C	Str	7E783C00+7E783D00
 C	Int	7E785A00+7E785B00
 C	Agl	7E784E00+7E784F00
@@ -54178,7 +54178,7 @@ C	Level Modifier	7E783B00
 C	Max HP	7E793100+7E793200
 C	Current HP	7E793300+7E793400
 C	Max MP	7E793700+7E793800
-C	Experience	7E798BFF+7E798CFF+7E798DFF+7E798EFF
+C	Esixteen	7E798BFF+7E798CFF+7E798DFF+7E798EFF
 C	Str	7E793C00+7E793D00
 C	Int	7E795A00+7E795B00
 C	Agl	7E794E00+7E794F00
@@ -54198,7 +54198,7 @@ C	Level Modifier	7E793B00
 C	Max HP	7E7A3100+7E7A3200
 C	Current HP	7E7A3300+7E7A3400
 C	Max MP	7E7A3700+7E7A3800
-C	Experience	7E7A8BFF+7E7A8CFF+7E7A8DFF+7E7A8EFF
+C	Esixteen	7E7A8BFF+7E7A8CFF+7E7A8DFF+7E7A8EFF
 C	Str	7E7A3C00+7E7A3D00
 C	Int	7E7A5A00+7E7A5B00
 C	Agl	7E7A4E00+7E7A4F00
@@ -54218,7 +54218,7 @@ C	Level Modifier	7E7A3B00
 C	Max HP	7E7B3100+7E7B3200
 C	Current HP	7E7B3300+7E7B3400
 C	Max MP	7E7B3700+7E7B3800
-C	Experience	7E7B8BFF+7E7B8CFF+7E7B8DFF+7E7B8EFF
+C	Esixteen	7E7B8BFF+7E7B8CFF+7E7B8DFF+7E7B8EFF
 C	Str	7E7B3C00+7E7B3D00
 C	Int	7E7B5A00+7E7B5B00
 C	Agl	7E7B4E00+7E7B4F00
@@ -54246,36 +54246,36 @@ C	P1 Hit Points	7E74330F
 C	P1 Hit Points	7E743427
 C	P1 Spell Points	7E74B9E7
 C	P1 Spell Points	7E74BA03
-C	P1 Experience	7E748C09
-C	P1 Experience	7E748B00
-C	P1 Experience	7E748D3D
+C	P1 Esixteen	7E748C09
+C	P1 Esixteen	7E748B00
+C	P1 Esixteen	7E748D3D
 C	P1 Attack	7E74400F
 C	P1 Attack	7E744127
 C	P2 Hit Points	7E753427
 C	P2 Hit Points	7E75330F
 C	P2 Spell Points	7E75B9E7
 C	P2 Spell Points	7E75BA03
-C	P2 Experience	7E758C09
-C	P2 Experience	7E758B00
-C	P2 Experience	7E758D3D
+C	P2 Esixteen	7E758C09
+C	P2 Esixteen	7E758B00
+C	P2 Esixteen	7E758D3D
 C	P2 Attack	7E75400F
 C	P2 Attack	7E754127
 C	P3 Hit Points	7E76330F
 C	P3 Hit Points	7E763427
 C	P3 Spell Points	7E76B9E7
 C	P3 Spell Points	7E76BA03
-C	P3 Experience	7E768B00
-C	P3 Experience	7E768C09
-C	P3 Experience	7E768D3D
+C	P3 Esixteen	7E768B00
+C	P3 Esixteen	7E768C09
+C	P3 Esixteen	7E768D3D
 C	P3 Attack	7E76400F
 C	P3 Attack	7E764127
 C	P4 Hit Points	7E77330F
 C	P4 Hit Points	7E773427
 C	P4 Spell Points	7E77B9E7
 C	P4 Spell Points	7E77BA03
-C	P4 Experience	7E778B00
-C	P4 Experience	7E778C09
-C	P4 Experience	7E778D3D
+C	P4 Esixteen	7E778B00
+C	P4 Esixteen	7E778C09
+C	P4 Esixteen	7E778D3D
 C	P4 Attack	7E77400F
 C	P4 Attack	7E774127
 C	Item Creation Never Fails (See Note)	DDD7-5D43+6D34-8F9D+6D38-EDBD+6D34-842F+6D30-77F4+6D3C-5724+6D3B-84B4+6D4C-5434
@@ -57726,7 +57726,7 @@ C	Dragon Power Increases Faster	DDB3-A7F1
 C	Prolonged Maximum Dragon Power	D7B2-A7B5
 C	Infinite Energy	1D6F-0766
 G	Super E.D.F. (Japan) (Action Replay)
-C	Infinite Experience Bar	7E0183:64
+C	Infinite Esixteen Bar	7E0183:64
 G	Super E.D.F. (Japan) (BS)
 C	Infinite Shield	7E018105
 C	Untouchable	7E019301
@@ -57739,12 +57739,12 @@ C	Start At Stage 6	D937-DDDD+CB34-D7AD+DD37-DD0D
 C	Start With 4 Shields	7123-A4A7+3D23-A7D7
 C	Start With 5 Shields	2B23-A4A7+B823-A7D7
 C	Infinite Shields	C263-6FAF
-C	Start At Experience Level 2	D42E-A7A7
-C	Start At Experience Level 3	D72E-A7A7
-C	Start At Experience Level 4	D02E-A7A7
-C	Start At Experience Level 5	D92E-A7A7
-C	Advancing Experience Levels Is Easier	4D21-6F0F
-C	Advancing Experience Levels Is Much Easier	DA21-6F0F
+C	Start At Esixteen Level 2	D42E-A7A7
+C	Start At Esixteen Level 3	D72E-A7A7
+C	Start At Esixteen Level 4	D02E-A7A7
+C	Start At Esixteen Level 5	D92E-A7A7
+C	Advancing Esixteen Levels Is Easier	4D21-6F0F
+C	Advancing Esixteen Levels Is Much Easier	DA21-6F0F
 C	2 Credits	DF2E-AF67+CB2E-AF07+DD2E-AFA7
 C	3 Credits	D42E-AF67+CB2E-AF07+DD2E-AFA7
 C	6 Credits	D92E-AF67+CB2E-AF07+DD2E-AFA7
@@ -59498,9 +59498,9 @@ C	Infinite HP - Character 3	7EFB91FF
 C	Max HP - Character 1	7EFA93FF
 C	Max HP - Character 2	7EFB13FF
 C	Max HP - Character 3	7EFB93FF
-C	Experience Modifier - Character 1	7EFA9A00
-C	Experience Modifier - Character 2	7EFB1A00
-C	Experience Modifier - Character 3	7EFB9A00
+C	Esixteen Modifier - Character 1	7EFA9A00
+C	Esixteen Modifier - Character 2	7EFB1A00
+C	Esixteen Modifier - Character 3	7EFB9A00
 C	Have All Characters	D977-DA6D+DD77-DAAD+DF77-D2DD+D477-D20D+D777-D26D+D077-D2AD+DD77-D3DD
 C	Character Amount Won't Screw Up	D977-DA6D+DD77-D3DD
 C	Invincibility Fix	EE7F-0A6D
@@ -59617,7 +59617,7 @@ C	Attack	7FF80600
 C	Defense	7FF80700
 C	Magic Attack	7FF80800
 C	Magic Defense	7FF80900
-C	Experience	7FF80A00+7FF80B00
+C	Esixteen	7FF80A00+7FF80B00
 C	999 HP	7FF815E7+7FF81603
 C	Max HP	7FF81700+7FF81800
 C	Speed	7FF81900
@@ -59625,7 +59625,7 @@ C	Attack	7FF81A00
 C	Defense	7FF81B00
 C	Magic Attack	7FF81C00
 C	Magic Defense	7FF81D00
-C	Experience	7FF81E00+7FF81F00
+C	Esixteen	7FF81E00+7FF81F00
 C	Has All 'Correct' Spells	7FF824C0+7FF8250F
 C	999 HP	7FF829E7+7FF82A03
 C	Max HP	7FF82B00+7FF82C00
@@ -59634,7 +59634,7 @@ C	Attack	7FF82E00
 C	Defense	7FF82F00
 C	Magic Attack	7FF83000
 C	Magic Defense	7FF83100
-C	Experience	7FF83200+7FF83300
+C	Esixteen	7FF83200+7FF83300
 C	999 HP	7FF83DE7+7FF83E03
 C	Max HP	7FF83F00+7FF84000
 C	Speed	7FF84100
@@ -59642,7 +59642,7 @@ C	Attack	7FF84200
 C	Defense	7FF84300
 C	Magic Attack	7FF84400
 C	Magic Defense	7FF84500
-C	Experience	7FF84600+7FF84700
+C	Esixteen	7FF84600+7FF84700
 C	999 HP	7FF851E7+7FF85203
 C	Max HP	7FF85300+7FF85400
 C	Speed	7FF85500
@@ -59650,7 +59650,7 @@ C	Attack	7FF85600
 C	Defense	7FF85700
 C	Magic Attack	7FF85800
 C	Magic Defense	7FF85900
-C	Experience	7FF85A00+7FF85B00
+C	Esixteen	7FF85A00+7FF85B00
 C	Has All 'Correct' Spells	7FF862E0+7FF86307
 C	999 Speed	7EFC70E7+7EFC8103
 C	999 Attack	7EFC72E7+7EFC7303
@@ -60632,10 +60632,10 @@ C	Don't Use Up NP's	018EC9B9
 C	Start With 250 Cash	01B766FA
 C	Start With 40,960 Cash	01B76885
 C	Don't Subtract Money (Must Have Enough To Buy)	02C01860
-C	1 Experience Point Required For Level 2	02DB2B01
-C	1 Experience Point Required For Level 3	02DB2E01
-C	1 Experience Point Required For Level 4	02DB3101
-C	1 Experience Point Required For Level 5	02DB3401
+C	1 Esixteen Point Required For Level 2	02DB2B01
+C	1 Esixteen Point Required For Level 3	02DB2E01
+C	1 Esixteen Point Required For Level 4	02DB3101
+C	1 Esixteen Point Required For Level 5	02DB3401
 C	Don't Use Up NP's (Alternate Code)	02DD1EBD
 C	Don't Subtract M's For Ninja Cyclone Attack	058C6F00
 C	Don't Use Up NP's On Cyclone Kick	05AE9FBD
@@ -60675,10 +60675,10 @@ C	All Stats Are 20 (Attack, Defense, Energy, Max HP, Max NP)	CB2F-A70C+3C2F-A7AC
 C	All Stats For Every Level Are 50	CB2F-A70C+3C2F-A7AC+742F-A76C
 C	All Stats For Every Level Are 100	CB2F-A70C+3C2F-A7AC+102F-A76C
 C	All Stats For Every Level Are 255	CB2F-A70C+3C2F-A7AC+EE2F-A76C
-C	1 Experience Point Required For Level 2	DF24-A4AC
-C	1 Experience Point Required For Level 3	DF24-A76C
-C	1 Experience Point Required For Level 4	DF27-AD0C
-C	1 Experience Point Required For Level 5	DF27-AFDC
+C	1 Esixteen Point Required For Level 2	DF24-A4AC
+C	1 Esixteen Point Required For Level 3	DF24-A76C
+C	1 Esixteen Point Required For Level 4	DF27-AD0C
+C	1 Esixteen Point Required For Level 5	DF27-AFDC
 C	Don't Subtract M's For Ninja Cyclone Attack	DD61-D725
 C	Don't Subtract M's For Mighty Balls Attack	DDA5-0421
 C	Skulls Subtract 2 M's	D437-6420
@@ -60698,10 +60698,10 @@ C	All stats are 20 [attack, defense, energy, max HP, max NP]	CB2F-A70C+3C2F-A7AC
 C	All stats for every level are 50	CB2F-A70C+3C2F-A7AC+742F-A76C
 C	All stats for every level are 100	CB2F-A70C+3C2F-A7AC+102F-A76C
 C	All stats for every level are 255	CB2F-A70C+3C2F-A7AC+EE2F-A76C
-C	1 experience point required for level 2	DF24-A4AC
-C	1 experience point required for level 3	DF24-A76C
-C	1 experience point required for level 4	DF27-AD0C
-C	1 experience point required for level 5	DF27-AFDC
+C	1 esixteen point required for level 2	DF24-A4AC
+C	1 esixteen point required for level 3	DF24-A76C
+C	1 esixteen point required for level 4	DF27-AD0C
+C	1 esixteen point required for level 5	DF27-AFDC
 C	Don't subtract M's for ninja cyclone attack	DD61-D725
 C	Don't subtract M's for mighty balls attack	DDA5-0421
 C	Skulls subtract 2 M's	D437-6420
@@ -63184,7 +63184,7 @@ C	Infinite Time	7E194C63
 C	P1 Down Dont Count	7E197400
 C	P2 Full Down	7E197605
 G	Tales of Phantasia (Japan) (Action Replay)
-C	Hero 4 Experience	7E6E1A7F+7E6E1B96+7E6E1C98
+C	Hero 4 Esixteen	7E6E1A7F+7E6E1B96+7E6E1C98
 C	Maximum Money	7E14B37F+7E14B496+7E14B598
 C	Walk Anywhere On World Map	7E009005
 C	No Random Encounters (All Areas)	7E143C0B
@@ -63998,7 +63998,7 @@ C	Get 8 of Every Item Except For 'Chicken' [Item Code Set 2]	CB5F-E7D8+D65F-E708
 C	Get 8 of Every Item Except For 'Chicken' [Item Code Set 3]	CB5F-E7D8+665F-E708+B254-EF08
 C	No Random Battles (Overworld)	DD63-EF3B
 C	No Random Battles (Other Areas)	6DB5-57F6
-C	Hero 4 Experience	7E6E1A7F+7E6E1B96+7E6E1C98
+C	Hero 4 Esixteen	7E6E1A7F+7E6E1B96+7E6E1C98
 C	Walk Anywhere On World Map	7E009005
 C	No Random Encounters (All Areas)	7E143C0B
 C	Save Anywhere	7E137E01
@@ -64204,9 +64204,9 @@ G	Tecmo Secret of the Stars (USA) (Game Genie)
 C	Characters Have Infinite MP	EA22-DE37
 C	Enemy Attacks Heal You	AED3-D8F7
 C	Characters Win The Battle Instantly	EA7D-AAE2
-C	Experience/Gold Code	EE2A-DDD7
-C	Experience/Gold Note - 1 of 2	N/A
-C	Experience/Gold Note - 1 of 2	N/A
+C	Esixteen/Gold Code	EE2A-DDD7
+C	Esixteen/Gold Note - 1 of 2	N/A
+C	Esixteen/Gold Note - 1 of 2	N/A
 C	Able To Save In Battle	FF2ADDD7
 C	Get Lots Of Gold & More	012BDDD7
 C	Get A Free Evaluation Of Your Items	0220DDD7
@@ -64224,7 +64224,7 @@ C	Change Equipment To Get 999 Power, Def, Luck, and Speed	6D31-0D66
 C	Characters Have Infinite MP	EA22-DE37
 C	Enemy Attacks Heal You	AED3-D8F7
 C	Characters Win The Battle Instantly	EA7D-AAE2
-C	Experience/Gold Code	EE2A-DDD7
+C	Esixteen/Gold Code	EE2A-DDD7
 C	Able To Save In Battle	2542-8E53
 C	Get Lots Of Gold & More	2542-A701
 C	Store Modifier	2542-A701
@@ -64813,7 +64813,7 @@ C	Minimum of 32000 MAX HP	7E06587D
 C	No Abnormalities	7E066D00
 C	Can Always Move	7E066C00
 C	God Mode (Through No Enemy Collisions)	7F202045
-C	Max Experience	7E0690FF+7E06910F+7E0692A5+7E0693D4
+C	Max Esixteen	7E0690FF+7E06910F+7E0692A5+7E0693D4
 C	Have Maximum Gold	7E069499+7E069599+7E069609
 C	Infinite Magirock	7E07ED99+7E07EE09
 C	Kind Of Like A 'Walk Through Walls' Code	7E100EA4+7E100C84
@@ -64972,7 +64972,7 @@ C	Have All Special Armor	7F8060BC+7F806101+7F8062BD+7F806301+7F8064BE+7F806501+7
 C	Value List:	7F8060BC+7F806101+7F8062BD+7F806301+7F8064BE+7F806501+7F8066BF+7F806701
 C	Use Up a Ring/Pin to Get 5 of them	D9B3-CDE9+DFB3-CF59
 C	Talk to person in the entrance of the Elder's house for Debug Menu	D2B0-3F2A+3FC2-37C7+EDC2-3717+4C23-3F47
-C	Big Experience	7E0692FF
+C	Big Esixteen	7E0692FF
 C	Hit Anywhere	6D21-1F29+DD25-3FF0
 C	Get Cash From Anywhere	DD32-4FB9
 C	255 Health	2E31-DF5A+ED31-DF8A+6531-DFEA
@@ -65005,7 +65005,7 @@ C	Level Up Fast (Use Only In Areas With Dungeons)	7E0691FF
 C	Max Gems	7E0697FF
 C	535 Strength/535 Defense/255 Luck	7E065FFF+7E0660FF+7E0663FF+7E0666FF
 C	God Mode (Through No Enemy Collisions)	7F202045
-C	Max Experience	7E0690FF+7E06910F+7E0692A5+7E0693D4
+C	Max Esixteen	7E0690FF+7E06910F+7E0692A5+7E0693D4
 C	Infinite Magirock	7E07ED99+7E07EE09
 C	Kind Of Like A 'Walk Through Walls' Code	7E100EA4+7E100C84
 C	Access Debug Room	7E060006+7E060100
@@ -66400,7 +66400,7 @@ C	Start with a stronger armor	CB6C-4D68+4A6C-4DA8
 C	Start With A Stronger Armor	CB6C-4D68+4A6C-4DA8
 G	Ultima - The Black Gate (USA)
 C	65,000 Gold	7E1CE6E8+7E1CE7FD
-C	65,000 Experience	7E1D00E8+7E1D01FD
+C	65,000 Esixteen	7E1D00E8+7E1D01FD
 C	Infinite Keys	7E1CFC63
 C	Infinite Energy	7E1CFAE4
 G	Ultima - The False Prophet (USA) (Game Genie) (diff)
@@ -66456,52 +66456,52 @@ C	Infinite Gold	7E014BFF+7E014CFF
 C	Max Karma	7E014A64
 C	Infinite Energy	7E8603F0
 C	Infinite MP	7E8C023C
-C	Max Experience	7E88020F+7E880327
+C	Max Esixteen	7E88020F+7E880327
 C	Infinite Energy	7E8607F0
 C	Infinite MP	7E8C063C
-C	Max Experience	7E88060F+7E880727
+C	Max Esixteen	7E88060F+7E880727
 C	Infinite Energy	7E8609F0
 C	Infinite MP	7E8C083C
-C	Max Experience	7E88080F+7E880927
+C	Max Esixteen	7E88080F+7E880927
 C	Infinite Energy	7E8605F0
 C	Infinite MP	7E8C043C
-C	Max Experience	7E88040F+7E880527
+C	Max Esixteen	7E88040F+7E880527
 C	Infinite Energy	7E867DF0
 C	Infinite MP	7E8C7C3C
-C	Max Experience	7E887C0F+7E887D27
+C	Max Esixteen	7E887C0F+7E887D27
 C	Infinite Energy	7E8685F0
 C	Infinite MP	7E8C843C
-C	Max Experience	7E88840F+7E888527
+C	Max Esixteen	7E88840F+7E888527
 C	Infinite Energy	7E8741F0
 C	Infinite MP	7E8D403C
-C	Max Experience	7E89400F+7E894127
+C	Max Esixteen	7E89400F+7E894127
 C	Infinite Energy	7E86C3F0
 C	Infinite MP	7E8CC23C
-C	Max Experience	7E88C20F+7E88C327
+C	Max Esixteen	7E88C20F+7E88C327
 C	Infinite Energy	7E874DF0
 C	Infinite MP	7E8D4C3C
-C	Max Experience	7E894C0F+7E894D27
+C	Max Esixteen	7E894C0F+7E894D27
 C	Infinite Energy	7E86E3F0
 C	Infinite MP	7E8CE23C
-C	Max Experience	7E88E20F+7E88E327
+C	Max Esixteen	7E88E20F+7E88E327
 C	Infinite Energy	7E8757F0
 C	Infinite MP	7E8D563C
-C	Max Experience	7E89560F+7E895727
+C	Max Esixteen	7E89560F+7E895727
 C	Infinite Energy	7E86E5F0
 C	Infinite MP	7E8CE43C
-C	Max Experience	7E88E40F+7E88E527
+C	Max Esixteen	7E88E40F+7E88E527
 C	Infinite Energy	7E870FF0
 C	Infinite MP	7E8D0E3C
-C	Max Experience	7E890E0F+7E890F27
+C	Max Esixteen	7E890E0F+7E890F27
 C	Infinite Energy	7E875DF0
 C	Infinite MP	7E8D5C3C
-C	Max Experience	7E895C0F+7E895D27
+C	Max Esixteen	7E895C0F+7E895D27
 C	Infinite Energy	7E8687F0
 C	Infinite MP	7E8C863C
-C	Max Experience	7E88860F+7E888727
+C	Max Esixteen	7E88860F+7E888727
 G	Ultima VII - The Black Gate (USA, Japan) (Action Replay)
 C	65,000 Gold	7E1CE6E8+7E1CE7FD
-C	65,000 Experience	7E1D00E8+7E1D01FD
+C	65,000 Esixteen	7E1D00E8+7E1D01FD
 C	Infinite Keys	7E1CFC63
 C	Infinite Energy	7E1CFAE4
 G	Ultimate Fighter (USA) (Action Replay)
@@ -68840,8 +68840,8 @@ C	Set DEF. To 255	7E129EFF
 C	Set All Statues	7E12C5FF+7E12C6FF+7E12C7FF+7E12C8FF
 C	Start With 65 280 EXP.	EE8E-01FE
 C	Start With 255 Hit Point, Start Of Game Only	EE82-012E
-C	Get 250 Experience From Each Enemy	CBBB-A192+EEBB-A5B2
-C	Get 26 Experience From Each Enemy, And They Don't Die	CBBB-A192+EEBB-A0B2
+C	Get 250 Esixteen From Each Enemy	CBBB-A192+EEBB-A5B2
+C	Get 26 Esixteen From Each Enemy, And They Don't Die	CBBB-A192+EEBB-A0B2
 C	View 'Equipment' To Get All Of It	DF38-D4AD+B238-D7DD+CD38-D70D+F438-D76D
 C	Kill An Enemy For Maximum Gold	DDBA-A922
 C	Kill An Enemy To Level Up	DDC5-0D07+DDC5-04A7
@@ -68852,8 +68852,8 @@ C	Start with 9,704 gold	498E-00BE
 C	Start with 20,200 gold	038E-00BE
 C	Start with 40,168 gold	BA8E-00BE
 C	Start with 65,512 gold	EE8E-00BE
-C	Gain experience quicker	CBBB-A192
-C	Gain experience much quicker	CBBB-A192+79BB-A1B2
+C	Gain esixteen quicker	CBBB-A192
+C	Gain esixteen much quicker	CBBB-A192+79BB-A1B2
 C	Start with 100 hit points instead of 20	1082-012E
 C	Start with 200 hit points	A682-012E
 C	Items are free if you have enough money	6DEB-D46F+DCEB-D4AF
@@ -68865,7 +68865,7 @@ C	Invincibility	1794E1AD
 C	Start With 200 Hit Points	17BDDBC8
 C	Start With 65,512 Gold	17BDF2FF
 C	Items Are Free If You Have Enough Money	00F49A80+00F49B0A
-C	Gain Experience Much Quicker	179799A9+17979A35
+C	Gain Esixteen Much Quicker	179799A9+17979A35
 C	Set HP To 255	7E1295FF
 C	Set Ring To 255	7E1296FF
 C	Set Max. Gold	7E1297FF+7E1298FF
@@ -68885,14 +68885,14 @@ C	Start With 9,704 Gold	498E-00BE
 C	Start With 20,200 Gold	038E-00BE
 C	Start With 40,168 Gold	BA8E-00BE
 C	Start With 65,512 Gold	EE8E-00BE
-C	Gain Experience Quicker	CBBB-A192
-C	Gain Experience Much Quicker	CBBB-A192+79BB-A1B2
+C	Gain Esixteen Quicker	CBBB-A192
+C	Gain Esixteen Much Quicker	CBBB-A192+79BB-A1B2
 C	Start With 100 Hit Points Instead Of 20	1082-012E
 C	Start With 200 Hit Points	A682-012E
 C	Items Are Free If You Have Enough Money	6DEB-D46F+DCEB-D4AF
 C	Start With 255 Hit Point, Start Of Game Only	EE82-012E
-C	Get 250 Experience From Each Enemy	CBBB-A192+EEBB-A5B2
-C	Get 26 Experience From Each Enemy, And They Don't Die	CBBB-A192+EEBB-A0B2
+C	Get 250 Esixteen From Each Enemy	CBBB-A192+EEBB-A5B2
+C	Get 26 Esixteen From Each Enemy, And They Don't Die	CBBB-A192+EEBB-A0B2
 C	Kill An Enemy To Level Up	DDC5-0D07+DDC5-04A7
 C	Kill An Enemy For Maximum Gold	DDBA-A922
 C	View 'Equipment' To Get All Of It	DF38-D4AD+B238-D7DD+CD38-D70D+F438-D76D

@@ -1,5 +1,5 @@
 [package]
-name = "xperience-domain"
+name = "sixteen-domain"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

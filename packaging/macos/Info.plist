@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>SNES Xperience</string>
+	<string>SixteeN</string>
 	<key>CFBundleDisplayName</key>
-	<string>SNES Xperience</string>
+	<string>SixteeN</string>
 	<key>CFBundleIdentifier</key>
-	<string>dev.ticianocorral.snes-xperience</string>
+	<string>dev.ticianocorral.sixteen</string>
 	<key>CFBundleVersion</key>
 	<string>__VERSION__</string>
 	<key>CFBundleShortVersionString</key>
 	<string>__VERSION__</string>
 	<key>CFBundleExecutable</key>
-	<string>xperience</string>
+	<string>sixteen</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>

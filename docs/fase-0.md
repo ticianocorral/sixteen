@@ -25,7 +25,7 @@ Nada de moldura, seletor ou painel nesta fase.
   baixado do buildbot para o teste local. Confirme que ele carrega:
 
   ```bash
-  cargo run -p xperience-emulation --example probe -- ./cores/snes9x_libretro.dylib
+  cargo run -p sixteen-emulation --example probe -- ./cores/snes9x_libretro.dylib
   ```
 - **Uma ROM de SNES** à qual você tem direito. Para um teste sem cópias
   protegidas, uma ROM homebrew serve (ex.: as demos livres de `pdroms` ou
@@ -40,7 +40,7 @@ cargo run --release --bin emu-run -- \
   --save-dir ./saves
 ```
 
-Ou defina o core por ambiente: `export XPERIENCE_CORE=~/cores/snes9x_libretro.dylib`.
+Ou defina o core por ambiente: `export SIXTEEN_CORE=~/cores/snes9x_libretro.dylib`.
 
 ### Teclas
 
@@ -102,7 +102,7 @@ O ScreenScraper exige um par de credenciais de desenvolvedor. Registre-se em
 ```bash
 export SS_DEVID=seu_devid
 export SS_DEVPASSWORD=seu_devpassword
-export SS_SOFTNAME=snes-xperience        # opcional
+export SS_SOFTNAME=sixteen        # opcional
 export SS_USER=sua_conta                 # opcional, cota maior (plano §4.2)
 export SS_PASSWORD=sua_senha             # opcional
 ```
@@ -132,7 +132,7 @@ arquivo muito fora do padrão — anote quais para o fallback da Fase 2.
 
 Com as duas provas passando, seguir para a Fase 1 (plano §6): emulador feio que
 funciona — save state, run-ahead, configuração de input, sem moldura.
-O laço em `xperience-emulation` já expõe `save_state` / `load_state` para o
+O laço em `sixteen-emulation` já expõe `save_state` / `load_state` para o
 run-ahead começar cedo.
 
 ## Revisão (2026-09-14): ScreenScraper removido, `scrape-test` também

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Wraps the already-built xperience binary into an AppImage.
-# Usage: build-appimage.sh <path-to-xperience-binary> <version> <out-path>
+# Wraps the already-built sixteen binary into an AppImage.
+# Usage: build-appimage.sh <path-to-sixteen-binary> <version> <out-path>
 set -euo pipefail
 
 BIN="$1"
@@ -11,16 +11,16 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-APPDIR="$WORK/SNES_Xperience.AppDir"
+APPDIR="$WORK/SixteeN.AppDir"
 mkdir -p "$APPDIR/usr/bin"
-cp "$BIN" "$APPDIR/usr/bin/xperience"
-chmod +x "$APPDIR/usr/bin/xperience"
-cp "$HERE/snes-xperience.desktop" "$APPDIR/snes-xperience.desktop"
-cp "$HERE/snes-xperience.png" "$APPDIR/snes-xperience.png"
+cp "$BIN" "$APPDIR/usr/bin/sixteen"
+chmod +x "$APPDIR/usr/bin/sixteen"
+cp "$HERE/sixteen.desktop" "$APPDIR/sixteen.desktop"
+cp "$HERE/sixteen.png" "$APPDIR/sixteen.png"
 cat > "$APPDIR/AppRun" << 'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/xperience" "$@"
+exec "$HERE/usr/bin/sixteen" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 

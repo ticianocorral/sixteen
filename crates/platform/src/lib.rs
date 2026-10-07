@@ -25,7 +25,7 @@ use sdl3::joystick::JoystickId;
 use sdl3::mouse::MouseButton;
 use thiserror::Error;
 
-/// Diagnóstico de engasgo, gateado por `XPERIENCE_TRACE=1` na hora de rodar.
+/// Diagnóstico de engasgo, gateado por `SIXTEEN_TRACE=1` na hora de rodar.
 /// Com ele ligado, warns apontam qual fase estourou o budget do frame:
 /// `poll_*` (fila de eventos SDL + gamepad), `present` (submissão/vsync de
 /// GPU — estourar aqui aponta para compositor/tela, não para o app) e o
@@ -33,7 +33,7 @@ use thiserror::Error;
 /// motivo). Sem a variável, o custo é um `OnceLock` lido uma vez.
 pub fn trace_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os("XPERIENCE_TRACE").is_some_and(|v| v != "0"))
+    *ENABLED.get_or_init(|| std::env::var_os("SIXTEEN_TRACE").is_some_and(|v| v != "0"))
 }
 
 /// Cronometra o escopo onde vive e, com o trace ligado, avisa se passar de

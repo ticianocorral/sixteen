@@ -94,7 +94,7 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   `roms/` e `assets/` (com guarda contra caminhos `..`/absolutos); depois
   de instalar, "Atualizar" na estante traz o jogo. O pacote
   (`exemplo-platformer-example.zip`) é commitado no repositório e a URL
-  aponta para ele; `XPERIENCE_EXEMPLO_ZIP_URL` sobrepõe para testes.
+  aponta para ele; `SIXTEEN_EXEMPLO_ZIP_URL` sobrepõe para testes.
 - Feedback do download do núcleo na seta verde do nameplate: o painel da
   tela inicial mostra "baixando… X MB" ao vivo, "núcleo atualizado!" ao
   concluir (e a seta se apaga) ou o motivo da falha — que antes era
@@ -108,7 +108,7 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
 ### Alterado
 - Nova pasta `config/` na raiz do app reunindo os arquivos de
-  configuração/identificação: `xperience.cfg`, `nointro.dat`,
+  configuração/identificação: `sixteen.cfg`, `nointro.dat`,
   `library.json` e `hashcache.json` (migrados sozinhos no primeiro
   arranque; um `--config` explícito nunca é tocado).
 - Os dados do RetroAchievements (`ra-cache/`, `ra-earned/`,
@@ -222,8 +222,8 @@ direto em tela cheia.
   cada ação agora mostra `tecla | controle`, e clicar na linha aceita a
   primeira entrada que chegar — tecla do teclado **ou** botão do controle
   (antes o cadastro só ouvia o teclado). O layout do pad é persistido no
-  `[gamepad]` do `xperience.cfg` e vale na hora, sem sair das configurações.
-- Diagnóstico de engasgos: `XPERIENCE_TRACE=1` ao rodar acusa qual fase
+  `[gamepad]` do `sixteen.cfg` e vale na hora, sem sair das configurações.
+- Diagnóstico de engasgos: `SIXTEEN_TRACE=1` ao rodar acusa qual fase
   estourou o budget do frame (`poll_*`, `present` ou frame atrasado no
   `pace_frame`), e o log de startup passa a mostrar driver de vídeo e
   renderer (cocoa/metal).
@@ -268,7 +268,7 @@ pronto para uso diário.
   botão "Conquistas" preenchia a pilha (corte no primeiro botão real).
 - "jogado" no painel saía e o "zero" de conquistas para quem já tinha
   ganhas fora do app foi resolvido pelo completion progress.
-- xperience-ra: slot de contexto do `tick` era global — corrida entre
+- sixteen-ra: slot de contexto do `tick` era global — corrida entre
   testes paralelos; agora é `thread_local`.
 
 ### Removido
@@ -391,7 +391,7 @@ pronto para uso diário.
   executável; os arquivos em `assets/` viram override opcional, e um
   override quebrado cai para a embutida em vez de sumir.
 - **Exemplo headless da cena do cartucho** — `cargo run -p
-  xperience-platform --example cart_scene` renderiza o encaixe com arte
+  sixteen-platform --example cart_scene` renderiza o encaixe com arte
   real em BMPs, sem abrir janela.
 
 ### Alterado
@@ -436,7 +436,7 @@ pronto para uso diário.
   controles POWER/EJETAR/RESET apagados (decorativos) abaixo.
 - **Console-tag** — wordmark opcional `assets/console-tag.png` impresso na
   base do console, alinhado à esquerda, em toda tela que mostra o slot.
-- **Exemplo headless da cena** — `cargo run -p xperience-platform
+- **Exemplo headless da cena** — `cargo run -p sixteen-platform
   --example cart_scene` renderiza o encaixe com arte real em BMPs, sem
   abrir janela, para inspeção e ajustes.
 
@@ -448,7 +448,7 @@ pronto para uso diário.
   cover, cartucho, lançamento e o resto das informações do jogo agora
   rolam (botões "^ Cima"/"v Baixo", que só aparecem quando fazem falta)
   em vez de simplesmente cortar o que não coube.
-- **Tela cheia por padrão numa instalação nova** — sem `xperience.cfg`
+- **Tela cheia por padrão numa instalação nova** — sem `sixteen.cfg`
   ainda (primeira execução), o app já abre em tela cheia; "Tela cheia" em
   Configurações continua desligando/religando quando quiser.
 - **Botão de fechar o app**, canto superior esquerdo, presente na tela
@@ -497,7 +497,7 @@ pronto para uso diário.
   embutido no binário (`assets/console.png`, se existir, continua tendo
   prioridade — mesma regra de "arquivo local vence" das outras artes).
 - **Versão do app e do núcleo snes9x na plaqueta do gabinete** — o mesmo
-  texto que já mostrava "SNES Xperience" no rodapé da tela (em toda tela,
+  texto que já mostrava "SixteeN" no rodapé da tela (em toda tela,
   não só a estante) agora inclui a versão do app e, com um núcleo
   carregado, a versão que o próprio snes9x reporta.
 - **Verificação de atualização ao abrir o app** — checa o GitHub por uma
@@ -784,7 +784,7 @@ pronto para uso diário.
   caderno de pausa.
 - **Logo do console na tela inicial** (`assets/console.png`, opcional) —
   mostrado no lugar do logo do jogo; sem o arquivo, cai pro nome
-  "SNES Xperience" em texto, mesmo comportamento do logo por jogo faltando.
+  "SixteeN" em texto, mesmo comportamento do logo por jogo faltando.
 
 ### Alterado
 
@@ -841,14 +841,14 @@ Ver `docs/fase-0.md`/`fase-2.md`/`fase-3.md`/`fase-4.md`, seções
 ### Corrigido
 
 - **Pastas no macOS**: a raiz portátil (`roms/`, `core/`, `assets/`,
-  `saves/`, `notes/`, `xperience.cfg`) ficava ao lado do `.app` — na
+  `saves/`, `notes/`, `sixteen.cfg`) ficava ao lado do `.app` — na
   prática, dentro de `/Aplicativos` depois de instalar pelo DMG, o que não
   é gravável/esperado nesse SO. No macOS a raiz agora é sempre
-  `~/Documents/SNES Xperience` (criada no primeiro uso), independente de
+  `~/Documents/SixteeN` (criada no primeiro uso), independente de
   onde o `.app` foi parar; Windows/Linux continuam com a pasta ao lado do
   executável. Uma migração automática (mesmo espírito da migração de
   `saves`/`notes` do local antigo pré-portátil) copia o conteúdo da raiz
-  antiga ao lado do `.app` pra dentro de `~/Documents/SNES Xperience`, uma
+  antiga ao lado do `.app` pra dentro de `~/Documents/SixteeN`, uma
   vez, se esta ainda estiver vazia — quem já rodou o DMG 0.4.0 e colocou
   ROMs lá não perde nada.
 
@@ -899,7 +899,7 @@ Ver `docs/fase-0.md`/`fase-2.md`/`fase-3.md`/`fase-4.md`, seções
 ### Adicionado (continuação)
 
 - **App portátil**: `roms/`, `core/`, `assets/{cover,logo,cartridge}/`,
-  `saves/`, `notes/`, `xperience.cfg` e `library.json` moram ao lado do
+  `saves/`, `notes/`, `sixteen.cfg` e `library.json` moram ao lado do
   executável (do `.app` no macOS, não dentro dele) — sem instalação, sem
   `~/.local/share`. Uma cópia única do `saves/`/`notes/` antigo migra
   sozinha na primeira execução, se existir.
@@ -945,13 +945,13 @@ Ver `docs/fase-0.md`/`fase-2.md`/`fase-3.md`/`fase-4.md`, seções
   `build-appimage.sh`) montam o pacote a partir do binário já compilado;
   `crates/app/build.rs` embute o ícone no `.exe` do Windows. O core do
   snes9x e as ROMs continuam de fora (ver `THIRD-PARTY-NOTICES.md`).
-- **Diretório de dados multiplataforma**: `xperience_app::dirs` resolve
-  `~/.local/share/snes-xperience` / `~/.config/snes-xperience` quando
+- **Diretório de dados multiplataforma**: `sixteen_app::dirs` resolve
+  `~/.local/share/sixteen` / `~/.config/sixteen` quando
   `$HOME` existe (todo o comportamento de antes, sem mudança) e cai pra
-  `%APPDATA%\snes-xperience` quando não existe — o caso de um `.exe`
+  `%APPDATA%\sixteen` quando não existe — o caso de um `.exe`
   aberto no Explorer sem terminal nenhum por perto, onde `$HOME` nunca
   esteve definido.
-- **Núcleo padrão**: sem `--core`/`$XPERIENCE_CORE`, o `xperience` agora
+- **Núcleo padrão**: sem `--core`/`$SIXTEEN_CORE`, o `sixteen` agora
   procura `snes9x_libretro.{dylib,so,dll}` em `<diretório de dados>/core/`
   antes de desistir — o caminho que sobra pra um pacote de verdade (DMG/exe/
   AppImage), que abre sem argumento nenhum.
@@ -966,7 +966,7 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
 
 ### Adicionado
 
-- **Catálogo** (`xperience-domain`): `library::scan` varre uma pasta
+- **Catálogo** (`sixteen-domain`): `library::scan` varre uma pasta
   recursivamente e hasheia os ROMs; `Catalog` é um cache SQLite (`rusqlite`
   bundled) com as tabelas `rom` e `meta`, ordenação de estante (§3.1: último
   jogado → recém-adicionado), `unscraped`, `prune_missing`.
@@ -978,18 +978,18 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
 - **Seletor** (`selector`): estante rolável de capas com painel de detalhes,
   navegação por gamepad/teclado, busca por digitação e preenchimento
   progressivo das capas numa thread. Imprime o caminho da ROM escolhida.
-  Camada 2D nova em `xperience-platform` (`Ui`: rects, texto `font8x8`,
+  Camada 2D nova em `sixteen-platform` (`Ui`: rects, texto `font8x8`,
   imagens) e `Platform::poll_menu`.
-- Binário **`xperience`**: estante → jogo → estante num processo só, sem shell.
-  O laço do emulador virou `xperience_app::runner::run_game` e o da estante
-  `xperience_app::shelf::run`; `emu-run` e `selector` agora são cascas finas em
+- Binário **`sixteen`**: estante → jogo → estante num processo só, sem shell.
+  O laço do emulador virou `sixteen_app::runner::run_game` e o da estante
+  `sixteen_app::shelf::run`; `emu-run` e `selector` agora são cascas finas em
   volta desses módulos. `UiEvent::CloseRequested` novo separa "voltar" (Esc) de
   "encerrar" (fechar janela / Cmd-Q). `scripts/play.sh` removido (obsoleto).
 - **Scrape sob demanda** na estante: com `SS_DEVID` / `SS_DEVPASSWORD` no
   ambiente, o jogo em foco sem ficha é scrapeado numa thread (um pedido por
   jogo, ~700 ms entre chamadas, para ao esgotar a cota); a ficha e a capa
   entram na hora. `--no-scrape` desliga. O download de arte virou
-  `xperience_domain::art::download_art`, compartilhado com o `library scrape`.
+  `sixteen_domain::art::download_art`, compartilhado com o `library scrape`.
 - **Ficha completa** no painel: logo `wheel` no topo quando existe (senão o
   título em texto) e sinopse longa numa região recortada (`Ui::clip`) que rola
   sozinha após ~1,3 s parada. `Ui::wrapped_height` (com teste) dimensiona o
@@ -1000,7 +1000,7 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
   `screen_area` / `fit_aspect_in` dão o vão 4:3 com queixo maior; a malha é
   cacheada por tamanho. A imagem do jogo fica sendo a coisa mais clara do quadro.
 - **Janela única** (Fase 3): `Ui` + `Video` viraram um tipo só, `Cabinet`, que
-  tem o caminho do jogo (`present_frame`) e o 2D da estante. `xperience` cria um
+  tem o caminho do jogo (`present_frame`) e o 2D da estante. `sixteen` cria um
   `Cabinet` e passa `&mut` dele pra `shelf::run` e `runner::run_game` — a troca
   estante↔jogo não recria janela. Testes de `screen_area` / `fit_aspect_in`.
 - **Estante pelo tubo** (Fase 3): o 2D da estante virou `Cabinet::frame_2d(bg,
@@ -1042,7 +1042,7 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
   fixa). `Cabinet::set_panel` ganhou um terceiro parâmetro `commands`;
   extras do emulador (save state, slot, fast-forward) ficam de fora de
   propósito.
-- **Marca no gabinete**: selo "SNES Xperience" impresso no queixo, à esquerda
+- **Marca no gabinete**: selo "SixteeN" impresso no queixo, à esquerda
   do tubo — mobília do gabinete, não da partida, então aparece em todo lugar
   (estante, jogo, console desligado), diferente do cartucho/painel que só
   existem durante o jogo.
@@ -1050,7 +1050,7 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
   embute códigos curados da pasta `cht` do `libretro-database` (CC BY-SA
   4.0 — ver `THIRD-PARTY-NOTICES.md`) para os 19 jogos do catálogo do
   usuário, casados pelo título do cabeçalho SNES, não pelo arquivo/hash.
-  `xperience-emulation::Core` ganhou `cheat_reset`/`cheat_set` (FFI fina
+  `sixteen-emulation::Core` ganhou `cheat_reset`/`cheat_set` (FFI fina
   sobre o libretro). Três teclas novas (`.`/`,`/`/`, rebindáveis) navegam a
   lista e viram o interruptor no painel; o estado liga/desliga persiste em
   `<hash>.cheats` no save-dir. Descrições escritas para o app, sem acento
@@ -1059,8 +1059,8 @@ subsistema de entrada de texto) e sem a tabela manual de senhas/dicas.
   quadro cru do core — sem NTSC, sem tubo, pra ficar legível — como PNG em
   `<notes-dir>/<hash>/<epoch>.png` e acrescenta a entrada em
   `<notes-dir>/<hash>.md`, indexado pelo hash da ROM (sobrevive a rename ou
-  re-dump). `GameSpec::notes_dir` novo (`xperience`:
-  `~/.local/share/snes-xperience/notes/`; `emu-run`: `<save-dir>/notes`,
+  re-dump). `GameSpec::notes_dir` novo (`sixteen`:
+  `~/.local/share/sixteen/notes/`; `emu-run`: `<save-dir>/notes`,
   `--notes-dir` sobrescreve). O painel ganhou o item 5 do §3.2: miniatura da
   captura mais recente + contador, ausente por completo sem nada capturado.
 - **Tela de pausa, leitura** (Fase 4, §3.2/§3.4): `P` abre o caderno do jogo
@@ -1081,17 +1081,17 @@ emulador utilitário completo, sem moldura nem seletor.
 
 - **Workspace de quatro camadas** (`emulation` → `platform` → `domain` → `app`),
   mais o crate folha `ntsc`. CI em Linux/macOS/Windows com SDL3 vendorizado.
-- **Emulação** (`xperience-emulation`): carregador de core libretro em runtime
+- **Emulação** (`sixteen-emulation`): carregador de core libretro em runtime
   com FFI de `libretro.h`, laço de frame (vídeo/áudio/entrada), save states
   (`retro_serialize`), SRAM de bateria (`retro_get_memory_data`).
-- **Plataforma** (`xperience-platform`): janela SDL3, saída de vídeo por malha
+- **Plataforma** (`sixteen-platform`): janela SDL3, saída de vídeo por malha
   com distorção de barril (tubo CRT via `render_geometry`, vinheta, sem
   scanline), áudio push com guarda de latência, teclado remapeável (`KeyMap`) e
   até dois gamepads.
-- **Domínio** (`xperience-domain`): identificação de ROM (CRC32/MD5/SHA1 sem
+- **Domínio** (`sixteen-domain`): identificação de ROM (CRC32/MD5/SHA1 sem
   header de copiadora) e cliente ScreenScraper `jeuInfos` que extrai as mídias
   `texture` e `wheel`.
-- **NTSC** (`xperience-ntsc`): `snes_ntsc` 0.2.2 do blargg vendorizado
+- **NTSC** (`sixteen-ntsc`): `snes_ntsc` 0.2.2 do blargg vendorizado
   (LGPL-2.1+), wrapper seguro e preset `Rf` (visual de antena).
 - **`emu-run`**: roda uma ROM com o visual fixo NTSC RF + tubo CRT; 10 slots de
   save state indexados pelo SHA1 da ROM; persistência de SRAM; run-ahead
@@ -1110,12 +1110,12 @@ emulador utilitário completo, sem moldura nem seletor.
   a Fase 3; os três modos de escala originais foram substituídos por essa
   visualização única a pedido.
 
-[Não lançado]: https://github.com/ticianocorral/snes-xperience/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.8.0...v0.9.0
-[0.8.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.5.0...v0.6.0
-[0.3.1]: https://github.com/ticianocorral/snes-xperience/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/ticianocorral/snes-xperience/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/ticianocorral/snes-xperience/releases/tag/v0.1.0
+[Não lançado]: https://github.com/ticianocorral/sixteen/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ticianocorral/sixteen/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/ticianocorral/sixteen/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/ticianocorral/sixteen/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/ticianocorral/sixteen/compare/v0.5.0...v0.6.0
+[0.3.1]: https://github.com/ticianocorral/sixteen/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/ticianocorral/sixteen/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/ticianocorral/sixteen/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ticianocorral/sixteen/releases/tag/v0.1.0

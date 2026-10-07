@@ -17,7 +17,7 @@
 use std::fs;
 use std::path::Path;
 
-use xperience_domain::{library, NoIntroDat};
+use sixteen_domain::{library, NoIntroDat};
 
 use crate::runner::sanitize_dir_name;
 
@@ -157,7 +157,7 @@ mod tests {
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "xperience-rom-rename-test-{name}-{}",
+            "sixteen-rom-rename-test-{name}-{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
@@ -186,7 +186,7 @@ mod tests {
 
         let rom_path = roms_dir.join("oldname.sfc");
         write_rom(&rom_path);
-        let crc = xperience_domain::RomId::from_path(&rom_path).unwrap().crc32;
+        let crc = sixteen_domain::RomId::from_path(&rom_path).unwrap().crc32;
 
         fs::create_dir_all(saves_dir.join("oldname")).unwrap();
         fs::write(saves_dir.join("oldname").join("sram.srm"), b"progress").unwrap();
@@ -232,7 +232,7 @@ mod tests {
         fs::create_dir_all(&roms_dir).unwrap();
         let rom_path = roms_dir.join("Canonical Name.sfc");
         write_rom(&rom_path);
-        let crc = xperience_domain::RomId::from_path(&rom_path).unwrap().crc32;
+        let crc = sixteen_domain::RomId::from_path(&rom_path).unwrap().crc32;
 
         let dat_path = root.join("nointro.dat");
         fs::write(

@@ -6,8 +6,8 @@ name: Release
 # them need SDL3 installed on the machine that runs them.
 #
 # The core (snes9x_libretro) and ROMs are never bundled — see
-# THIRD-PARTY-NOTICES.md. `xperience` looks for `--core`, then
-# $XPERIENCE_CORE, then <data dir>/core/snes9x_libretro.{dylib,so,dll}.
+# THIRD-PARTY-NOTICES.md. `sixteen` looks for `--core`, then
+# $SIXTEEN_CORE, then <data dir>/core/snes9x_libretro.{dylib,so,dll}.
 
 on:
   push:
@@ -34,15 +34,15 @@ jobs:
         id: ver
         run: echo "v=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
       - name: Build (vendored SDL3)
-        run: cargo build --release --bin xperience --features xperience-platform/vendored-sdl
+        run: cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
       - name: Package DMG
         run: |
-          ./packaging/macos/build-dmg.sh target/release/xperience "${{ steps.ver.outputs.v }}" \
-            "SNES-Xperience-${{ steps.ver.outputs.v }}-macos.dmg"
+          ./packaging/macos/build-dmg.sh target/release/sixteen "${{ steps.ver.outputs.v }}" \
+            "SixteeN-${{ steps.ver.outputs.v }}-macos.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: SNES-Xperience-*.dmg
+          path: SixteeN-*.dmg
 
   windows:
     runs-on: windows-latest
@@ -53,21 +53,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build (vendored SDL3)
-        run: cargo build --release --workspace --features xperience-platform/vendored-sdl
+        run: cargo build --release --workspace --features sixteen-platform/vendored-sdl
       - name: Package zip
         shell: bash
         run: |
           VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
-          DIR="dist/SNES Xperience"
+          DIR="dist/SixteeN"
           mkdir -p "$DIR"
-          cp target/release/xperience.exe target/release/emu-run.exe \
+          cp target/release/sixteen.exe target/release/emu-run.exe \
              target/release/selector.exe "$DIR/"
           cp README.md CHANGELOG.md THIRD-PARTY-NOTICES.md "$DIR/"
-          (cd dist && 7z a "../SNES-Xperience-$VERSION-windows-x86_64.zip" "SNES Xperience")
+          (cd dist && 7z a "../SixteeN-$VERSION-windows-x86_64.zip" "SixteeN")
       - uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: SNES-Xperience-*.zip
+          path: SixteeN-*.zip
 
   linux:
     runs-on: ubuntu-latest
@@ -94,15 +94,15 @@ jobs:
         id: ver
         run: echo "v=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
       - name: Build (vendored SDL3)
-        run: cargo build --release --bin xperience --features xperience-platform/vendored-sdl
+        run: cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
       - name: Package AppImage
         run: |
-          ./packaging/linux/build-appimage.sh target/release/xperience "${{ steps.ver.outputs.v }}" \
-            "SNES-Xperience-${{ steps.ver.outputs.v }}-linux-x86_64.AppImage"
+          ./packaging/linux/build-appimage.sh target/release/sixteen "${{ steps.ver.outputs.v }}" \
+            "SixteeN-${{ steps.ver.outputs.v }}-linux-x86_64.AppImage"
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: SNES-Xperience-*.AppImage
+          path: SixteeN-*.AppImage
 
   publish:
     needs: [macos, windows, linux]

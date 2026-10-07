@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 SNES Xperience contributors
+Copyright (c) 2026 SixteeN contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,6 @@ SOFTWARE.
 
 ---
 
-This licence covers the SNES Xperience source code only. It does not cover the
+This licence covers the SixteeN source code only. It does not cover the
 snes9x libretro core, SDL3, ROMs, BIOS images or scraped artwork, none of which
 are distributed here. See THIRD-PARTY-NOTICES.md.

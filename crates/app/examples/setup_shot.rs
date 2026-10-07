@@ -3,19 +3,19 @@
 //! Also draws the nameplate's green "tem update" dots (app + core) so both
 //! new visuals can be eyeballed in one image.
 
-use xperience_app::idle;
-use xperience_platform::Cabinet;
+use sixteen_app::idle;
+use sixteen_platform::Cabinet;
 
 fn main() -> anyhow::Result<()> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "/tmp/setup.bmp".into());
     let mut plat =
-        xperience_platform::Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        sixteen_platform::Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
-        .create_cabinet("SNES Xperience", 1280, 800, false)
+        .create_cabinet("SixteeN", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    cab.set_nameplate("SNES Xperience v0.14.0\nsnes9x 1.63 TaC2rea");
+    cab.set_nameplate("SixteeN v0.14.0\nsnes9x 1.63 TaC2rea");
     cab.set_nameplate_updates(true, true);
     idle::capture_preview(
         &mut cab,

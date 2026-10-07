@@ -1,4 +1,4 @@
-/* SNES Xperience — manual do proprietário
+/* SixteeN — manual do proprietário
    Papel creme, tinta preta, roxo de console e sombras duras. */
 
 :root {
@@ -129,7 +129,8 @@ a:hover { color: var(--roxo-vivo); }
   font-family: var(--display);
   font-size: clamp(40px, 4.6vw, 58px);
   line-height: 0.95;
-  text-transform: uppercase;
+  /* a marca é "SixteeN" — caixa própria, itálico como o wordmark da logo */
+  font-style: italic;
   letter-spacing: -0.015em;
 }
 .capa-lema {
@@ -261,7 +262,7 @@ a:hover { color: var(--roxo-vivo); }
 }
 
 /* ---- seções ---- */
-.secao { padding: 26px 0 34px; }
+.secao { padding: 56px 0 64px; }
 .secao-alt .pagina {
   border-top: 3px solid var(--tinta);
   border-bottom: 3px solid var(--tinta);
@@ -271,7 +272,7 @@ a:hover { color: var(--roxo-vivo); }
   display: flex;
   align-items: baseline;
   gap: 22px;
-  margin: 0 0 30px;
+  margin: 0 0 36px;
 }
 .secao-num {
   font-family: var(--display);
@@ -499,5 +500,6 @@ code {
   .capa .pagina { padding: 36px 22px; }
   .espiral { display: none; }
   .cabecalho { padding: 12px 20px; }
+  .secao { padding: 40px 0 44px; }
   .secao-num { font-size: 64px; }
 }

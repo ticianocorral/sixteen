@@ -1,12 +1,12 @@
-//! `xperience.cfg`: run-ahead default, start-fullscreen, and keyboard binds —
+//! `sixteen.cfg`: run-ahead default, start-fullscreen, and keyboard binds —
 //! the same file the in-app settings screen (`O` on the shelf) edits and
 //! saves. TOML syntax under the hood (same as before); only the name and
-//! location changed — it now sits in the app's root (`xperience_app::dirs`,
-//! next to the executable on Windows/Linux, `~/Documents/SNES Xperience` on
+//! location changed — it now sits in the app's root (`sixteen_app::dirs`,
+//! next to the executable on Windows/Linux, `~/Documents/SixteeN` on
 //! macOS), not under `~/.config` (plan: app portátil).
 //!
-//! Lookup order: `--config PATH`, then `$XPERIENCE_CONFIG`, then
-//! `xperience_app::dirs::config_path()`. When the last one is used and is
+//! Lookup order: `--config PATH`, then `$SIXTEEN_CONFIG`, then
+//! `sixteen_app::dirs::config_path()`. When the last one is used and is
 //! missing, a default file is written so the user has something to edit.
 
 use std::collections::BTreeMap;
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use xperience_platform::{KeyMap, PadButton, PadMap};
+use sixteen_platform::{KeyMap, PadButton, PadMap};
 
 pub struct Config {
     pub runahead: u32,
@@ -85,7 +85,7 @@ impl Config {
     pub fn load(explicit: Option<&Path>) -> Result<Self> {
         let (path, required) = match explicit {
             Some(p) => (Some(p.to_path_buf()), true),
-            None => match std::env::var_os("XPERIENCE_CONFIG") {
+            None => match std::env::var_os("SIXTEEN_CONFIG") {
                 Some(p) => (Some(PathBuf::from(p)), true),
                 None => (Some(crate::dirs::config_path()), false),
             },
@@ -94,7 +94,7 @@ impl Config {
         let mut cfg = Config {
             runahead: 1,
             // Plan revision: "sempre abrir em fullscreen como padrao" — a
-            // fresh install (no `xperience.cfg` yet) starts fullscreen; the
+            // fresh install (no `sixteen.cfg` yet) starts fullscreen; the
             // settings screen's own toggle still turns it off from there.
             fullscreen: true,
             check_updates_on_start: true,
@@ -196,10 +196,10 @@ impl Config {
         Ok(())
     }
 
-    /// Serialize the live config back to the `xperience.cfg` text format.
+    /// Serialize the live config back to the `sixteen.cfg` text format.
     pub fn to_toml(&self) -> String {
         let mut s = String::from(
-            "# SNES Xperience configuration.\n\
+            "# SixteeN configuration.\n\
              # Edited by the in-app settings screen (O on the shelf) — hand edits\n\
              # survive a save, but comments outside a value don't.\n\
              # runahead: speculative frames to hide input lag (0 disables).\n\

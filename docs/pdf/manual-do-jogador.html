@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>SixteeN — Manual do Jogador</title>
+<link rel="stylesheet" href="assets/fonts/local_PressStart2P.css">
+<link rel="stylesheet" href="assets/fonts/local_Archivo.css">
+<link rel="stylesheet" href="assets/fonts/local_ArchivoBlack.css">
+<link rel="stylesheet" href="assets/fonts/local_IBMPlexMono.css">
+<style>
+:root{
+  --papel:#f2ede3; --papel-alt:#eae3d4; --papel-sombra:#dcd4c0;
+  --tinta:#211d18; --tinta-fraca:#6b6459;
+  --roxo:#4a3f8f; --roxo-vivo:#6a5fc9; --roxo-claro:#eceafa;
+  --vermelho:#b3382e; --verde:#2e6b3f; --amarelo:#d9a522; --azul:#2e5b8f;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  --sans:"Archivo", system-ui, sans-serif;
+  --display:"Archivo Black", var(--sans);
+  --pixel:"Press Start 2P", var(--mono);
+}
+@page{ size:794px 1123px; margin:0; }
+html,body{ margin:0; padding:0; width:794px; background:var(--papel); }
+body{ font-family:var(--sans),sans-serif; color:var(--tinta); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.page{ width:794px; height:1123px; position:relative; overflow:hidden; background:var(--papel);
+       background-image:radial-gradient(#00000008 1px, transparent 1px); background-size:22px 22px;
+       page-break-after:always; display:flex; flex-direction:column; }
+.page:last-child{ page-break-after:auto; }
+.inner{ flex:1 1 auto; min-height:0; padding:30px 58px 18px; }
+@media screen{
+  html{ height:auto; display:flex; justify-content:center; background:#211d18; }
+  body{ transform-origin:top center; scale:min(1, calc(100vw / 794)); margin:0 auto; }
+  .page{ margin:18px 0; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+}
+
+/* ---------- tipografia ---------- */
+.pixel{ font-family:var(--pixel),monospace; line-height:1.5; }
+h1,h2,h3{ margin:0; }
+.sec-title{ font-family:var(--pixel),monospace; font-size:21px; color:var(--tinta); letter-spacing:1px; }
+.sec-num{ font-family:var(--pixel),monospace; font-size:11px; color:var(--papel); background:var(--roxo);
+          padding:7px 9px; display:inline-block; margin-right:12px; box-shadow:3px 3px 0 var(--tinta); }
+.sec-sub{ font-family:var(--mono),monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+          color:var(--tinta-fraca); margin-top:10px; }
+p{ margin:0 0 10px; font-size:13.5px; line-height:1.6; }
+.lead{ font-size:15px; }
+b,strong{ font-weight:700; }
+.mono{ font-family:var(--mono),monospace; }
+.up{ text-transform:uppercase; letter-spacing:.14em; }
+
+/* ---------- cabeçalho / rodapé ---------- */
+.topbar{ flex:0 0 40px; background:var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px; }
+.topbar .brand{ font-family:var(--pixel),monospace; font-size:8px; color:var(--papel); letter-spacing:1px; }
+.topbar .pg{ font-family:var(--mono),monospace; font-size:10px; color:var(--papel-alt); letter-spacing:.15em; }
+.botbar{ flex:0 0 36px; border-top:2px solid var(--tinta);
+         display:flex; align-items:center; justify-content:space-between; padding:0 58px;
+         font-family:var(--mono),monospace; font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--tinta-fraca); }
+.compact table.t8 td{ padding:5px 10px; }
+.compact table.t8 th{ padding:6px 10px; }
+.compact .box{ padding:12px 14px; }
+.compact .shotcap{ margin-top:6px; }
+
+/* ---------- blocos ---------- */
+.box{ border:3px solid var(--tinta); background:#fffdf7; box-shadow:5px 5px 0 var(--tinta); padding:16px 18px; }
+.box .box-tag{ display:inline-block; font-family:var(--pixel),monospace; font-size:9px; padding:5px 7px;
+               margin:-16px 0 10px -18px; background:var(--roxo); color:var(--papel); }
+.box.dica{ background:#fdf6e0; } .box.dica .box-tag{ background:var(--amarelo); color:var(--tinta); }
+.box.atencao{ background:#faeae8; } .box.atencao .box-tag{ background:var(--vermelho); }
+.box.segredo{ background:var(--roxo-claro); } .box.segredo .box-tag{ background:var(--roxo-vivo); }
+.box p:last-child{ margin-bottom:0; }
+
+.steps{ margin:0; padding:0; list-style:none; counter-reset:st; }
+.steps li{ counter-increment:st; position:relative; padding:0 0 12px 44px; }
+.steps li::before{ content:counter(st, decimal-leading-zero); position:absolute; left:0; top:-2px;
+   width:30px; height:30px; border:3px solid var(--tinta); background:var(--roxo-vivo); color:#fff;
+   font-family:var(--mono),monospace; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center;
+   box-shadow:2px 2px 0 var(--tinta); }
+.steps li b{ display:block; font-size:13.5px; }
+.steps li span{ font-size:12.5px; color:var(--tinta); }
+
+table.t8{ width:100%; border-collapse:collapse; border:3px solid var(--tinta); background:#fffdf7;
+          box-shadow:5px 5px 0 var(--tinta); }
+table.t8 th{ background:var(--roxo); color:var(--papel); font-family:var(--mono),monospace; font-size:10.5px;
+   letter-spacing:.12em; text-transform:uppercase; text-align:left; padding:8px 12px; border:2px solid var(--tinta); }
+table.t8 td{ border:2px solid var(--tinta); padding:7px 12px; font-size:12.5px; line-height:1.45; vertical-align:top; }
+table.t8 tr:nth-child(even) td{ background:var(--papel-alt); }
+.t8 code, code.k{ font-family:var(--mono),monospace; font-size:11.5px; background:var(--papel-alt);
+   border:1px solid var(--tinta-fraca); padding:1px 5px; white-space:nowrap; }
+.keycap{ display:inline-block; font-family:var(--mono),monospace; font-weight:600; font-size:11px; min-width:22px;
+   text-align:center; padding:3px 7px; background:#fff; border:2px solid var(--tinta);
+   border-bottom-width:4px; border-radius:4px; margin:1px 2px; }
+
+.shot{ border:3px solid var(--tinta); box-shadow:6px 6px 0 var(--tinta); background:#000; }
+.shot img{ display:block; width:100%; height:auto; }
+.shotcap{ font-family:var(--mono),monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+   color:var(--tinta-fraca); margin-top:10px; }
+
+.cols2{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.cols3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+
+/* ---------- cartucho desenhado ---------- */
+.cart{ width:150px; background:var(--papel-alt); border:3px solid var(--tinta); border-radius:6px 6px 0 0;
+   box-shadow:5px 5px 0 var(--tinta); padding:12px 12px 0; position:relative; }
+.cart .label{ height:64px; background:var(--roxo-vivo); border:2px solid var(--tinta); display:flex;
+   align-items:center; justify-content:center; font-family:var(--pixel),monospace; font-size:7px; color:#fff;
+   text-align:center; line-height:1.7; padding:6px; }
+.cart .grip{ margin-top:10px; height:26px;
+   background:repeating-linear-gradient(180deg, var(--tinta) 0 3px, transparent 3px 8px); }
+.slot{ width:190px; height:16px; background:var(--tinta); border-radius:3px; margin:6px 0 0 -6px; }
+
+/* selo redondo */
+.selo{ width:104px; height:104px; border-radius:50%; background:var(--vermelho); border:3px solid var(--tinta);
+   box-shadow:4px 4px 0 var(--tinta); display:flex; flex-direction:column; align-items:center;
+   justify-content:center; text-align:center; color:var(--papel); transform:rotate(8deg); }
+.selo .a{ font-family:var(--pixel),monospace; font-size:9px; line-height:1.7; }
+.selo .b{ font-family:var(--mono),monospace; font-size:8.5px; letter-spacing:.1em; margin-top:6px; }
+
+/* diagrama do controle */
+.pad-label{ font-family:var(--mono),monospace; font-size:10px; letter-spacing:.08em; fill:var(--tinta); }
+.pad-key{ font-family:var(--mono),monospace; font-weight:600; font-size:13px; fill:#fff; }
+</style>
+</head>
+<body>
+
+<!-- ============ PÁGINA 1 — CAPA ============ -->
+<div class="page">
+  <div class="inner" style="display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="mono up" style="font-size:10px;">Manual de instruções</div>
+      <div class="mono up" style="font-size:10px; border:2px solid var(--tinta); padding:4px 10px; background:var(--papel-alt);">Modelo SX-1</div>
+    </div>
+
+    <div style="margin-top:66px; text-align:center;">
+      <div style="display:inline-block;">
+        <div class="cart" style="margin:0 auto;">
+          <div class="label">SNES<br>SIXTEEN</div>
+          <div class="grip"></div>
+        </div>
+        <div class="slot" style="margin:8px auto 0 -8px;"></div>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:52px;">
+      <h1 class="pixel" style="font-size:34px; color:var(--roxo); text-shadow:4px 4px 0 var(--tinta); line-height:1.55;">SNES<br>SIXTEEN</h1>
+      <div style="margin:26px auto 0; width:420px; border-top:3px solid var(--tinta); border-bottom:3px solid var(--tinta); padding:10px 0;">
+        <div class="mono up" style="font-size:12px; letter-spacing:.3em;">Manual do jogador</div>
+      </div>
+      <p class="lead" style="margin:22px auto 0; max-width:460px; font-size:14px;">
+        Um console inteiro dentro do seu computador: TV de tubo, painel de chaves
+        e uma estante de cartuchos. Este manual ensina a montar tudo — do
+        primeiro clique ao primeiro <b>POWER</b>.
+      </p>
+    </div>
+
+    <div style="margin-top:auto;">
+      <div class="cols3" style="align-items:stretch;">
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">JOGADORES</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">1 a 2 (controles USB/Bluetooth)</div>
+        </div>
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">PLATAFORMAS</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">macOS · Windows · Linux</div>
+        </div>
+        <div style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:4px 4px 0 var(--tinta); padding:10px 12px; text-align:center;">
+          <div class="pixel" style="font-size:8px; color:var(--roxo);">CLASSIFICAÇÃO</div>
+          <div class="mono" style="font-size:11px; margin-top:6px;">Nostalgia livre · 0 anos</div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:24px;">
+        <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); line-height:1.7;">
+          Edição 1.1 · 2026<br>Projeto pessoal, sem fins comerciais
+        </div>
+        <div class="mono" style="font-size:9.5px; color:var(--tinta-fraca); text-align:right; line-height:1.7;">
+          Antes de ligar, leia a página 2.<br>Sim, a gente sabe que você não ia ler.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PÁGINA 2 — ANTES DE LIGAR ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">02 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">01</span><span class="sec-title">ANTES DE LIGAR</span></div>
+    <div class="sec-sub">O que é isto, afinal?</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O <b>SixteeN</b> é um <b>emulador com jeitão de console</b>: um programa que faz
+      seu computador rodar jogos de Super Nintendo — e se disfarça de console de
+      verdade, com TV de tubo, chiado de estática e cartucho que entra no slot.
+    </p>
+    <p>
+      Ele foi desenhado para ser operado com <b>mouse e controle</b>, como um aparelho de
+      verdade. O teclado só é convocado para duas coisas: <b>jogar</b> (se você não tiver
+      controle) e <b>digitar</b> anotações e buscas.
+    </p>
+
+    <div class="cols2" style="margin-top:20px;">
+      <div class="box">
+        <span class="box-tag">VEM NA CAIXA</span>
+        <p style="margin-bottom:8px;">✔ Um console completo na tela — nada para instalar além do app.</p>
+        <p style="margin-bottom:8px;">✔ A estante, os saves, o livro de anotações e as conquistas.</p>
+        <p>✔ Um botão secreto. (Todo console que se preza tem um.)</p>
+      </div>
+      <div class="box atencao">
+        <span class="box-tag">NÃO VEM NA CAIXA</span>
+        <p style="margin-bottom:8px;">✘ <b>Os jogos.</b> O app não acompanha nenhuma ROM — cada um usa os
+        cartuchos que já tem direito de usar.</p>
+        <p>✘ O “cérebro” que roda os jogos (o <b>núcleo snes9x</b>). Fica tranquilo:
+        o app baixa sozinho na primeira ligação. Página 4 ensina.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;">
+      <table class="t8">
+        <tr><th style="width:34%;">Você vai precisar de</th><th>Detalhes</th></tr>
+        <tr><td><b>Um computador</b></td><td>macOS, Windows ou Linux. Quanto mais novo, melhor o run-ahead (pág. 9).</td></tr>
+        <tr><td><b>Mouse ou controle</b></td><td>Controle USB ou Bluetooth de estilo moderno (Xbox/PS/Switch genérico). Até 2 jogadores.</td></tr>
+        <tr><td><b>Suas ROMs</b></td><td>Arquivos <code>.sfc</code>, <code>.smc</code> ou <code>.zip</code> dos jogos que você quer jogar.</td></tr>
+        <tr><td><b>Internet (só no começo)</b></td><td>Para o app baixar o núcleo e o catálogo de nomes. Depois disso, joga offline.</td></tr>
+      </table>
+    </div>
+
+    <div class="box dica" style="margin-top:24px;">
+      <span class="box-tag">PALAVRA DE TÉCNICO</span>
+      <p>“ROM” é o nome chique do <b>cartucho de arquivo</b>: é o arquivo do jogo que vai
+      dentro da pasta <code>roms/</code>, igual ao cartucho que entrava no slot. No manual
+      usamos os dois nomes — cartucho e ROM — pelo mesmo motivo que o console
+      usa: nostalgia.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Antes de ligar</span></div>
+</div>
+
+<!-- ============ PÁGINA 3 — INSTALAÇÃO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">03 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">02</span><span class="sec-title">INSTALAÇÃO</span></div>
+    <div class="sec-sub">Três sistemas, três jeitos fáceis</div>
+
+    <p class="lead" style="margin-top:18px;">
+      O app mora na aba <b>Releases</b> do projeto no GitHub
+      (<span class="mono" style="font-size:11.5px;">github.com/ticianocorral/sixteen</span>).
+      Baixe o arquivo do seu sistema e siga o quadro abaixo. Não precisa instalar
+      mais nada — o pacote já traz tudo consigo.
+    </p>
+
+    <div class="cols3" style="margin-top:22px;">
+      <div class="box" style="padding:14px;">
+        <div class="pixel" style="font-size:10px; color:var(--roxo); margin-bottom:12px;">MACOS</div>
+        <ul class="steps" style="font-size:12px;">
+          <li><span>Baixe o arquivo <b>.dmg</b> da aba Releases</span></li>
+          <li><span>Abra o DMG com dois cliques</span></li>
+          <li><span>Arraste o <b>SixteeN</b> para a pasta Aplicativos</span></li>
+          <li><span>Pronto. Abra pelos Aplicativos</span></li>
+        </ul>
+      </div>
+      <div class="box" style="padding:14px;">
+        <div class="pixel" style="font-size:10px; color:var(--roxo); margin-bottom:12px;">WINDOWS</div>
+        <ul class="steps" style="font-size:12px;">
+          <li><span>Baixe o <b>.zip</b> da aba Releases</span></li>
+          <li><span>Botão direito no arquivo e escolha <b>Extrair tudo</b></span></li>
+          <li><span>Entre na pasta e dê dois cliques em <b>sixteen.exe</b></span></li>
+          <li><span>Dica: crie um atalho na área de trabalho</span></li>
+        </ul>
+      </div>
+      <div class="box" style="padding:14px;">
+        <div class="pixel" style="font-size:10px; color:var(--roxo); margin-bottom:12px;">LINUX</div>
+        <ul class="steps" style="font-size:12px;">
+          <li><span>Baixe o <b>.AppImage</b> da aba Releases</span></li>
+          <li><span>Marque-o como executável (botão direito &gt; Propriedades, ou <span class="mono" style="font-size:10px;">chmod +x</span>)</span></li>
+          <li><span>Dê dois cliques. Funciona sozinho</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:24px;">
+      <span class="box-tag">ONDE FICA O “CONSOLE”?</span>
+      <p style="margin-bottom:0;">Na primeira execução, o app cria uma pasta só dele — o <b>lar do console</b>,
+      onde vivem jogos, saves e configurações:</p>
+      <table class="t8" style="margin-top:12px; box-shadow:none;">
+        <tr><th style="width:22%;">Sistema</th><th>Pasta criada</th></tr>
+        <tr><td><b>macOS</b></td><td><code>Documentos/SixteeN</code></td></tr>
+        <tr><td><b>Windows</b></td><td>a mesma pasta do <code>sixteen.exe</code></td></tr>
+        <tr><td><b>Linux</b></td><td><code>~/.local/share/SixteeN</code></td></tr>
+      </table>
+    </div>
+
+    <div class="box dica" style="margin-top:22px;">
+      <span class="box-tag">DICA DE OURO</span>
+      <p>Guarde o endereço dessa pasta de cor (ou nos favoritos do gerenciador de
+      arquivos). É para lá que vão os jogos — e é dela que sai um <b>backup completo</b>:
+      copiou a pasta, levou o console inteiro.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Instalação</span></div>
+</div>
+
+<!-- ============ PÁGINA 4 — PRIMEIRA LIGAÇÃO ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">04 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">03</span><span class="sec-title">PRIMEIRA LIGAÇÃO</span></div>
+    <div class="sec-sub">Dois downloads e você está no ar</div>
+
+    <div class="cols2" style="margin-top:18px; gap:24px;">
+      <div>
+        <ul class="steps">
+          <li><b>Abra o app</b><span>Ele cria as pastas sozinho e liga a TV: estática no ar, selo CH 3 no canto. Como em todo console novo, ainda não há cartucho.</span></li>
+          <li><b>Receba as boas-vindas</b><span>A TV mostra a tela “bem-vindo ao sixteen”, com os dois downloads do lado. Ninguém precisa adivinhar nada.</span></li>
+          <li><b>Baixe o núcleo snes9x</b><span>É o “cérebro” que roda os jogos. <b>Obrigatório.</b> O app baixa e instala sozinho; o botão vira “instalado” em verde.</span></li>
+          <li><b>Baixe o nointro.dat (opcional)</b><span>Um catálogo que batiza os jogos com nome, ano e editora oficiais. Recomendado — deixa a estante bonita.</span></li>
+          <li><b>Clique em “continuar”</b><span>Fim do setup. Da próxima vez o app liga direto, sem cerimônia.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot"><img src="assets/inicial.jpg" alt="Tela de boas-vindas do SixteeN"></div>
+        <div class="shotcap">Fig. 1 — A tela de boas-vindas: os dois downloads lado a lado na TV.</div>
+        <div class="box atencao" style="margin-top:18px;">
+          <span class="box-tag">SEM INTERNET?</span>
+          <p style="margin-bottom:0;">Dá para instalar depois: o download do núcleo também fica em
+          <b>Configurações &gt; sistema</b>. Ou coloque o arquivo do núcleo à mão na pasta
+          <code>core/</code> — o app reconhece na hora.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:22px;" class="cols2">
+      <div class="box">
+        <span class="box-tag">O QUE É O “NÚCLEO”?</span>
+        <p style="margin-bottom:0;">Pense nele como a <b>placa-mãe do console</b>: o pedaço de software que
+        realmente “roda” o jogo. O SixteeN usa o snes9x, um emulador de SNES
+        famoso e afinado. Você não precisa entender nada dele — só baixar uma vez.</p>
+      </div>
+      <div class="box dica">
+        <span class="box-tag">E O CH 3?</span>
+        <p style="margin-bottom:0;">É o canal 3 — o da TV ligada no videogame, nos anos 90. Quando o
+        console está <b>desligado</b>, a TV mostra estática com esse selo. Detalhe
+        proposital. Tem mais por vir.</p>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Primeira ligação</span></div>
+</div>
+
+<!-- ============ PÁGINA 5 — INSIRA OS CARTUCHOS ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">05 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">04</span><span class="sec-title">INSIRA OS CARTUCHOS</span></div>
+    <div class="sec-sub">Colocando jogos na estante</div>
+
+    <div class="cols2" style="margin-top:18px; gap:24px;">
+      <div>
+        <ul class="steps">
+          <li><b>Abra a pasta do console</b><span>No macOS: <code>Documentos/SixteeN</code>. No Windows, a pasta do exe. No Linux, <code>~/.local/share/SixteeN</code>.</span></li>
+          <li><b>Entre em <code>roms/</code></b><span>É a “gaveta de cartuchos”. Pode criar subpastas para organizar (por ano, gênero…), o app acha tudo.</span></li>
+          <li><b>Copie suas ROMs para lá</b><span>Formatos: <code>.sfc</code> <code>.smc</code> <code>.fig</code> <code>.swc</code> <code>.bin</code> e <code>.zip</code> (zipado funciona — não precisa descompactar).</span></li>
+          <li><b>Clique em “atualizar” na estante</b><span>Os jogos aparecem na hora, em ordem alfabética, prontos para jogar.</span></li>
+        </ul>
+        <div class="box dica" style="margin-top:14px;">
+          <span class="box-tag">NOME É TUDO</span>
+          <p style="margin-bottom:0;">As artes e saves de um jogo são amarradas ao <b>nome do arquivo</b>.
+          Se renomear a ROM depois, use o botão <b>“Renomear ROMs”</b> das Configurações
+          — ele leva saves, notas e capas junto, nada se perde.</p>
+        </div>
+      </div>
+      <div>
+        <div class="shot"><img src="assets/estante.jpg" alt="Estante de jogos do SixteeN"></div>
+        <div class="shotcap">Fig. 2 — A estante: capas, busca, favoritos e recentes.</div>
+        <table class="t8" style="margin-top:16px;">
+          <tr><th>Deixe bonito (opcional)</th><th>Pasta</th></tr>
+          <tr><td>Capa na estante</td><td><code>assets/cover/</code></td></tr>
+          <tr><td>Logo no painel</td><td><code>assets/logo/</code></td></tr>
+          <tr><td>Cartucho no slot</td><td><code>assets/cartridge/</code></td></tr>
+          <tr><td>Contracapa do jogo</td><td><code>assets/backcover/</code></td></tr>
+          <tr><td>Manual em PDF</td><td><code>assets/manual/</code></td></tr>
+        </table>
+        <p class="mono" style="font-size:10px; margin-top:10px; color:var(--tinta-fraca);">
+          Regra do nome: igual ao da ROM, sem a extensão.<br>
+          Ex.: <code>Super Mario World (USA).sfc</code> &gt; capa
+          <code>Super Mario World (USA).png</code>
+        </p>
+      </div>
+    </div>
+
+    <div class="box dica" style="margin-top:20px;">
+      <span class="box-tag">SEM CAPA NENHUMA? SEM PROBLEMA</span>
+      <p style="margin-bottom:0;">Sem arte, a estante vira uma lista numerada estilo multicart — e joga
+      igual. Capa, logo, cartucho e contracapa são enfeite: o console funciona
+      100% sem eles. Comece jogando; deixe bonito depois.</p>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Cartuchos</span></div>
+</div>
+
+<!-- ============ PÁGINA 6 — CONHEÇA SEU CONSOLE ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">06 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">05</span><span class="sec-title">CONHEÇA SEU CONSOLE</span></div>
+    <div class="sec-sub">Anatomia do aparelho</div>
+
+    <div class="shot" style="margin-top:18px;"><img src="assets/screenshot.jpg" alt="Jogo rodando na TV de tubo com o painel lateral"></div>
+    <div class="shotcap">Fig. 3 — O aparelho completo: TV de tubo à esquerda, painel de comando à direita.</div>
+
+    <div style="margin-top:20px;" class="cols2">
+      <table class="t8">
+        <tr><th style="width:56px;">Peça</th><th>Para que serve</th></tr>
+        <tr><td><b>TV de tubo</b></td><td>Onde o jogo aparece — com curvatura e filtro de TV antiga de fábrica.</td></tr>
+        <tr><td><b>POWER</b></td><td>Liga e desliga. Desligar não perde o lugar: religar retoma de onde parou.</td></tr>
+        <tr><td><b>RESET</b></td><td>Reinicia o jogo do zero. A chave volta sozinha, como no original.</td></tr>
+        <tr><td><b>EJETAR</b></td><td>Tira o cartucho e volta à tela inicial. Só funciona desligado — a trava é de propósito!</td></tr>
+        <tr><td><b>Slot do cartucho</b></td><td>O jogo escolhido entra aqui, com animação e clique de encaixe.</td></tr>
+      </table>
+      <div>
+        <table class="t8">
+          <tr><th style="width:56px;">Peça</th><th>Para que serve</th></tr>
+          <tr><td><b>Nomeplate</b></td><td>O “adesivo” do queixo: versão do app e do núcleo.</td></tr>
+          <tr><td><b>Setas verdes</b></td><td>Acendem quando há atualização do app ou do núcleo. Clique nelas (pág. 9).</td></tr>
+          <tr><td><b>Comandos</b></td><td>Lista no painel com Anotações, Conquistas, Cheats, Printscreen, Salvar e Carregar.</td></tr>
+          <tr><td><b>Sessão</b></td><td>Cronômetro que conta só o tempo com o console ligado.</td></tr>
+        </table>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">SEM BARRA DE TÍTULO</span>
+          <p style="margin-bottom:0;">O <b>X</b> fecha e o <b>–</b> minimiza ficam no canto da própria TV.
+          O app abre em tela cheia; para sair dela, Configurações &gt; vídeo.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Anatomia</span></div>
+</div>
+
+<!-- ============ PÁGINA 7 — COMO JOGAR ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">07 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">06</span><span class="sec-title">COMO JOGAR</span></div>
+    <div class="sec-sub">O ritual completo — de pé, como manda a tradição</div>
+
+    <div class="cols2" style="margin-top:18px; gap:24px;">
+      <div>
+        <ul class="steps">
+          <li><b>“Estante de games”</b><span>Na tela inicial, clique no botão do slot (ou aperte A no controle). A estante desliza para fora da TV.</span></li>
+          <li><b>Escolha o cartucho</b><span>Clique no jogo: o cartucho desce e assenta no slot. O console continua desligado — estática fraca na TV.</span></li>
+          <li><b>POWER!</b><span>A chave acende, a neve sobe, o selo CH 3 pisca… e o jogo toma a tela. Este é o bom momento.</span></li>
+          <li><b>Jogue</b><span>Mouse não — agora é controle (ou teclado, pág. 8). O cronômetro “sessão” só corre agora.</span></li>
+          <li><b>POWER de novo (pausa esperta)</b><span>Desligar congela o jogo na memória: religar retoma <b>exatamente</b> do mesmo ponto.</span></li>
+          <li><b>EJETAR (desligado!)</b><span>O cartucho sobe, a estática volta e você está na tela inicial, pronto para o próximo jogo.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="box">
+          <span class="box-tag">SEU PROGRESSO ESTÁ SEGURO</span>
+          <p style="margin-bottom:8px;"><b>1. Save do jogo (automático).</b> O app grava a memória do cartucho
+          a cada ~10 segundos e ao desligar/ejetar/fechar. Use o “Salvar” de dentro
+          do jogo, como sempre.</p>
+          <p style="margin-bottom:8px;"><b>2. Save states (a foto do instante).</b> No painel, <b>“Salvar”</b> e
+          <b>“Carregar”</b> abrem 10 slots por jogo. Congele no meio do pulo, se quiser.</p>
+          <p style="margin-bottom:0;">Os arquivos ficam em <code>saves/</code> — e no backup da pasta vão junto.</p>
+        </div>
+        <div class="box atencao" style="margin-top:18px;">
+          <span class="box-tag">ATENÇÃO, JOGADOR ANSIOSO</span>
+          <p style="margin-bottom:0;"><b>Ejetar com o console ligado não faz nada</b> — a trava é proposital,
+          para ninguém perder progresso no calor da partida. Desligue (POWER) e
+          eijeje em seguida.</p>
+        </div>
+        <div class="box dica" style="margin-top:18px;">
+          <span class="box-tag">FECHOU O APP SEM QUERER?</span>
+          <p style="margin-bottom:0;">Tranquilo: o save automático do jogo já foi para o disco. A única
+          coisa perdida é o “retomar de onde parou” — que vale enquanto o app
+          está aberto.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Como jogar</span></div>
+</div>
+
+<!-- ============ PÁGINA 8 — CONTROLES ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">08 / 10</span></div>
+  <div class="inner compact">
+    <div><span class="sec-num">07</span><span class="sec-title">CONTROLES</span></div>
+    <div class="sec-sub">Controle ou teclado — nos menus, mouse também</div>
+
+    <div class="cols2" style="margin-top:16px; gap:26px; align-items:start;">
+      <div>
+        <svg viewBox="0 0 340 210" width="100%" style="border:3px solid var(--tinta); background:var(--papel-alt); box-shadow:5px 5px 0 var(--tinta); display:block;">
+          <!-- corpo -->
+          <rect x="30" y="55" width="280" height="100" rx="50" fill="#4a3f8f" stroke="#211d18" stroke-width="3"/>
+          <rect x="55" y="45" width="100" height="120" rx="46" fill="#4a3f8f" stroke="#211d18" stroke-width="3"/>
+          <rect x="185" y="45" width="100" height="120" rx="46" fill="#4a3f8f" stroke="#211d18" stroke-width="3"/>
+          <!-- dpad -->
+          <rect x="84" y="70" width="26" height="70" rx="4" fill="#211d18"/>
+          <rect x="62" y="92" width="70" height="26" rx="4" fill="#211d18"/>
+          <!-- select/start -->
+          <rect x="148" y="84" width="20" height="10" rx="5" fill="#211d18" transform="rotate(-18 158 89)"/>
+          <rect x="172" y="84" width="20" height="10" rx="5" fill="#211d18" transform="rotate(18 182 89)"/>
+          <!-- botões -->
+          <circle cx="243" cy="66" r="13" fill="#2e5b8f" stroke="#211d18" stroke-width="2.5"/>
+          <circle cx="266" cy="88" r="13" fill="#b3382e" stroke="#211d18" stroke-width="2.5"/>
+          <circle cx="220" cy="88" r="13" fill="#d9a522" stroke="#211d18" stroke-width="2.5"/>
+          <circle cx="243" cy="110" r="13" fill="#2e6b3f" stroke="#211d18" stroke-width="2.5"/>
+          <text x="243" y="71" text-anchor="middle" class="pad-key">X</text>
+          <text x="266" y="93" text-anchor="middle" class="pad-key">A</text>
+          <text x="220" y="93" text-anchor="middle" class="pad-key">Y</text>
+          <text x="243" y="115" text-anchor="middle" class="pad-key">B</text>
+          <!-- ombros -->
+          <rect x="60" y="34" width="52" height="12" rx="6" fill="#211d18"/>
+          <rect x="188" y="34" width="52" height="12" rx="6" fill="#211d18"/>
+          <text x="86" y="30" text-anchor="middle" class="pad-label">L</text>
+          <text x="214" y="30" text-anchor="middle" class="pad-label">R</text>
+          <!-- legendas (fora do corpo, sobre o fundo claro) -->
+          <text x="90" y="182" text-anchor="middle" class="pad-label">direcional</text>
+          <text x="170" y="182" text-anchor="middle" class="pad-label">select/start</text>
+          <text x="262" y="182" text-anchor="middle" class="pad-label">botões de ação</text>
+        </svg>
+        <div class="shotcap">O controle no estilo moderno: direcional, L/R, Select/Start e os quatro botões.</div>
+        <table class="t8" style="margin-top:14px;">
+          <tr><th>Botão do controle</th><th>Faz no SNES</th></tr>
+          <tr><td>Sul (de baixo)</td><td><b>B</b></td></tr>
+          <tr><td>Leste (da direita)</td><td><b>A</b></td></tr>
+          <tr><td>Oeste / Norte</td><td><b>Y</b> / <b>X</b></td></tr>
+          <tr><td>L1·R1 (ombros)</td><td><b>L</b> / <b>R</b></td></tr>
+          <tr><td>Start / Select</td><td><b>Start</b> / <b>Select</b></td></tr>
+        </table>
+      </div>
+      <div>
+        <p style="margin-bottom:10px;">Sem controle? O <b>teclado</b> joga na porta 1 (e alimenta o código Konami… pág. 9):</p>
+        <table class="t8">
+          <tr><th>Tecla</th><th>Botão do SNES</th></tr>
+          <tr><td><span class="keycap">←</span><span class="keycap">↑</span><span class="keycap">↓</span><span class="keycap">→</span></td><td>Direcional</td></tr>
+          <tr><td><span class="keycap">Z</span></td><td>B</td></tr>
+          <tr><td><span class="keycap">X</span></td><td>A</td></tr>
+          <tr><td><span class="keycap">A</span></td><td>Y</td></tr>
+          <tr><td><span class="keycap">S</span></td><td>X</td></tr>
+          <tr><td><span class="keycap">Q</span> / <span class="keycap">W</span></td><td>L / R</td></tr>
+          <tr><td><span class="keycap">Enter</span></td><td>Start</td></tr>
+          <tr><td><span class="keycap">Shift</span> direito</td><td>Select</td></tr>
+        </table>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">NOS MENUS</span>
+          <p style="margin-bottom:6px;"><b>A</b> confirma · <b>B</b> volta · direcionais navegam · L/R passam página.</p>
+          <p style="margin-bottom:0;">No teclado, as setas navegam e o mouse faz o resto — exceto digitar
+          buscas e anotações, aí sim ele entra em cena.</p>
+        </div>
+        <div class="box dica" style="margin-top:14px;">
+          <span class="box-tag">BOTÃO TROUXE</span>
+          <p style="margin-bottom:0;">Remapeie tudo em <b>Configurações &gt; controles</b>: clique na linha e
+          aperte a tecla/botão que quiser. Os botões do console (Power, Eject…)
+          não mudam — são do hardware.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Controles</span></div>
+</div>
+
+<!-- ============ PÁGINA 9 — RECURSOS ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">09 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">08</span><span class="sec-title">RECURSOS DO CONSOLE</span></div>
+    <div class="sec-sub">Anotações, prints, cheats, conquistas e um segredo</div>
+
+    <div class="cols2" style="margin-top:18px; gap:24px;">
+      <div>
+        <div class="box">
+          <span class="box-tag">LIVRO DE ANOTAÇÕES</span>
+          <p style="margin-bottom:6px;">O comando <b>“Anotações”</b> pausa o jogo e abre um livro de duas
+          páginas: <b>15 slots de texto</b> (dicas, senhas de fase) e <b>15 slots de prints</b>
+          da tela. O que você <b>fixar</b> aparece no painel enquanto joga.</p>
+          <p style="margin-bottom:0;">Capturar um print: <b>Printscreen</b> nos comandos, escolha o slot,
+          dê um nome (opcional) e pronto.</p>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">CHEATS</span>
+          <p style="margin-bottom:0;">Se o jogo tem códigos conhecidos, o comando <b>“Cheats”</b> abre a
+          lista pronta: clique para ligar/desligar na hora. Use a busca e os filtros
+          Todos/Ligados/Desligados. Nada para baixar — o banco já vem no app.</p>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">CONQUISTAS (RETROACHIEVEMENTS)</span>
+          <p style="margin-bottom:6px;">Crie uma conta grátis em <span class="mono" style="font-size:11px;">retroachievements.org</span>, logue em
+          <b>Configurações &gt; conquistas</b> e jogue: ao desbloquear, o aviso desliza
+          no queixo da TV com badge e pontos.</p>
+          <p style="margin-bottom:0;"><b>Hardcore</b> (padrão) = valendo: sem cheats nem save states.
+          <b>Softcore</b> = modo relaxado. Escolha na mesma tela.</p>
+        </div>
+      </div>
+      <div>
+        <div class="shot"><img src="assets/ra-notificacao.jpg" alt="Notificação de conquista desbloqueada"></div>
+        <div class="shotcap">Fig. 4 — “CONQUISTA DESBLOQUEADA”: badge, nome e pontos no queixo da TV.</div>
+        <div class="box" style="margin-top:16px;">
+          <span class="box-tag">SETAS VERDES = UPDATE</span>
+          <p style="margin-bottom:0;">Na tela inicial, setas verdes no nameplate avisam de atualização
+          do <b>app</b> e do <b>núcleo</b>. Clique, leia as novidades, confirme — o app
+          baixa, instala e pede para reiniciar. Sem janela no meio do jogo, nunca.</p>
+        </div>
+        <div class="box segredo" style="margin-top:16px;">
+          <span class="box-tag">CÓDIGO SECRETO DETECTADO</span>
+          <p style="margin-bottom:8px;">Na <b>tela inicial</b>, digite com o teclado (ou o direcional do controle):</p>
+          <p class="pixel" style="font-size:11px; color:var(--roxo); letter-spacing:2px; margin-bottom:8px;">&#8593; &#8593; &#8595; &#8595; &#8592; &#8594; &#8592; &#8594; B A</p>
+          <p style="margin-bottom:0;">Um botão <b>“Dev”</b> aparece — com um jogo de exemplo, para testar o
+          console numa instalação recém-nascida. Vale só até fechar o app.
+          Conte para todo mundo, estamos orgulhosos.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Recursos</span></div>
+</div>
+
+<!-- ============ PÁGINA 10 — PROBLEMAS & SOLUÇÕES ============ -->
+<div class="page">
+  <div class="topbar"><span class="brand">SIXTEEN</span><span class="pg">10 / 10</span></div>
+  <div class="inner">
+    <div><span class="sec-num">09</span><span class="sec-title">PROBLEMAS &amp; SOLUÇÕES</span></div>
+    <div class="sec-sub">Quando a TV resmunga</div>
+
+    <table class="t8" style="margin-top:18px;">
+      <tr><th style="width:42%;">A TV diz / acontece</th><th>O que fazer</th></tr>
+      <tr><td>“Para jogar é necessário baixar o núcleo snes9x”</td><td>Clique no botão de baixar na tela inicial (ou Configurações &gt; sistema).</td></tr>
+      <tr><td>“nenhuma rom encontrada”</td><td>A pasta <code>roms/</code> está vazia — copie suas ROMs para lá e clique em “atualizar” na estante.</td></tr>
+      <tr><td>“MODO HARDCORE — savestates/cheats bloqueados”</td><td>Você está jogando valendo. Para usar cheats e save states: Configurações &gt; conquistas &gt; desligar modo hardcore.</td></tr>
+      <tr><td>“Conquistas (versão sem suporte)”</td><td>Esse jogo não tem conquistas aceitas no serviço. O resto continua funcionando.</td></tr>
+      <tr><td>EJETAR não faz nada</td><td>O console está ligado. Desligue com POWER — a trava é proposital.</td></tr>
+      <tr><td>Jogo sem capa na estante</td><td>O arquivo de arte precisa ter o mesmo nome da ROM (sem extensão) e estar na pasta certa de <code>assets/</code>.</td></tr>
+      <tr><td>Atualizou, mas o app não mudou</td><td>Feche e abra: o pacote pendente é aplicado na abertura.</td></tr>
+      <tr><td>Jogo instável / “pesado”</td><td>Configurações &gt; jogo &gt; Run-ahead: reduza para 1 ou 0.</td></tr>
+    </table>
+
+    <div class="cols2" style="margin-top:22px;">
+      <div class="box">
+        <span class="box-tag">RESET DE FÁBRICA (PARCIAL)</span>
+        <p style="margin-bottom:0;">Com o app fechado, dá para “zerar” partes sem perder o resto:
+        apague <code>config/sixteen.cfg</code> para voltar às preferências de fábrica;
+        apague <code>saves/Nome do Jogo/</code> para recomeçar aquele jogo do zero.</p>
+      </div>
+      <div class="box dica">
+        <span class="box-tag">MUDOU DE COMPUTADOR?</span>
+        <p style="margin-bottom:0;">Copie a pasta inteira do console (jogos incluídos) para o mesmo
+        lugar no outro computador. Saves, notas, artes e preferências viajam juntos.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:30px; border-top:3px solid var(--tinta); padding-top:22px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div class="pixel" style="font-size:13px; color:var(--roxo); line-height:1.8;">OBRIGADO<br>POR JOGAR!</div>
+        <p class="mono" style="font-size:9.5px; color:var(--tinta-fraca); margin-top:12px;">
+          SixteeN · projeto pessoal, sem fins comerciais.<br>
+          Nenhum jogo ou núcleo é distribuído junto — cada jogador usa os seus.
+        </p>
+      </div>
+      <div class="selo">
+        <div class="a">APROVADO PELO<br>CONTROLE DE<br>QUALIDADE</div>
+        <div class="b">DIVISÃO DE NOSTALGIA</div>
+      </div>
+    </div>
+  </div>
+  <div class="botbar"><span>SixteeN · Manual do jogador</span><span>Fim — volte a jogar</span></div>
+</div>
+
+</body>
+</html>

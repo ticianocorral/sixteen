@@ -1,7 +1,7 @@
 //! The catalogue: a folder scan (plan §4.1) plus a small JSON sidecar for
 //! what a scan alone can't know — when a ROM was first seen and how many
 //! times it's been played. No database: the app is portable, everything it
-//! needs lives in plain files next to it (`xperience_app::dirs`).
+//! needs lives in plain files next to it (`sixteen_app::dirs`).
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -363,7 +363,7 @@ mod tests {
 
     fn fake_catalog(rows: Vec<RomRow>) -> Catalog {
         let store_path = std::env::temp_dir().join(format!(
-            "xperience-catalog-test-{}-{:?}.json",
+            "sixteen-catalog-test-{}-{:?}.json",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn mark_played_persists_across_reopen() {
         let dir = std::env::temp_dir().join(format!(
-            "xperience-catalog-roundtrip-{}",
+            "sixteen-catalog-roundtrip-{}",
             std::process::id()
         ));
         let roms_dir = dir.join("roms");
@@ -480,7 +480,7 @@ mod tests {
     #[test]
     fn favorite_persists_across_reopen() {
         let dir =
-            std::env::temp_dir().join(format!("xperience-catalog-favorite-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sixteen-catalog-favorite-{}", std::process::id()));
         let roms_dir = dir.join("roms");
         std::fs::create_dir_all(&roms_dir).unwrap();
         let rom_path = roms_dir.join("Test.sfc");

@@ -9,7 +9,7 @@
 
 use std::sync::OnceLock;
 
-use xperience_platform::Cabinet;
+use sixteen_platform::Cabinet;
 
 /// The embedded effects, at `RATE` Hz mono S16LE.
 pub const RATE: u32 = 22_050;
