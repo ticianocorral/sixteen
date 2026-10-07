@@ -110,16 +110,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
-      # O flatpak-builder traz o runtime/sdk (e a extensão Rust) do Flathub;
-      # o build do app roda dentro do sandbox com a rede liberada só nele.
+      # Só os pacotes de tooling — o próprio build-flatpak.sh adiciona o
+      # Flathub e instala runtime/sdk/extension no escopo system (com sudo),
+      # que é onde o --install-deps-from do flatpak-builder resolve.
       - name: Flatpak tooling
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
-          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive \
-            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 \
-            org.freedesktop.Sdk.Extension.rust-stable//24.08
       - name: Version
         id: ver
         run: echo "v=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
