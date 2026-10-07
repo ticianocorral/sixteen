@@ -34,15 +34,15 @@ modules:
     buildsystem: simple
     build-options:
       env:
-        # O repo tem rust-toolchain.toml; dentro do sandbox usamos o toolchain
-        # que a extensão rust-stable já traz, sem download do rustup.
+        # Toolchain da extensão rust-stable direto no PATH (a 24.08 não tem
+        # use.sh); RUSTUP_TOOLCHAIN cobre tanto a extensão com rustup quanto
+        # sem — e ignora o rust-toolchain.toml do repo (sem download).
+        PATH: /usr/lib/sdk/rust-stable/bin:/usr/bin:/bin
         RUSTUP_TOOLCHAIN: stable
       build-args:
         - --share=network
     build-commands:
-      # use.sh coloca o toolchain da extensão no PATH — sem ele o sandbox
-      # não encontra o cargo.
-      - source /usr/lib/sdk/rust-stable/use.sh && cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
+      - cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
       - install -Dm755 target/release/sixteen /app/bin/sixteen
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.desktop -t /app/share/applications/
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.metainfo.xml -t /app/share/metainfo/
