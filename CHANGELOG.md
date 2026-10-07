@@ -7,6 +7,28 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.1.6] - 2026-10-07
+
+### Modificado
+- O app agora se chama **SixteeN** (era SNES Xperience) — nome novo na
+  interface, janela, binário (`sixteen`), crates, `sixteen.cfg`, variáveis
+  `SIXTEEN_*` e empacotamento (`SixteeN.app`/dmg/zip/AppImage/Flatpak). A
+  pasta de dados antiga (`~/Documents/SNES Xperience` no macOS,
+  `XDG_DATA_HOME/SNES Xperience` no Linux) e o `xperience.cfg` migram
+  sozinhos no primeiro arranque — saves, notas e configuração ficam onde
+  sempre estiveram, só com o nome novo.
+- Logo nova, gerada do wordmark SixteeN com a faixa "Retroconsole System"
+  em recorte: vermelha na tela inicial (como era) e cinza na base do
+  cartucho (como era).
+- O repositório mudou de `ticianocorral/snes-xperience` para
+  `ticianocorral/sixteen` (o GitHub redireciona o endereço antigo —
+  instalações 1.1.5 continuam recebendo o aviso de update).
+
+### Adicionado
+- Empacotamento **Flatpak** para Linux: `packaging/flatpak/` com o
+  manifest `dev.ticianocorral.sixteen`, e o pipeline de release publica o
+  bundle `.flatpak` junto com dmg, zip e AppImage.
+
 ## [1.1.5] - 2026-09-30
 
 ### Modificado

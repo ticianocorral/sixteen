@@ -1349,7 +1349,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "sixteen-app"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "sixteen-domain"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "crc32fast",
  "log",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "sixteen-emulation"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "anyhow",
  "libloading",
@@ -1397,14 +1397,14 @@ dependencies = [
 
 [[package]]
 name = "sixteen-ntsc"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "sixteen-platform"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "log",
  "noto-sans-mono-bitmap",
@@ -1414,7 +1414,7 @@ dependencies = [
 
 [[package]]
 name = "sixteen-ra"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "cc",
  "log",
