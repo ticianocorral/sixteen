@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Builds the SixteeN Flatpak and a single-file .flatpak bundle from it —
 # the "make a Linux flatpak" one-liner, same spirit as the AppImage script.
-# Needs flatpak + flatpak-builder and sudo: the Freedesktop 24.08
-# runtime/sdk and the rust extension are pulled from Flathub into the
-# system installation, which is also where flatpak-builder's
-# --install-deps-from resolves them.
+# Needs flatpak, flatpak-builder and elfutils (eu-strip, que o
+# flatpak-builder usa ao final) and sudo: the Freedesktop 24.08 runtime/sdk
+# and the rust extension are pulled from Flathub into the system
+# installation, which is also where flatpak-builder's --install-deps-from
+# resolves them.
 # Usage: build-flatpak.sh <version> <out-path>
 set -euo pipefail
 
