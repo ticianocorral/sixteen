@@ -1,0 +1,50 @@
+# Flatpak do SixteeN — o mesmo binário do AppImage, empacotado no formato
+# do flatpak-builder. O app não é "sandbox-first": ele mantém a raiz de
+# dados portátil (roms/, saves/, core/...), que dentro do sandbox cai em
+# ~/.var/app/dev.ticianocorral.sixteen/data/SixteeN (XDG_DATA_HOME remapeado
+# pelo flatpak) — sem permissão extra de filesystem. O --filesystem=home
+# existe para o app ler ROMs que o jogador deixou em qualquer pasta de casa.
+#
+# O build usa a rede (cargo baixa as dependências e o SDL3 vendido compila
+# via cmake — ambos presentes no org.freedesktop.Sdk), então não é o formato
+# "fontes declaradas" exigido pelo Flathub; é um flatpak de instalação
+# direta/publicação própria. Idempotente: rode de novo quantas vezes quiser.
+id: dev.ticianocorral.sixteen
+branch: stable
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: sixteen
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=all
+  - --filesystem=home
+cleanup:
+  - /include
+  - /lib/cmake
+  - "*.a"
+  - "*.la"
+modules:
+  - name: sixteen
+    buildsystem: simple
+    build-options:
+      env:
+        # O repo tem rust-toolchain.toml; dentro do sandbox usamos o toolchain
+        # que a extensão rust-stable já traz, sem download do rustup.
+        RUSTUP_TOOLCHAIN: stable
+      build-args:
+        - --share=network
+    build-commands:
+      - cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
+      - install -Dm755 target/release/sixteen /app/bin/sixteen
+      - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.desktop -t /app/share/applications/
+      - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.metainfo.xml -t /app/share/metainfo/
+      - install -Dm644 packaging/linux/sixteen.png /app/share/icons/hicolor/256x256/apps/dev.ticianocorral.sixteen.png
+    sources:
+      - type: dir
+        path: ../..

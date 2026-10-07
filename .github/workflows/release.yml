@@ -104,8 +104,36 @@ jobs:
           name: linux-appimage
           path: SixteeN-*.AppImage
 
+  linux-flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      # O flatpak-builder traz o runtime/sdk (e a extensão Rust) do Flathub;
+      # o build do app roda dentro do sandbox com a rede liberada só nele.
+      - name: Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive \
+            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 \
+            org.freedesktop.Sdk.Extension.rust-stable//24.08
+      - name: Version
+        id: ver
+        run: echo "v=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Build Flatpak
+        run: |
+          ./packaging/flatpak/build-flatpak.sh "${{ steps.ver.outputs.v }}" \
+            "SixteeN-${{ steps.ver.outputs.v }}-linux-x86_64.flatpak"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-flatpak
+          path: SixteeN-*.flatpak
+
   publish:
-    needs: [macos, windows, linux]
+    needs: [macos, windows, linux, linux-flatpak]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -119,5 +147,6 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \
             || gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes
-          gh release upload "$TAG" macos-dmg/*.dmg windows-zip/*.zip linux-appimage/*.AppImage \
+          gh release upload "$TAG" macos-dmg/*.dmg windows-zip/*.zip \
+            linux-appimage/*.AppImage linux-flatpak/*.flatpak \
             --repo "${{ github.repository }}" --clobber

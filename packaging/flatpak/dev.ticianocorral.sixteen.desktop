@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SixteeN
+Comment=Console de SNES inteiro na TV — emulador pessoal, não comercial
+Exec=sixteen
+Icon=dev.ticianocorral.sixteen
+Categories=Game;Emulator;
+Terminal=false

@@ -38,3 +38,7 @@ screenscraper.toml
 # artefatos de runtime dos testes headless
 /platformer-example/
 .zcodeignore
+
+# build local do flatpak (packaging/flatpak/build-flatpak.sh)
+packaging/flatpak/.flatpak-build/
+packaging/flatpak/.flatpak-repo/

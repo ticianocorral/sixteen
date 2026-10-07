@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.ticianocorral.sixteen</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>SixteeN</name>
+  <summary>Um console inteiro na sua TV — emulador de SNES com gabinete, tubo CRT e cartucho</summary>
+  <description>
+    <p>
+      SixteeN é um emulador de Super Nintendo pessoal e sem fins comerciais
+      que se apresenta como um console de verdade: em vez de só uma janela
+      com o jogo, você vê o gabinete, o tubo CRT com o chiado de estática, o
+      painel lateral do jogo (logo, cartucho no slot, chaves Power e Reset) e
+      uma estante de games com capas.
+    </p>
+    <p>
+      Inclui save states, notas do jogo, RetroAchievements, filtro NTSC e
+      atualização pelo próprio app. O núcleo snes9x (libretro) não vem
+      embutido — o app baixa na primeira execução, como o core de qualquer
+      front-end libretro.
+    </p>
+  </description>
+  <launchable type="desktop-id">dev.ticianocorral.sixteen.desktop</launchable>
+  <url type="homepage">https://github.com/ticianocorral/sixteen</url>
+  <developer_name translatable="no">ticianocorral</developer_name>
+  <content_rating type="oars-1.1" />
+  <provides>
+    <binary>sixteen</binary>
+  </provides>
+  <categories>
+    <category>Game</category>
+    <category>Emulator</category>
+  </categories>
+  <releases>
+    <release version="1.1.6" date="2026-10-07">
+      <description>
+        <p>O app agora se chama SixteeN (era SNES Xperience), com logo nova
+        e migração automática da pasta de dados antiga no primeiro arranque.
+        Empacotamento Flatpak novo para Linux.</p>
+      </description>
+    </release>
+  </releases>
+</component>
