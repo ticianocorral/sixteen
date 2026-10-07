@@ -44,8 +44,12 @@ modules:
       build-args:
         - --share=network
     build-commands:
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path
-      - $HOME/.cargo/bin/cargo build --release --bin sixteen --features sixteen-platform/vendored-sdl
+      # O rustup TEM de viver no build dir ($PWD): escritas fora dele são
+      # descartadas entre um build-command e o próximo, então /home não
+      # sobrevive. Mesma variante em todos os comandos porque cada um roda
+      # em um shell novo.
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | env CARGO_HOME="$PWD/.cargo-home" RUSTUP_HOME="$PWD/.rustup-home" sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path
+      - env CARGO_HOME="$PWD/.cargo-home" RUSTUP_HOME="$PWD/.rustup-home" "$PWD/.cargo-home/bin/cargo" build --release --bin sixteen --features sixteen-platform/vendored-sdl
       - install -Dm755 target/release/sixteen /app/bin/sixteen
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.desktop -t /app/share/applications/
       - install -Dm644 packaging/flatpak/dev.ticianocorral.sixteen.metainfo.xml -t /app/share/metainfo/
