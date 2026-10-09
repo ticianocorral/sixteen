@@ -182,6 +182,7 @@ fn main() -> Result<()> {
         sixteen_app::dirs::assets_dir().join("cover"),
         sixteen_app::dirs::assets_dir().join("cartridge"),
         sixteen_app::dirs::assets_dir().join("backcover"),
+        sixteen_app::dirs::assets_dir().join("manual"),
         args.save_dir.clone(),
         args.notes_dir.clone(),
         sixteen_app::dirs::retroachievements_dir(),
@@ -189,6 +190,9 @@ fn main() -> Result<()> {
     ] {
         let _ = std::fs::create_dir_all(&dir);
     }
+    // Artes de exemplo (mocks embutidos) nas pastas de arte — molde pro
+    // jogador; arquivo já existente nunca é tocado.
+    sixteen_app::exemplo::seed(&sixteen_app::dirs::assets_dir());
     migrate_old_data();
 
     let mut cfg = Config::load(args.config.as_deref())?;

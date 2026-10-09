@@ -7,6 +7,28 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.2.0] - 2026-10-08
+
+### Adicionado
+- **Artes de exemplo na pasta de dados** — no arranque (sempre que o
+  arquivo estiver faltando) o app semeia `exemplo.png`/`exemplo.pdf` em
+  `assets/{cover,cartridge,backcover,manual}`: os mocks embutidos no
+  binário servem de molde do tamanho e formato de cada slot para o
+  jogador criar as artes dos seus jogos — o cartucho é um shell cinza
+  sem rótulo, pronto pra receber uma label. Arquivo do jogador nunca é
+  sobrescrito, e `assets/logo/` fica de fora (o app já tem logo padrão
+  própria). `assets/manual/`, que o leitor de manual espera, agora
+  também é criada no arranque.
+- `packaging/exemplo-mock/` — os mocks fonte (capa, cartucho sem
+  rótulo, contracapa e manual em PDF) com o script que os gera.
+
+### Modificado
+- O pacote de exemplo que o app baixa pelo menu Dev
+  (`exemplo-platformer-example.zip`) vem com as artes novas — capa,
+  cartucho, contracapa e manual — no lugar das antigas, que ainda
+  carregavam a marca "SNES Xperience"; o LEIA-ME do pacote também está
+  no nome novo e explica os tamanhos de cada arte.
+
 ## [1.1.7] - 2026-10-07
 
 ### Corrigido

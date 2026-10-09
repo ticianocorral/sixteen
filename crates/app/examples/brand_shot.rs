@@ -21,7 +21,11 @@ fn main() -> anyhow::Result<()> {
     let logo = image::load_from_memory(include_bytes!("../assets/console_logo.png"))?
         .thumbnail(640, 640)
         .to_rgba8();
-    cab.set_console_logo(Some((logo.width(), logo.height(), logo.as_raw().as_slice())));
+    cab.set_console_logo(Some((
+        logo.width(),
+        logo.height(),
+        logo.as_raw().as_slice(),
+    )));
 
     let tag = image::load_from_memory(include_bytes!("../assets/console_tag.png"))?
         .thumbnail(1024, 1024)

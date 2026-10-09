@@ -1,0 +1,30 @@
+Mocks das artes de exemplo do SixteeN — gerados por `gerar-mocks.py`
+(`python3 gerar-mocks.py`, precisa de Pillow + numpy).
+
+Os arquivos saem direto em `crates/app/assets/` com o prefixo
+`exemplo-`, de onde eles:
+
+  - são **embutidos no binário** (`crates/app/src/exemplo.rs` faz
+    `include_bytes!`) e semeados na pasta de dados do jogador
+    (`assets/{cover,cartridge,backcover}/exemplo.png` e
+    `assets/manual/exemplo.pdf`) na primeira execução;
+  - são **copiados para o pacote de exemplo**
+    (`exemplo-platformer-example.zip`, na raiz do repositório — é o
+    que o app baixa pelo menu Dev) renomeados para
+    `platformer-example.*`, o nome da ROM que vem no pacote.
+
+O que é cada mock:
+
+  exemplo-cartucho.png   1400×900 — shell cinza SEM rótulo (base: o
+                         cartucho do pacote World Cup 2026, com o
+                         rótulo apagado). Cole a arte da sua label na
+                         área rebaixada (≈ x 258–1146, y 4–414).
+  exemplo-cover.png      1024×777 — capa paisagem (tile da estante).
+  exemplo-backcover.png  1024×773 — contracapa.
+  exemplo-manual.pdf     5 páginas, imagens JPEG embutidas (compatível
+                         com o leitor de manual do app).
+
+Como o app consome (mesmo nome da ROM, sem extensão):
+  assets/cover/<nome>.png  assets/logo/<nome>.png
+  assets/cartridge/<nome>.png  assets/backcover/<nome>.png
+  assets/manual/<nome>.pdf

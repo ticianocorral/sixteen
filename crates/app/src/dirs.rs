@@ -159,12 +159,16 @@ fn legacy_app_root() -> Option<PathBuf> {
 /// Call once at startup, before anything reads [`app_root`] — the create-
 /// dir-on-first-launch passes would otherwise block the folder rename.
 pub fn migrate_renamed_root() {
-    let root = app_root();
+    // No Windows a raiz nunca se moveu (sempre foi ao lado do .exe) — o
+    // rename de raiz só existe em macOS/Linux, root incluído.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    if !root.exists() {
-        if let Some(legacy) = legacy_app_root() {
-            if legacy.is_dir() {
-                rename_dir_best_effort(&legacy, &root);
+    {
+        let root = app_root();
+        if !root.exists() {
+            if let Some(legacy) = legacy_app_root() {
+                if legacy.is_dir() {
+                    rename_dir_best_effort(&legacy, &root);
+                }
             }
         }
     }
@@ -172,6 +176,8 @@ pub fn migrate_renamed_root() {
     migrate_brand_overrides(&assets_dir(), &config_dir());
 }
 
+/// Só macOS/Linux — ver [`migrate_renamed_root`].
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn rename_dir_best_effort(legacy: &Path, root: &Path) {
     if let Some(parent) = root.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -279,6 +285,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn legacy_root_moves_when_the_new_one_is_still_missing() {
         let tmp = std::env::temp_dir().join(format!("sixteen-dirs-root-{}", std::process::id()));

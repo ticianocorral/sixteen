@@ -447,9 +447,6 @@ mod tests {
 
     /// raiz temporária única por teste (sem dep de tempfile)
     fn tempfile_root(tag: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "sixteen-devmenu-test-{}-{tag}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("sixteen-devmenu-test-{}-{tag}", std::process::id()))
     }
 }

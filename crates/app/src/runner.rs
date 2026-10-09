@@ -2327,8 +2327,7 @@ mod tests {
     use sixteen_emulation::PixelFormat as EmuFormat;
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("sixteen-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sixteen-test-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
