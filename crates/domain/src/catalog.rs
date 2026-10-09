@@ -451,10 +451,8 @@ mod tests {
 
     #[test]
     fn mark_played_persists_across_reopen() {
-        let dir = std::env::temp_dir().join(format!(
-            "sixteen-catalog-roundtrip-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("sixteen-catalog-roundtrip-{}", std::process::id()));
         let roms_dir = dir.join("roms");
         std::fs::create_dir_all(&roms_dir).unwrap();
         let rom_path = roms_dir.join("Test.sfc");

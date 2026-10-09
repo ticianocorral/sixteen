@@ -10,8 +10,7 @@ fn main() -> anyhow::Result<()> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "/tmp/setup.bmp".into());
-    let mut plat =
-        sixteen_platform::Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut plat = sixteen_platform::Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
         .create_cabinet("SixteeN", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;

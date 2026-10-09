@@ -5,6 +5,7 @@
 //! - [`dirs`] — the portable app layout (one root: next to the executable
 //!   on Windows/Linux, `~/Documents/SixteeN` on macOS).
 //! - [`devmenu`] — the dev-mode menu (Konami-code secret; blank for now).
+//! - [`exemplo`] — the built-in example art seeded into the data folder.
 //! - [`idle`] — the idle/root screen (`sixteen`'s home: TV off, "Inserir cartucho").
 //! - [`rom_rename`] — rename ROMs to their canonical No-Intro name (settings-screen action).
 //! - [`runner`] — the emulator run-loop (`emu-run`, and `sixteen` between games).
@@ -19,6 +20,7 @@ pub mod core_update;
 pub mod dat_update;
 pub mod devmenu;
 pub mod dirs;
+pub mod exemplo;
 pub mod idle;
 pub mod manual;
 pub mod ra;

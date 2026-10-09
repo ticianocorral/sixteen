@@ -11,8 +11,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-const RELEASES_API: &str =
-    "https://api.github.com/repos/ticianocorral/sixteen/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/ticianocorral/sixteen/releases/latest";
 
 /// HEAD of the snes9x core's own repo — the same identifier a core embeds
 /// in its `library_version` ("1.63 fae2fea" is upstream version + commit).
