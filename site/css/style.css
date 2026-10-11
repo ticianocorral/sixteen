@@ -565,6 +565,7 @@ code {
     letter-spacing: 0.06em;
   }
   .cabecalho-link { margin-left: 0; }
+  .capa { padding-top: 14px; }
   .secao { padding: 40px 0 44px; }
   .secao-num { font-size: 30px; }
   .secao-head { padding: 10px 16px; gap: 14px; }
