@@ -1,8 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#f2ede3"/>
-  <rect x="4" y="4" width="56" height="56" fill="none" stroke="#211d18" stroke-width="4"/>
-  <rect x="14" y="14" width="36" height="26" fill="#211d18"/>
-  <rect x="18" y="18" width="28" height="18" fill="#6a5fc9"/>
-  <circle cx="24" cy="50" r="4" fill="#b3382e"/>
-  <circle cx="40" cy="50" r="4" fill="#4a3f8f"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Losango do SNES, quatro cores de fábrica -->
+  <g transform="translate(64 64) rotate(45)">
+    <rect x="-38" y="-38" width="34" height="34" fill="#b3382e"/>
+    <rect x="4"   y="-38" width="34" height="34" fill="#c9a227"/>
+    <rect x="-38" y="4"   width="34" height="34" fill="#2e6b3f"/>
+    <rect x="4"   y="4"   width="34" height="34" fill="#4a3f8f"/>
+  </g>
+  <!-- O "N" da marca: caixa alta, como no wordmark SixteeN -->
+  <text x="64" y="78" font-family="Archivo Black, Arial Black, sans-serif"
+        font-size="44" font-style="italic" font-weight="900" fill="#f2ede3"
+        text-anchor="middle">N</text>
 </svg>

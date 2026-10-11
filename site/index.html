@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SixteeN — manual do proprietário</title>
-  <meta name="description" content="SixteeN: um console inteiro na sua TV — gabinete, tubo CRT e cartucho de verdade. Emulador de Super Nintendo para macOS, Windows e Linux, com estante de jogos, manual em PDF e RetroAchievements.">
+  <meta name="description" content="SixteeN: um frontend de console para o emulador snes9x — a sala inteira ao redor do emulador de referência do Super Nintendo, para macOS, Windows e Linux, com estante de jogos, manual em PDF e RetroAchievements.">
   <meta property="og:title" content="SixteeN">
   <meta property="og:description" content="Um console inteiro na sua TV — gabinete, tubo CRT e cartucho de verdade.">
   <meta property="og:image" content="assets/screenshot.jpg">
@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
   <a class="pular" href="#conteudo">Pular para o conteúdo</a>
@@ -24,22 +24,32 @@
 
   <header class="cabecalho">
     <p class="cabecalho-ref">SNX-1000 · MANUAL DO PROPRIETÁRIO</p>
-    <p class="cabecalho-ref">REV. 1.1.5</p>
+    <p class="cabecalho-ref">REV. 1.2.0</p>
     <a class="cabecalho-link" href="https://github.com/ticianocorral/sixteen">github.com/ticianocorral/sixteen</a>
   </header>
 
   <main id="conteudo">
 
-    <!-- ===== Capa ===== -->
+    <!-- ===== Capa — preta, como a capa dos manuais de SNES ===== -->
     <section class="capa">
-      <div class="pagina">
+      <div class="capa-cartao">
+        <header class="capa-marca" aria-label="SixteeN">
+          <span class="capa-marca-regua" aria-hidden="true"></span>
+          <img src="assets/console-logo.png" width="485" height="187"
+               alt="SixteeN — Retroconsole System">
+          <span class="capa-marca-regua" aria-hidden="true"></span>
+        </header>
         <div class="capa-grid">
           <div class="capa-texto">
-            <p class="kicker">manual do proprietário</p>
-            <h1>SixteeN</h1>
+            <h1 class="capa-titulo">
+              <span class="capa-titulo-l1">manual do</span>
+              <span class="capa-titulo-l2">proprietário</span>
+            </h1>
             <p class="capa-lema">
               Um <strong>console inteiro na sua TV</strong> — gabinete, tubo
               CRT e cartucho de verdade — em vez de só uma janela com o jogo.
+              E não é um emulador novo: <strong>quem emula é o
+              snes9x</strong>; o SixteeN é o console ao redor dele.
             </p>
             <div class="capa-acoes">
               <a class="botao" href="https://github.com/ticianocorral/sixteen/releases/latest">
@@ -52,13 +62,13 @@
               </p>
             </div>
             <p class="capa-selo">
-              <span class="carimbo" title="última release publicada">v<span data-release>1.1.5</span></span>
+              <span class="carimbo" title="última release publicada">v<span data-release>1.2.0</span></span>
               <span class="capa-selo-txt">SDL3 embutido · macOS / Windows / Linux / Steam Deck</span>
             </p>
           </div>
           <figure class="figura capa-figura">
             <img src="assets/screenshot.jpg" width="1280" height="800" loading="eager"
-                 alt="O Platformer Example — homebrew open source — rodando no tubo CRT, com o painel lateral: logotipo do jogo, cartucho no slot e chaves Power e Reset roxas">
+                 alt="Mighty Morphin Power Rangers rodando no tubo CRT, com o painel lateral: logotipo do jogo, cartucho no slot e chaves Power e Reset roxas">
             <figcaption><span>Fig. 1</span> o console ligado: tubo, painel e cartucho no slot</figcaption>
           </figure>
         </div>
@@ -104,6 +114,13 @@
               anotação, que precisa de teclado por natureza.
             </p>
             <p>
+              Importante: <strong>o SixteeN não é um emulador novo</strong>.
+              Quem roda os jogos é o <strong>snes9x</strong> (port libretro),
+              baixado e atualizado pelo próprio app — o SixteeN é o
+              frontend de console ao redor: vídeo, áudio, estante,
+              cartucho, manual e conquistas.
+            </p>
+            <p>
               E é portátil de verdade, zero nuvem: sem banco de dados e sem
               raspagem online — tudo em pastas ao lado do app, que você
               carrega onde quiser.
@@ -129,6 +146,11 @@
           <span class="secao-num" aria-hidden="true">2</span>
           <h2>Como ligar</h2>
         </header>
+        <figure class="figura">
+          <img src="assets/inicial.jpg" width="1280" height="800" loading="lazy"
+               alt="A tela inicial do SixteeN: o tubo em estática no Canal 3, sem cartucho no slot, com o painel lateral do console desligado">
+          <figcaption><span>Fig. 2</span> a tela inicial: sem cartucho, a TV insiste no Canal 3</figcaption>
+        </figure>
         <ol class="passos">
           <li class="passo">
             <p class="passo-num">passo 1</p>
@@ -182,8 +204,8 @@
         </header>
         <figure class="figura">
           <img src="assets/estante.jpg" width="1280" height="800" loading="lazy"
-               alt="A estante de jogos: o tile do Platformer Example com a capa, e o painel do jogo com logo, abas de informações, capa traseira, manual e cartucho">
-          <figcaption><span>Fig. 2</span> a estante: tile do jogo à esquerda, painel com logo, abas e manual à direita</figcaption>
+               alt="A estante de jogos real: grade com as capas da biblioteca, o tile de Mighty Morphin Power Rangers selecionado com o botão de play, e o painel do jogo com logo, abas e informações">
+          <figcaption><span>Fig. 3</span> a estante de verdade: capas da biblioteca, play no hover e o painel do jogo</figcaption>
         </figure>
         <div class="secao-grid">
           <div class="secao-texto">
@@ -225,7 +247,7 @@
         <figure class="figura">
           <img src="assets/cartucho.gif" width="1280" height="800" loading="lazy"
                alt="Cartucho entrando e saindo do slot do console, com animação de encaixe">
-          <figcaption><span>Fig. 3</span> o cartucho desce, assenta e destrava com clique de verdade</figcaption>
+          <figcaption><span>Fig. 4</span> o cartucho desce, assenta e destrava com clique de verdade</figcaption>
         </figure>
         <div class="secao-texto secao-texto-largo">
           <p>
@@ -248,13 +270,13 @@
         <div class="galeria-2">
           <figure class="figura">
             <img src="assets/ra-notificacao.jpg" width="1280" height="800" loading="lazy"
-                 alt="Notificação de conquista desbloqueada com badge, nome e pontos no queixo da TV, com o Mundo do Tomate no tubo">
-            <figcaption><span>Fig. 4</span> “CONQUISTA DESBLOQUEADA” no queixo da TV — badge e pontos</figcaption>
+                 alt="Notificação de conquista desbloqueada com badge, nome e pontos no queixo da TV, com Mighty Morphin Power Rangers no tubo">
+            <figcaption><span>Fig. 5</span> “CONQUISTA DESBLOQUEADA” no queixo da TV — badge e pontos</figcaption>
           </figure>
           <figure class="figura">
             <img src="assets/ra-badge.jpg" width="1280" height="800" loading="lazy"
-                 alt="Badge fixo RA ATIVADO no queixo da TV, indicando o modo hardcore, com o Mundo do Tomate no tubo">
-            <figcaption><span>Fig. 5</span> sem desbloqueio na fila, o badge RA ATIVADO fica no lugar</figcaption>
+                 alt="Badge fixo RA ATIVADO no queixo da TV, indicando o modo hardcore, com Mighty Morphin Power Rangers no tubo">
+            <figcaption><span>Fig. 6</span> sem desbloqueio na fila, o badge RA ATIVADO fica no lugar</figcaption>
           </figure>
         </div>
         <div class="secao-texto secao-texto-largo">
@@ -281,7 +303,7 @@
         </header>
         <table class="tabela tabela-larga">
           <tbody>
-            <tr><th>núcleo</th><td><a href="https://www.snes9x.com/">snes9x</a> (port libretro) — baixado e atualizado pelo app</td></tr>
+            <tr><th>emulação</th><td><a href="https://www.snes9x.com/">snes9x</a> (port libretro) — baixado e atualizado pelo app; o SixteeN é um frontend de console ao redor, <strong>não um emulador novo</strong></td></tr>
             <tr><th>vídeo</th><td>filtro NTSC RF do blargg, scanlines, tela cheia na resolução nativa do monitor</td></tr>
             <tr><th>áudio</th><td>48 kHz estéreo, com hiss de tubo opcional</td></tr>
             <tr><th>código</th><td><a href="https://www.rust-lang.org/">Rust</a> sobre <a href="https://wiki.libsdl.org/SDL3/README/README">SDL3</a>, em quatro camadas de crates: apresentação, domínio, emulação, plataforma</td></tr>
@@ -302,25 +324,30 @@
         <div class="aviso">
           <p class="aviso-titulo">aviso importante</p>
           <p>
-            Nenhum jogo comercial aparece neste site e <strong>nenhuma ROM ou
-            núcleo é distribuído</strong> com o app: suas ROMs são suas, e o
-            núcleo snes9x é baixado direto do buildbot oficial da libretro.
+            As telas vêm do console do autor em uso real — mas
+            <strong>nenhuma ROM ou núcleo é distribuído</strong> com o app:
+            suas ROMs são suas, e o núcleo snes9x é baixado direto do
+            buildbot oficial da libretro.
           </p>
         </div>
         <div class="secao-grid">
           <div class="secao-texto">
-            <h3>sobre as telas de jogo</h3>
+            <h3>sobre as telas</h3>
             <p>
-              As imagens mostram o <strong>Platformer Example</strong>,
-              homebrew open source de
-              <a href="https://github.com/NovaSquirrel/snes-platformer-example">NovaSquirrel</a>
-              (código MIT; arte de Kenney, surt e GrafxKid via OpenGameArt,
-              CC0/CC-BY). Ele também vem como
+              Todas as imagens são <strong>prints de verdade do app</strong>,
+              capturados do console em funcionamento com a biblioteca real do
+              autor — os dois Mighty Morphin Power Rangers no tubo e na
+              estante.
+              As capas e os jogos comerciais pertencem aos seus donos e
+              <strong>nenhuma ROM é distribuída</strong>; o texto da
+              notificação de conquista é ilustrativo (o badge e o aviso na TV
+              são os do app). Para começar do zero sem ROM própria, o
+              homebrew open source Platformer Example (de
+              <a href="https://github.com/NovaSquirrel/snes-platformer-example">NovaSquirrel</a>)
+              vem como
               <a href="https://raw.githubusercontent.com/ticianocorral/sixteen/main/exemplo-platformer-example.zip">pacote
-              de exemplo</a> pronto para instalar pelo modo dev — código
-              Konami na tela inicial. Só as fotos de conquistas mantêm o
-              homebrew fictício <em>Mundo do Tomate</em>, desenhado pixel a
-              pixel para elas.
+              de exemplo</a> pronto para instalar pelo modo dev (código
+              Konami na tela inicial).
             </p>
           </div>
           <div class="secao-texto">

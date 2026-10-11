@@ -10,6 +10,7 @@
   --roxo: #4a3f8f;
   --roxo-vivo: #6a5fc9;
   --vermelho: #b3382e;
+  --vermelho-vivo: #d4483c;
   --verde: #2e6b3f;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --sans: "Archivo", system-ui, sans-serif;
@@ -100,47 +101,94 @@ a:hover { color: var(--roxo-vivo); }
   padding: 0 40px;
 }
 
-/* ---- capa ---- */
-.capa { padding: 64px 0 0; }
-.capa .pagina {
-  border: 3px solid var(--tinta);
-  box-shadow: var(--sombra);
-  background: var(--papel);
-  padding: 56px 40px;
+/* ---- capa — preta, como a capa dos manuais de SNES ---- */
+.capa { padding: 48px 0 0; }
+.capa-cartao {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0;
+  background: var(--tinta);
+  color: var(--papel);
+}
+
+.capa-marca {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 40px 48px 0;
+}
+.capa-marca img {
+  width: 280px;
+  height: auto;
+  display: block;
+}
+.capa-marca-regua {
+  flex: 1;
+  height: 4px;
+  background: var(--vermelho);
+  box-shadow: 0 8px 0 var(--vermelho);
 }
 .capa-grid {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
   gap: 48px;
   align-items: center;
+  padding: 44px 48px 52px;
 }
 
-.kicker {
-  margin: 0 0 14px;
-  font-family: var(--mono);
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.28em;
-  color: var(--vermelho);
-}
-
-.capa h1 {
-  margin: 0 0 20px;
+/* título empilhado em duas linhas, como o "MANUAL DE / INSTRUÇÕES" do
+   manual — tamanho calibrado para "PROPRIETÁRIO" caber na coluna sem
+   correr por baixo da figura */
+.capa-titulo {
+  margin: 0 0 22px;
   font-family: var(--display);
-  font-size: clamp(40px, 4.6vw, 58px);
-  line-height: 0.95;
-  /* a marca é "SixteeN" — caixa própria, itálico como o wordmark da logo */
-  font-style: italic;
-  letter-spacing: -0.015em;
+  font-size: clamp(28px, 3.2vw, 42px);
+  line-height: 1.06;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
 }
+.capa-titulo span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.capa-titulo-l1 { color: var(--papel); }
+.capa-titulo-l2 { color: var(--vermelho-vivo); }
 .capa-lema {
   font-size: 19px;
   max-width: 34ch;
   margin: 0 0 30px;
 }
-.capa-lema strong { color: var(--roxo); }
+.capa-lema strong { color: var(--roxo-vivo); }
 
 .capa-acoes { margin: 0 0 26px; }
+
+/* capa: tudo o que cai sobre o preto troca a tinta pela cor do papel */
+.capa .figura {
+  border-color: var(--papel);
+  box-shadow: 8px 8px 0 var(--vermelho);
+  padding: 10px 10px 0;
+}
+.capa .figura img { border-color: var(--papel); filter: none; }
+.capa .figura figcaption { color: var(--papel); border-top-color: #55503f; }
+.capa .figura figcaption span { color: var(--vermelho-vivo); }
+.capa .botao {
+  background: var(--roxo-vivo);
+  border-color: var(--papel);
+  box-shadow: 6px 6px 0 var(--vermelho);
+}
+.capa .botao:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 4px 4px 0 var(--vermelho);
+  color: var(--papel);
+}
+.capa .botao:active {
+  transform: translate(6px, 6px);
+  box-shadow: 0 0 0 var(--vermelho);
+}
+.capa .capa-formatos a { color: var(--papel); }
+.capa .capa-formatos a:hover { color: var(--roxo-vivo); }
+.capa .carimbo { border-color: var(--vermelho-vivo); color: var(--vermelho-vivo); }
+.capa .capa-selo-txt { color: #b8b2a6; }
 
 .botao {
   display: inline-block;
@@ -203,7 +251,7 @@ a:hover { color: var(--roxo-vivo); }
 
 /* ---- figuras (fotos impressas coladas no manual) ---- */
 .figura {
-  margin: 0;
+  margin: 0 0 34px; /* respiro entre a foto e o texto de baixo */
   border: 3px solid var(--tinta);
   box-shadow: var(--sombra);
   background: var(--papel);
@@ -263,31 +311,40 @@ a:hover { color: var(--roxo-vivo); }
 
 /* ---- seções ---- */
 .secao { padding: 56px 0 64px; }
-.secao-alt .pagina {
-  border-top: 3px solid var(--tinta);
-  border-bottom: 3px solid var(--tinta);
-}
 
+/* faixa de seção: barra vermelha lisa como nos cabeçalhos das páginas
+   internas do manual — número e título em branco, rótulo à direita */
 .secao-head {
   display: flex;
-  align-items: baseline;
-  gap: 22px;
+  align-items: center;
+  gap: 20px;
   margin: 0 0 36px;
+  background: var(--vermelho);
+  padding: 14px 24px;
 }
 .secao-num {
   font-family: var(--display);
-  font-size: 96px;
-  line-height: 0.8;
-  color: transparent;
-  -webkit-text-stroke: 2.5px var(--tinta);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--papel);
 }
-.secao-num-alt { font-size: 72px; }
+.secao-num-alt { font-size: 32px; }
 .secao-head h2 {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(26px, 3.4vw, 40px);
+  font-size: clamp(20px, 2.6vw, 30px);
   text-transform: uppercase;
   letter-spacing: 0.01em;
+  color: var(--papel);
+}
+.secao-head::after {
+  content: "sixteen";
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #f2ede3b8;
 }
 
 .secao-grid {
@@ -497,9 +554,12 @@ code {
 }
 @media (max-width: 640px) {
   .pagina { padding: 0 20px; }
-  .capa .pagina { padding: 36px 22px; }
+  .capa-marca { padding: 28px 24px 0; }
+  .capa-grid { padding: 32px 24px 40px; }
   .espiral { display: none; }
   .cabecalho { padding: 12px 20px; }
   .secao { padding: 40px 0 44px; }
-  .secao-num { font-size: 64px; }
+  .secao-num { font-size: 30px; }
+  .secao-head { padding: 10px 16px; gap: 14px; }
+  .secao-head::after { display: none; }
 }
