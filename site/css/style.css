@@ -557,7 +557,14 @@ code {
   .capa-marca { padding: 28px 24px 0; }
   .capa-grid { padding: 32px 24px 40px; }
   .espiral { display: none; }
-  .cabecalho { padding: 12px 20px; }
+  /* cabeçalho de revisão compacto: uma ou duas linhas, não três */
+  .cabecalho {
+    padding: 10px 16px;
+    gap: 4px 14px;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+  }
+  .cabecalho-link { margin-left: 0; }
   .secao { padding: 40px 0 44px; }
   .secao-num { font-size: 30px; }
   .secao-head { padding: 10px 16px; gap: 14px; }
