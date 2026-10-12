@@ -7,6 +7,15 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.3.1] - 2026-10-12
+
+### Removido
+- **Run-ahead** — o recurso rodava o core frames especulativos à frente
+  (serializando savestate por frame) para esconder lag de input. Custo de
+  CPU/energia sem benefício perceptível (snes9x é leve para o hardware
+  alvo). A opção `runahead` sai do `sixteen.cfg`, da CLI e do runner — o
+  jogo roda sempre à velocidade cheia, com o menor gasto possível.
+
 ## [1.3.0] - 2026-10-11
 
 ### Adicionado
