@@ -8,10 +8,11 @@ janela com o jogo. Projeto pessoal, sem fins comerciais.
 
 ## Como funciona
 
-- **Escolher um jogo insere o cartucho de verdade**: a tela inicial é o
-  console com o slot vazio e um botão "Inserir cartucho"; o jogo entra na
-  estante, o cartucho desce e assenta no slot (gif abaixo), e o console só
-  liga quando você clicar em Power — igual ao hardware.
+- **Escolher um jogo insere o cartucho de verdade**: a tela inicial é a TV
+  fora do ar (estática no CH 3) com a logo e um botão "Estante de games";
+  o jogo entra na estante, o cartucho desce e assenta no slot do painel
+  (gif abaixo), e o console só liga quando você clicar em Power — igual ao
+  hardware. A face do console vive só na tela de jogo.
 - **Cartucho entra e sai com animação** no painel, com clique de encaixe e
   de destravamento:
 
@@ -43,7 +44,7 @@ janela com o jogo. Projeto pessoal, sem fins comerciais.
   (`console-tag.png`) vêm de imagens suas; o core snes9x baixa sozinho pelo
   menu de configurações.
 
-![Tela inicial: console com o slot vazio, botão de inserir e controles apagados](docs/img/inicial.png)
+![Tela inicial: TV fora do ar no CH 3, logo do app e botão "Estante de games"](docs/img/inicial.png)
 
 ## Baixar
 

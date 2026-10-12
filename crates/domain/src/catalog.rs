@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::library;
 use crate::nointro::NoIntroDat;
-use crate::tosec;
 
 /// Turn whatever optional extras are known for a game into label/value
 /// pairs, ready for the shelf's panel ("se o DAT tiver informacoes do jogo,
@@ -33,21 +32,35 @@ fn info_lines(
     nointro: Option<&crate::nointro::NoIntroGameInfo>,
     crc32: &str,
 ) -> Vec<(String, String)> {
-    let bundled = tosec::lookup(crc32);
+    // A tabela única embutida (crc → tudo) é a fonte primária; o DAT, se o
+    // usuário tiver um, ganha no ano/editora quando traz o campo.
+    let infos = crate::infos::lookup(crc32);
     let mut lines = Vec::new();
 
     let year = nointro
         .and_then(|i| i.year.as_deref())
-        .or_else(|| bundled.and_then(|t| t.year));
+        .or_else(|| infos.as_ref().and_then(|i| i.year.as_deref()));
     if let Some(year) = year {
         lines.push(("ano".to_string(), year.to_string()));
     }
 
     let publisher = nointro
         .and_then(|i| i.publisher.as_deref())
-        .or_else(|| bundled.and_then(|t| t.publisher));
+        .or_else(|| infos.as_ref().and_then(|i| i.publisher.as_deref()));
     if let Some(publisher) = publisher {
         lines.push(("editora".to_string(), publisher.to_string()));
+    }
+
+    if let Some(region) = infos.as_ref().and_then(|i| i.region.as_deref()) {
+        if region != "outra" {
+            lines.push(("região".to_string(), region.to_string()));
+        }
+    }
+
+    if let Some(nota) = infos.as_ref().and_then(|i| i.nota.as_deref()) {
+        if !nota.is_empty() {
+            lines.push(("nota (IGDB)".to_string(), nota.to_string()));
+        }
     }
 
     lines
@@ -218,7 +231,10 @@ impl Catalog {
                     title: None,
                 });
                 let nointro_hit = dat.and_then(|d| d.lookup(&r.id.crc32));
-                let nointro_name = nointro_hit.map(|i| i.name.clone());
+                let infos_hit = crate::infos::lookup(&r.id.crc32);
+                let nointro_name = nointro_hit
+                    .map(|i| i.name.clone())
+                    .or_else(|| infos_hit.as_ref().map(|i| i.name.clone()));
                 let nointro_extra = info_lines(nointro_hit, &r.id.crc32);
                 RomRow {
                     sha1: r.id.sha1,
@@ -376,35 +392,38 @@ mod tests {
 
     #[test]
     fn info_lines_falls_back_to_bundled_tosec_when_no_dat_hit() {
-        // Chrono Trigger (US), a real entry in the bundled TOSEC table —
-        // update this CRC32 if `tosec_data.txt` is ever regenerated from a
-        // TOSEC release that drops or renames it (see `tosec::tests` for a
-        // release-independent sanity check on the data file itself).
-        let lines = info_lines(None, "2D206BF7");
+        // Super Metroid (JU), uma entrada real da tabela única embutida —
+        // atualize este CRC32 se `infos_data.txt` for regenerado e a linha
+        // mudar (o ano/editora vêm da TOSEC, a nota da IGDB).
+        let lines = info_lines(None, "D63ED5F8");
         assert_eq!(
             lines,
             vec![
-                ("ano".to_string(), "1995".to_string()),
-                ("editora".to_string(), "Square".to_string()),
+                ("ano".to_string(), "1994".to_string()),
+                ("editora".to_string(), "Nintendo".to_string()),
+                ("região".to_string(), "Japan".to_string()),
+                ("nota (IGDB)".to_string(), "92".to_string()),
             ]
         );
     }
 
     #[test]
-    fn info_lines_prefers_the_dat_over_bundled_tosec() {
+    fn info_lines_prefers_the_dat_over_the_bundled_table() {
         let dat_info = crate::nointro::NoIntroGameInfo {
-            name: "Chrono Trigger (World)".to_string(),
-            year: Some("1994".to_string()), // deliberately different from TOSEC's "1995"
-            publisher: None,                // left for TOSEC to fill in
+            name: "Super Metroid (World)".to_string(),
+            year: Some("1995".to_string()), // deliberately different from the table's "1994"
+            publisher: None,                // left for the table to fill in
             category: None,
             description: None,
         };
-        let lines = info_lines(Some(&dat_info), "2D206BF7");
+        let lines = info_lines(Some(&dat_info), "D63ED5F8");
         assert_eq!(
             lines,
             vec![
-                ("ano".to_string(), "1994".to_string()), // the DAT's, not TOSEC's
-                ("editora".to_string(), "Square".to_string()), // TOSEC filled the gap
+                ("ano".to_string(), "1995".to_string()), // the DAT's, not the table's
+                ("editora".to_string(), "Nintendo".to_string()), // the table filled the gap
+                ("região".to_string(), "Japan".to_string()),
+                ("nota (IGDB)".to_string(), "92".to_string()),
             ]
         );
     }

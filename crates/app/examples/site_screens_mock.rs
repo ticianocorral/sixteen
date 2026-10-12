@@ -167,6 +167,33 @@ fn main() -> anyhow::Result<()> {
         }
         let covers_ids: Vec<u64> = covers.iter().map(|(id, _, _)| *id).collect();
 
+        // O "H" do HowLongToBeat + barras de mentira do homebrew, como o
+        // bloco real do app.
+        let hltb_icon: u64 = 0x484C_5442;
+        if let Ok(icon) = image::load_from_memory(sixteen_app::HLTB_ICON_PNG) {
+            let icon = icon.to_rgba8();
+            cab.set_image(hltb_icon, icon.width(), icon.height(), icon.as_raw());
+        }
+        let hltb = Some(sixteen_platform::HltbBars {
+            icon: hltb_icon,
+            rows: vec![
+                ("história principal".to_string(), 45u64, (52u8, 124, 246)),
+                ("principal + extras".to_string(), 90, (86, 88, 204)),
+            ]
+            .into_iter()
+            .map(|(label, minutos, color)| sixteen_platform::HltbBar {
+                label,
+                text: if minutos >= 60 {
+                    format!("{}h {}min", minutos / 60, minutos % 60)
+                } else {
+                    format!("{minutos}min")
+                },
+                frac: minutos as f32 / 90.0,
+                color,
+            })
+            .collect(),
+        });
+
         cab.set_shelf_panel(sixteen_platform::ShelfPanelInfo {
             title: GAME_TITLE.to_string(),
             logo_img: Some(logo_id),
@@ -184,6 +211,9 @@ fn main() -> anyhow::Result<()> {
             favorite: Some(true),
             achievements: true,
             award_img: Some(medal_id),
+
+            igdb: None,
+            hltb,
         });
 
         let m = 28i32; // margem do shelf

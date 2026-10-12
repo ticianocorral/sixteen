@@ -51,10 +51,6 @@ const SCROLLBAR_RESERVE: u32 = 16;
 const LIST_ROW_H: u32 = 22;
 const LIST_GAP: u32 = 6;
 
-/// O que o RA completa por jogo além do DAT: `(lançamento, extras)` —
-/// extras como `("editora", "Konami")`.
-type RaExtras = (Option<String>, Vec<(String, String)>);
-
 /// A "jogados recentemente" strip above the main grid/list (plan revision) —
 /// the last played games, always in a single row. Both strips scroll
 /// horizontally now (see `STRIP_CAP`), so no fixed five-item cap anymore.
@@ -111,10 +107,12 @@ const DIM: (u8, u8, u8) = (150, 150, 158);
 /// Text color on top of the `HILITE` selection bar in list mode — dark, for
 /// contrast against the bright fill.
 const HILITE_TEXT: (u8, u8, u8) = (24, 20, 12);
-/// How opaque the shelf sits over the resting TV static (plan §3.3) — under
-/// 1.0 so the signal-off snow bleeds through faintly instead of a flat
-/// background, but not enough to fight with reading the grid/list.
-const SHELF_ALPHA: f32 = 0.92;
+/// How opaque the shelf sits over the resting TV static (plan §3.3) — era
+/// 0.92 (a neve sangrava de leve pelo fundo), mas com as capas 3D vazadas
+/// o ruído cinça aparecia nas margens transparentes, embaixo das caixas —
+/// uma "borda cinza" contra a madeira. A estante agora assenta opaca; a
+/// neve segue viva na tela idle e na entrada (fade-in), que rampa até 1.0.
+const SHELF_ALPHA: f32 = 1.0;
 
 /// What the player did on the shelf.
 pub enum Pick {
@@ -529,11 +527,202 @@ fn pick_play(
 /// (A "jogado" row lived here once — the last-played date is already the
 /// recent strip's whole job, and the row was what overflowed into the
 /// panel's buttons.)
+/// A prateleira de madeira sob uma fileira de caixas (a estante de
+/// verdade, do mock `estante_mock` para o app): fita LED no lábio superior
+/// com brilho escorrendo na parede (atrás das capas — as caixas desenhadas
+/// por cima recortam o brilho e ficam retroiluminadas), três pranchas de
+/// tons vizinhos com veios e juntas, boca escura e mão francesa
+/// (quarto-de-círculo) sob as duas pontas — curta, para não invadir a copy
+/// da fileira de baixo. Mora no vão de `GAP`/`RECENT_GAP` entre fileiras —
+/// nenhuma geometria de clique muda.
+fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
+    // Fita LED: brilho decrescente na parede acima do tampo + linha quente
+    // no lábio (o tampo em si recebe a lavagem de luz na fileira de cima).
+    d.fill(x, y - 3, w, 1, (54, 44, 32, 255));
+    d.fill(x, y - 2, w, 1, (104, 82, 54, 255));
+    d.fill(x, y - 1, w, 1, (198, 158, 92, 255));
+
+    // O tampo: três pranchas de tons vizinhos (madeira de verdade nunca é
+    // uma cor só), lábio lavado pela fita, veios e juntas, boca escura.
+    let face_h = (h - 6).max(1);
+    let prancha = (w as i32 / 3).max(1);
+    for (p, tom) in [(0, (104, 69, 42)), (1, (100, 66, 40)), (2, (108, 72, 45))] {
+        let px = x + p * prancha;
+        let pw = if p == 2 {
+            w as i32 - 2 * prancha
+        } else {
+            prancha
+        };
+        d.fill(
+            px,
+            y + 2,
+            pw as u32,
+            face_h as u32,
+            (tom.0, tom.1, tom.2, 255),
+        );
+    }
+    d.fill(x, y, w, 2, (172, 128, 76, 255));
+    let veios = [
+        (5u32, 8i32, (88, 57, 34u8)),
+        (7, 30, (92, 61, 37u8)),
+        (9, 14, (86, 55, 33u8)),
+    ];
+    for (dy, ox, c) in veios {
+        if h > dy as i32 + 6 {
+            d.fill(
+                x + ox,
+                y + dy as i32,
+                w.saturating_sub(ox as u32 + 24),
+                1,
+                (c.0, c.1, c.2, 255),
+            );
+        }
+    }
+    for p in [1, 2] {
+        d.fill(x + p * prancha, y + 2, 1, face_h as u32, (64, 42, 26, 255));
+    }
+    d.fill(x, y + h - 4, w, 4, (58, 38, 24, 255));
+
+    // Sombra do tampo na parede, embaixo.
+    for (i, c) in [(13u8, 11u8, 10u8), (16u8, 14u8, 12u8), (19u8, 17u8, 15u8)]
+        .into_iter()
+        .enumerate()
+    {
+        d.fill(
+            x + 4,
+            y + h + i as i32,
+            w.saturating_sub(8),
+            1,
+            (c.0, c.1, c.2, 255),
+        );
+    }
+
+    // Mão francesa nos cantos: quarto-de-círculo sob cada ponta — r curto
+    // para a ponta não descer na copy da fileira de baixo (o vão entre a
+    // prateleira e o que vem depois é de 14 a 18px).
+    let r: i32 = 8;
+    for i in 0..r {
+        let dx = (((r * r - i * i) as f32).sqrt().round() as i32).max(1);
+        d.fill(x + 2, y + h + i, dx as u32, 1, (80, 52, 34, 255));
+        d.fill(
+            x + w as i32 - 2 - dx,
+            y + h + i,
+            dx as u32,
+            1,
+            (80, 52, 34, 255),
+        );
+    }
+}
+
+/// A caixa em pé na prateleira: sombra firme na madeira (as caixas
+/// chapadas precisam de assentamento), a face lateral escura na direita e
+/// o fio de luz na quina esquerda — o tile lê como caixa, não como cartão. Desenha POR CIMA da arte (a lateral
+/// escurece a borda da capa).
+fn draw_box_dressing(d: &mut Screen, x: i32, y: i32, w: u32, h: u32) {
+    d.fill(x - 4, y + h as i32, w + 12, 5, (26, 17, 11, 255));
+    d.fill(x + w as i32 - 5, y + 2, 5, h - 4, (20, 16, 14, 255));
+    d.fill(x, y + 2, 1, h - 4, (86, 84, 82, 255));
+}
+
+/// O suporte da capa vazada — um pequeno encaixe central de acrílico, o
+/// mesmo prong dos expositores de CD: uma linguinha no meio da base que
+/// segura a caixa de pé. Bem sutil de propósito — barra nenhuma embaixo, o
+/// mínimo de peça para a capa não flutuar.
+fn draw_expositor(d: &mut Screen, x: i32, y: i32, w: u32, h: u32) {
+    let base = y + h as i32;
+    let cx = x + w as i32 / 2;
+    let prong = (w as i32 / 5).clamp(18, 36);
+    // sombrinha de contato no tampo, logo atrás do encaixe
+    d.fill(
+        cx - prong / 2 - 2,
+        base + 3,
+        (prong + 4) as u32,
+        2,
+        (26, 17, 11, 255),
+    );
+    // o encaixe: sobe 4px na frente da base da capa e pousa 2px no tampo
+    d.fill(cx - prong / 2, base - 4, prong as u32, 6, (36, 34, 38, 255));
+    // o filete de acrílico: o topo do encaixe pegando a luz
+    d.fill(
+        cx - prong / 2,
+        base - 4,
+        prong as u32,
+        1,
+        (185, 195, 205, 255),
+    );
+}
+
 fn game_info_lines(entry: &CatalogEntry, playtime_secs: u64) -> Vec<(String, String)> {
     vec![
         ("cartucho".to_string(), cart_size(entry.rom.size)),
         ("tempo total".to_string(), format_playtime(playtime_secs)),
     ]
+}
+
+/// O id fixo da textura do ícone "H" do HowLongToBeat — 0x484C5442 é "HLTB"
+/// em ASCII. Registrada uma vez (como as medalhas do RA), lida por todo
+/// painel que tiver bloco de tempos.
+
+/// O id fixo da textura da logo da IGDB — 0x49474442 é "IGDB" em ASCII.
+/// Registrada uma vez, lida pelo cabeçalho da seção de nota.
+const IGDB_ICON_IMG: u64 = 0x4947_4442;
+const HLTB_ICON_IMG: u64 = 0x484C_5442;
+
+/// O bloco HowLongToBeat do painel — as 4 barras do card do site (história
+/// principal, + extras, completista, todos os estilos), a largura
+/// proporcional contra o maior tempo do jogo. Minuto zero vale como sem
+/// voto (arredondamento de jogo curtíssimo), e a cor por estilo segue o
+/// site: azul, índigo, vermelho, teal. Tempos da tabela embutida por CRC32
+/// (`sixteen_domain::hltb`), nada de rede.
+fn hltb_bars(i: &sixteen_domain::InfosData, icon: u64) -> sixteen_platform::HltbBars {
+    let estilos = [
+        ("história principal", i.hltb_main, (52, 124, 246)),
+        ("principal + extras", i.hltb_extra, (86, 88, 204)),
+    ];
+    let maior = estilos
+        .iter()
+        .filter_map(|(_, v, _)| v.filter(|minutos| *minutos > 0))
+        .max()
+        .unwrap_or(1) as f32;
+    sixteen_platform::HltbBars {
+        icon,
+        rows: estilos
+            .into_iter()
+            .filter_map(|(label, minutos, color)| {
+                let minutos = minutos.filter(|minutos| *minutos > 0)?;
+                Some(sixteen_platform::HltbBar {
+                    label: label.to_string(),
+                    text: format_playtime(minutos * 60),
+                    frac: minutos as f32 / maior,
+                    color,
+                })
+            })
+            .collect(),
+    }
+}
+
+/// O ícone "H" registrado na `Cabinet` (uma vez só) — o bloco de tempos o
+/// usa de cabeçalho, ao lado do "HowLongToBeat" dim.
+fn hltb_icon_registered(cab: &mut Cabinet) -> u64 {
+    if !cab.has_image(HLTB_ICON_IMG) {
+        if let Ok(icon) = image::load_from_memory(crate::HLTB_ICON_PNG) {
+            let icon = icon.to_rgba8();
+            cab.set_image(HLTB_ICON_IMG, icon.width(), icon.height(), icon.as_raw());
+        }
+    }
+    HLTB_ICON_IMG
+}
+
+/// O ícone "IGDB" registrado na `Cabinet` (uma vez só) — o cabeçalho da
+/// seção de nota o usa, ao lado do "IGDB" em negrito.
+fn igdb_icon_registered(cab: &mut Cabinet) -> u64 {
+    if !cab.has_image(IGDB_ICON_IMG) {
+        if let Ok(icon) = image::load_from_memory(crate::IGDB_ICON_PNG) {
+            let icon = icon.to_rgba8();
+            cab.set_image(IGDB_ICON_IMG, icon.width(), icon.height(), icon.as_raw());
+        }
+    }
+    IGDB_ICON_IMG
 }
 
 /// The cartridge size the box used to print, in megabits (plan revision:
@@ -575,6 +764,33 @@ fn format_playtime(secs: u64) -> String {
         (0, 0) => "menos de 1min".to_string(),
         (0, m) => format!("{m}min"),
         (h, m) => format!("{h}h {m}min"),
+    }
+}
+
+/// O botão de play sob o mouse: um CD (disco prateado, furo central) com
+/// a seta de play, no canto inferior direito da capa sob o cursor — o
+/// convite para o clique que lança o jogo.
+fn draw_play_icon(d: &mut Screen, cx: i32, cy: i32) {
+    let r = 17;
+    for dy in -r..=r {
+        let dx = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        d.fill(cx - dx, cy + dy, (dx * 2) as u32, 1, (176, 182, 192, 235));
+    }
+    let r2 = 4;
+    for dy in -r2..=r2 {
+        let dx = ((r2 * r2 - dy * dy) as f32).sqrt().round() as i32;
+        d.fill(cx - dx, cy + dy, (dx * 2) as u32, 1, (24, 24, 28, 255));
+    }
+    // a seta: triângulo apontando à direita, a partir do centro
+    for t in 0..11 {
+        let half = 6 - (t * 6 + 5) / 11;
+        d.fill(
+            cx - 1 + t,
+            cy - half,
+            1,
+            (half * 2) as u32,
+            (20, 20, 26, 255),
+        );
     }
 }
 
@@ -931,7 +1147,6 @@ pub fn run(
     > = std::collections::HashMap::new();
     // Lançamento/editora que o RA tem e o DAT/TOSEC não, mesmo cache de
     // um-cálculo-por-foco (leitura do JSON da identificação).
-    let mut ra_meta: std::collections::HashMap<String, RaExtras> = std::collections::HashMap::new();
     // sha1 → hash RA, guardado pela própria identificação para o painel não
     // refazer o hash da ROM a cada frame.
     let mut ra_hashes: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -1104,6 +1319,9 @@ pub fn run(
         let refresh_rect = refresh_button_rect(scr_w);
 
         // Input.
+        // O cursor em coordenadas de janela — o hover do botão de play lê
+        // a cada frame; durante a edição do filtro não há hover.
+        let mut pointer = None;
         if editing_filter {
             let te = plat.poll_text_entry();
             if te.quit {
@@ -1142,6 +1360,7 @@ pub fn run(
             }
         } else {
             let m = plat.poll_menu(MenuMode::Nav);
+            pointer = m.pointer;
             if m.quit {
                 return Ok(Pick::Quit);
             }
@@ -2008,33 +2227,29 @@ pub fn run(
                 // The DAT's year, if it had one, moves into its own "release"
                 // slot (plan revision) instead of sitting in the generic
                 // info list alongside publisher/category/description.
-                let mut nointro = e.rom.nointro_extra.clone();
-                let dat_release = nointro
-                    .iter()
-                    .position(|(k, _)| k == "ano")
-                    .map(|i| nointro.remove(i).1);
-                let mut info = nointro;
-                let mut release = dat_release;
-                let mut award_img: Option<u64> = None;
-                if let Some(Some(_)) = ra_games.get(&e.rom.sha1) {
-                    // O RA completa o que o DAT/TOSEC não cobre — muitos jogos
-                    // ficavam sem lançamento e editora por não estarem na
-                    // tabela (uma leitura do JSON da identificação por foco).
-                    let ra_meta_entry = ra_meta
-                        .entry(e.rom.sha1.clone())
-                        .or_insert_with(|| {
-                            ra_hashes
-                                .get(&e.rom.sha1)
-                                .map(|h| crate::ra::release_and_extras(h))
-                                .unwrap_or((None, Vec::new()))
-                        })
-                        .clone();
-                    release = release.or(ra_meta_entry.0);
-                    if !info.iter().any(|(k, _)| k == "editora") {
-                        if let Some(editora) = ra_meta_entry.1.first() {
-                            info.push(editora.clone());
+                // A tabela única embutida (crc → tudo): lançamento,
+                // editora, região e nota da IGDB — sem DAT, sem rede.
+                let infos = sixteen_domain::infos::lookup(&e.rom.crc32);
+                let mut info: Vec<(String, String)> = Vec::new();
+                if let Some(i) = &infos {
+                    // o lançamento vai pelo campo `release` do painel
+                    if let Some(editora) = &i.publisher {
+                        info.push(("editora".to_string(), editora.clone()));
+                    }
+                    if let Some(regiao) = &i.region {
+                        if regiao != "outra" {
+                            info.push(("região".to_string(), regiao.clone()));
                         }
                     }
+                    if let Some(critica) = &i.nota_critica {
+                        if !critica.is_empty() {
+                            info.push(("nota (crítica)".to_string(), critica.clone()));
+                        }
+                    }
+                }
+                let release = infos.as_ref().and_then(|i| i.year.clone());
+                let mut award_img: Option<u64> = None;
+                if let Some(Some(_)) = ra_games.get(&e.rom.sha1) {
                     // "30 de 58 (52%)" — o tally custa um hash de ROM inteiro,
                     // então fica cacheado por visita (e refresco quando o
                     // completion progress do servidor chega).
@@ -2073,6 +2288,22 @@ pub fn run(
                     }
                 }
                 info.extend(game_info_lines(e, playtime));
+                // O bloco HowLongToBeat no fim da aba — as 4 barras do card
+                // do site, tempos da tabela embutida por CRC32 (nada de
+                // rede); jogo fora da tabela não ganha bloco nenhum.
+                // A seção de nota da IGDB + o HowLongToBeat, ambos da
+                // tabela única — o HLTB fecha o painel.
+                let igdb = infos
+                    .as_ref()
+                    .and_then(|i| i.nota.clone())
+                    .filter(|nota| !nota.is_empty())
+                    .map(|nota| sixteen_platform::IgdbSection {
+                        icon: igdb_icon_registered(cab),
+                        nota: format!("{nota} / 100"),
+                    });
+                let hltb = infos
+                    .as_ref()
+                    .map(|i| hltb_bars(i, hltb_icon_registered(cab)));
                 let manual_path = manual_paths
                     .entry(e.rom.sha1.clone())
                     .or_insert_with(|| find_local_manual(&manual_dir, &e.rom.path))
@@ -2128,6 +2359,8 @@ pub fn run(
                         .is_some()
                         .then(|| manual_page_id(&e.rom.sha1, 1)),
                     award_img,
+                    igdb,
+                    hltb,
                 }
             }
             None => ShelfPanelInfo {
@@ -2144,6 +2377,8 @@ pub fn run(
                 achievements_reason: None,
                 manual_first_page: None,
                 award_img: None,
+                igdb: None,
+                hltb: None,
             },
         };
         cab.set_shelf_panel(shelf_panel);
@@ -2152,6 +2387,22 @@ pub fn run(
         let page_ready = manual
             .as_ref()
             .is_some_and(|m| cab.has_image(manual_page_id(&m.sha1, m.page)));
+        // O jogo sob o cursor do mouse — o botão de play desenha na
+        // capa dele (o clique nela lança; o hover é o convite).
+        let pointer = pointer
+            .map(|(wx, wy)| cab.window_to_output(wx, wy))
+            .and_then(|(ox, oy)| cab.hit_screen_point(ox, oy));
+        let hover_grid = pointer.and_then(|(lx, ly)| grid.tile_at(lx, ly, top_row, view.len()));
+        let hover_fav = if show_fav {
+            pointer.and_then(|(lx, ly)| fav_layout.hit(lx, ly, favorites.len()))
+        } else {
+            None
+        };
+        let hover_recent = if show_recent {
+            pointer.and_then(|(lx, ly)| recent_layout.hit(lx, ly, recent.len()))
+        } else {
+            None
+        };
         let render = |d: &mut Screen| {
             if let Some(m) = &manual {
                 manual_rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
@@ -2196,8 +2447,14 @@ pub fn run(
                     // scrolls, not the absolute slot that would leave a
                     // blank gap at the start.
                     let (x, y) = fav_layout.item_pos(i - fav_scroll);
-                    d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
                     let id = cover_id(&entry.rom.sha1);
+                    // Faixa sem prateleira: tile plano de volta — a capa
+                    // vazada (render 3D) compõe direto no fundo, sem tile
+                    // cinza nem lateral; as demais ficam no tile de sempre.
+                    let vazada = d.image_vazado(id);
+                    if !vazada {
+                        d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
+                    }
                     if d.has_image(id) {
                         d.image_fit(id, x + 4, y + 4, RECENT_TILE_W - 8, RECENT_TILE_H - 8);
                     } else {
@@ -2211,14 +2468,11 @@ pub fn run(
                         );
                     }
                     draw_fav_dot(d, x, y, RECENT_TILE_W);
-                    if in_fav && i == fav_idx {
-                        d.outline(
-                            x - 3,
-                            y - 3,
-                            RECENT_TILE_W + 6,
-                            RECENT_TILE_H + 6,
-                            3,
-                            HILITE,
+                    if hover_fav == Some(i) {
+                        draw_play_icon(
+                            d,
+                            x + RECENT_TILE_W as i32 - 26,
+                            y + RECENT_TILE_H as i32 - 26,
                         );
                     }
                 }
@@ -2247,8 +2501,14 @@ pub fn run(
                     .take(strip_vis)
                 {
                     let (x, y) = recent_layout.item_pos(i - recent_scroll);
-                    d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
                     let id = cover_id(&entry.rom.sha1);
+                    // Faixa sem prateleira: tile plano de volta — a capa
+                    // vazada (render 3D) compõe direto no fundo, sem tile
+                    // cinza nem lateral; as demais ficam no tile de sempre.
+                    let vazada = d.image_vazado(id);
+                    if !vazada {
+                        d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
+                    }
                     if d.has_image(id) {
                         d.image_fit(id, x + 4, y + 4, RECENT_TILE_W - 8, RECENT_TILE_H - 8);
                     } else {
@@ -2262,14 +2522,11 @@ pub fn run(
                         );
                     }
                     draw_fav_dot(d, x, y, RECENT_TILE_W);
-                    if in_recent && i == recent_idx {
-                        d.outline(
-                            x - 3,
-                            y - 3,
-                            RECENT_TILE_W + 6,
-                            RECENT_TILE_H + 6,
-                            3,
-                            HILITE,
+                    if hover_recent == Some(i) {
+                        draw_play_icon(
+                            d,
+                            x + RECENT_TILE_W as i32 - 26,
+                            y + RECENT_TILE_H as i32 - 26,
                         );
                     }
                 }
@@ -2302,14 +2559,34 @@ pub fn run(
                     d.text(x + 6, y + 3, 1, color, &label);
                 }
             } else {
+                // A madeira sob cada fileira visível — as caixas pousam
+                // nela (a prateleira mora no vão de GAP, sem mexer nos
+                // rects de clique).
+                for row in 0..grid.vis_rows {
+                    let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
+                    draw_shelf_board(d, MARGIN, scr_w - MARGIN as u32 * 2, y, 14);
+                }
                 for (i, entry) in view.iter().enumerate() {
                     let Some((x, y)) = grid.cell_pos(i, top_row) else {
                         continue;
                     };
-                    d.fill(x, y, TILE_W, TILE_H, TILE_BG);
                     let id = cover_id(&entry.rom.sha1);
+                    let vazada = d.image_vazado(id);
+                    if !vazada {
+                        d.fill(x, y, grid.item_w as u32, grid.item_h as u32, TILE_BG);
+                    }
                     if d.has_image(id) {
-                        d.image_fit(id, x + 4, y + 4, TILE_W - 8, TILE_H - 8);
+                        if vazada {
+                            d.image_fit_bottom(id, x, y, grid.item_w as u32, grid.item_h as u32);
+                        } else {
+                            d.image_fit(
+                                id,
+                                x + 4,
+                                y + 4,
+                                grid.item_w as u32 - 8,
+                                grid.item_h as u32 - 8,
+                            );
+                        }
                     } else {
                         d.text_wrapped(
                             x + 8,
@@ -2320,11 +2597,16 @@ pub fn run(
                             &entry.title().to_uppercase(),
                         );
                     }
-                    if entry.rom.favorite {
-                        draw_fav_dot(d, x, y, TILE_W);
+                    if !vazada {
+                        draw_box_dressing(d, x, y, grid.item_w as u32, grid.item_h as u32);
+                    } else {
+                        draw_expositor(d, x, y, grid.item_w as u32, grid.item_h as u32);
                     }
-                    if !in_recent && !in_fav && i == sel {
-                        d.outline(x - 3, y - 3, TILE_W + 6, TILE_H + 6, 3, HILITE);
+                    if entry.rom.favorite {
+                        draw_fav_dot(d, x, y, grid.item_w as u32);
+                    }
+                    if hover_grid == Some(i) {
+                        draw_play_icon(d, x + grid.item_w as i32 - 26, y + grid.item_h as i32 - 26);
                     }
                 }
             }
@@ -2511,6 +2793,8 @@ fn empty_shelf_panel() -> ShelfPanelInfo {
         favorite: None,
         achievements: false,
         award_img: None,
+        igdb: None,
+        hltb: None,
     }
 }
 
