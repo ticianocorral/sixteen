@@ -66,8 +66,6 @@ pub struct GameSpec {
     /// (both fixed at 15, plan revision — numbered independently of each
     /// other) (plan §3.4).
     pub notes_dir: PathBuf,
-    /// Speculative frames past the shown one; `None` = take the config value.
-    pub runahead: Option<u32>,
     /// Headless self-check: `(path, frame)` — run to `frame`, dump a BMP, exit.
     pub shot: Option<(PathBuf, u32)>,
     /// Local logo art (`assets/logo/<rom>.*`) for the top of the side panel.
@@ -1072,8 +1070,6 @@ pub fn run_game(
     spec: &GameSpec,
     cfg: &Config,
 ) -> Result<GameExit> {
-    let runahead_cfg = spec.runahead.unwrap_or(cfg.runahead);
-
     // --- load + identify -------------------------------------------------
     let mut core =
         Core::load(&spec.core).with_context(|| format!("loading core {}", spec.core.display()))?;
@@ -1419,16 +1415,6 @@ pub fn run_game(
 
     // Run-ahead: only if the core actually serializes; hardcore also rules
     // it out (a speculative frame would validate a hit the rewind undoes).
-    let mut runahead = runahead_cfg;
-    if ra_hardcore_active && runahead > 0 {
-        log::info!("ra hardcore: run-ahead disabled");
-        runahead = 0;
-    }
-    if runahead > 0 && core.save_state().is_none() {
-        log::warn!("core has no save state — run-ahead disabled");
-        runahead = 0;
-    }
-    let mut spec_state: Vec<u8> = Vec::new();
     let mut last_sram = core.sram();
     // Which note slot to save into once the next frame is ready — set at
     // click time, consumed after `core.run()` produces a real frame.
@@ -1469,7 +1455,7 @@ pub fn run_game(
     // and held there until the player finishes naming it (or cancels).
     let mut print_pending = false;
     let mut print_capture: Option<EmuFrame> = None;
-    log::info!("running: rf ntsc + crt tube, run-ahead {runahead}");
+    log::info!("running: rf ntsc + crt tube");
 
     let exit = 'run: loop {
         // Editing (text or a caption) is the one deliberate keyboard-typing
@@ -2191,14 +2177,6 @@ pub fn run_game(
                 }
             }
 
-            // Speculative frames past the shown one; their audio is discarded.
-            let speculated = runahead > 0 && core.save_state_into(&mut spec_state);
-            if speculated {
-                for _ in 0..runahead {
-                    core.run();
-                }
-            }
-
             if let Some(frame) = core.take_frame() {
                 let dims = (frame.width, frame.height);
                 if dims != last_dims {
@@ -2276,11 +2254,6 @@ pub fn run_game(
                         break 'run GameExit::Quit;
                     }
                 }
-            }
-
-            // Rewind past the speculative frames to the real state.
-            if speculated {
-                core.load_state(&spec_state);
             }
 
             // Periodically flush battery SRAM if it changed.

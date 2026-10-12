@@ -33,7 +33,6 @@ const ROW_H: i32 = 30;
 /// scale 2, so `2 * GLYPH_H` tall) plus a little breathing room. Shared by
 /// the draw functions and the click hit-test so they can't drift apart.
 const LIST_TOP: i32 = MARGIN + 50;
-const RUNAHEAD_MAX: u32 = 4;
 
 /// The settings sections, in panel order — the tube shows one section's
 /// rows at a time; the panel's `Section(i)` buttons switch between them
@@ -55,7 +54,7 @@ const RA_ROW_SENHA: usize = 2;
 
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
-        SEC_JOGO => 2,
+        SEC_JOGO => 1,
         SEC_VIDEO => 2,
         SEC_SISTEMA => 3,
         // usuário / token / senha / testar login / hardcore
@@ -453,10 +452,7 @@ fn activate_row(
                 *sec = SEC_CONTROLES;
                 *sel = 0;
             }
-            _ => {
-                cfg.runahead = (cfg.runahead + 1) % (RUNAHEAD_MAX + 1);
-                let _ = cfg.save();
-            }
+            _ => {}
         },
         SEC_VIDEO => match i {
             0 => {
@@ -517,16 +513,8 @@ fn start_login_test(
 
 /// The left/right adjustments — run-ahead steps, fullscreen/check-updates
 /// toggle. Rows without a horizontal feel ignore them.
-fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, right: bool) {
+fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _right: bool) {
     match (sec, sel) {
-        (SEC_JOGO, 1) => {
-            cfg.runahead = if right {
-                (cfg.runahead + 1).min(RUNAHEAD_MAX)
-            } else {
-                cfg.runahead.saturating_sub(1)
-            };
-            let _ = cfg.save();
-        }
         (SEC_VIDEO, 0) => {
             cfg.fullscreen = !cfg.fullscreen;
             cab.toggle_fullscreen();
@@ -665,14 +653,11 @@ fn bind_pad_row(plat: &mut Platform, cfg: &mut Config, row: usize, btn: GamepadB
     plat.set_pad_map(cfg.padmap.clone());
 }
 
-fn draw_jogo(d: &mut Screen, cfg: &Config, sel: usize) {
+fn draw_jogo(d: &mut Screen, _cfg: &Config, sel: usize) {
     let x = MARGIN;
     d.text(x, MARGIN, 2, TEXT, "jogo");
     let mut y = LIST_TOP;
-    let rows = [
-        "Controles".to_string(),
-        format!("Run-ahead: {} quadro(s)", cfg.runahead),
-    ];
+    let rows = ["Controles".to_string()];
     for (i, row) in rows.iter().enumerate() {
         draw_row(d, x, y, row, i == sel);
         y += ROW_H;

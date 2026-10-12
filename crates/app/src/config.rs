@@ -17,7 +17,6 @@ use serde::Deserialize;
 use sixteen_platform::{KeyMap, PadButton, PadMap};
 
 pub struct Config {
-    pub runahead: u32,
     pub fullscreen: bool,
     /// Check GitHub for a newer app release, and the buildbot for a fresher
     /// snes9x core, once at startup (plan revision) — a settings-screen
@@ -60,8 +59,6 @@ pub struct Config {
 #[derive(Deserialize, Default)]
 struct Raw {
     #[serde(default)]
-    runahead: Option<u32>,
-    #[serde(default)]
     fullscreen: Option<bool>,
     #[serde(default)]
     check_updates_on_start: Option<bool>,
@@ -92,7 +89,6 @@ impl Config {
         };
 
         let mut cfg = Config {
-            runahead: 1,
             // Plan revision: "sempre abrir em fullscreen como padrao" — a
             // fresh install (no `sixteen.cfg` yet) starts fullscreen; the
             // settings screen's own toggle still turns it off from there.
@@ -135,9 +131,6 @@ impl Config {
     }
 
     fn apply(&mut self, raw: Raw) -> Result<()> {
-        if let Some(r) = raw.runahead {
-            self.runahead = r;
-        }
         if let Some(f) = raw.fullscreen {
             self.fullscreen = f;
         }
@@ -202,7 +195,6 @@ impl Config {
             "# SixteeN configuration.\n\
              # Edited by the in-app settings screen (O on the shelf) — hand edits\n\
              # survive a save, but comments outside a value don't.\n\
-             # runahead: speculative frames to hide input lag (0 disables).\n\
              # fullscreen: start in fullscreen.\n\
              # check_updates_on_start: look for a newer release/snes9x core at launch.\n\
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
@@ -213,7 +205,6 @@ impl Config {
              # [gamepad]: action = \"SDL gamepad button name\" (e.g. \"south\",\n\
              # \"dpup\", \"leftshoulder\") — which pad button drives each action.\n\n",
         );
-        s.push_str(&format!("runahead = {}\n", self.runahead));
         s.push_str(&format!("fullscreen = {}\n", self.fullscreen));
         s.push_str(&format!(
             "check_updates_on_start = {}\n",
@@ -258,7 +249,6 @@ mod tests {
 
     fn defaults() -> Config {
         Config {
-            runahead: 1,
             fullscreen: false,
             check_updates_on_start: true,
             hiss_on_static: false,
@@ -276,7 +266,6 @@ mod tests {
     fn empty_config_keeps_defaults() {
         let mut cfg = defaults();
         cfg.apply(toml::from_str("").unwrap()).unwrap();
-        assert_eq!(cfg.runahead, 1);
         assert!(!cfg.fullscreen);
         assert!(cfg.check_updates_on_start);
     }
@@ -294,12 +283,10 @@ mod tests {
         let mut cfg = defaults();
         // "pause" is a pre-revision console-command binding — ignored now,
         // not an error (see `unknown_action_is_ignored`).
-        let raw: Raw = toml::from_str(
-            "runahead = 3\nfullscreen = true\n[keyboard]\nb = \"Space\"\npause = \"Escape\"",
-        )
-        .unwrap();
+        let raw: Raw =
+            toml::from_str("fullscreen = true\n[keyboard]\nb = \"Space\"\npause = \"Escape\"")
+                .unwrap();
         cfg.apply(raw).unwrap();
-        assert_eq!(cfg.runahead, 3);
         assert!(cfg.fullscreen);
         // Rebound key resolves; describe() reflects it.
         let d = cfg.keymap.describe();
@@ -340,14 +327,12 @@ mod tests {
     #[test]
     fn to_toml_round_trips() {
         let mut cfg = defaults();
-        cfg.runahead = 2;
         cfg.fullscreen = true;
         cfg.check_updates_on_start = false;
         let text = cfg.to_toml();
         let raw: Raw = toml::from_str(&text).unwrap();
         let mut round = defaults();
         round.apply(raw).unwrap();
-        assert_eq!(round.runahead, 2);
         assert!(round.fullscreen);
         assert!(!round.check_updates_on_start);
         assert_eq!(round.keymap.describe(), cfg.keymap.describe());

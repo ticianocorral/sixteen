@@ -18,7 +18,7 @@
 //! Usage:
 //!   sixteen [--core path/to/snes9x_libretro.{dylib,so,dll}]
 //!             [--config sixteen.cfg] [--save-dir DIR] [--system-dir DIR]
-//!             [--order shelf|name] [--runahead N]
+//!             [--order shelf|name]
 //!
 //! No `--core`/`$SIXTEEN_CORE`? Looks for one already downloaded into
 //! `core/` (see the settings screen, "Núcleo") — not included in the app
@@ -52,7 +52,6 @@ struct Args {
     system_dir: PathBuf,
     notes_dir: PathBuf,
     order: Order,
-    runahead: Option<u32>,
     /// Headless: render one settings screen ("main"|"controls") to `--shot`
     /// and exit, instead of starting the shelf (dev/testing).
     debug_settings: Option<String>,
@@ -74,7 +73,6 @@ fn parse_args() -> Result<Args> {
     let mut system_dir = None;
     let mut notes_dir = None;
     let mut order = Order::Shelf;
-    let mut runahead = None;
     let mut debug_settings = None;
     let mut debug_idle = false;
     let mut shot = None;
@@ -98,13 +96,6 @@ fn parse_args() -> Result<Args> {
                     other => anyhow::bail!("--order wants shelf|name, got {other:?}"),
                 }
             }
-            "--runahead" => {
-                runahead = Some(
-                    val()?
-                        .parse()
-                        .map_err(|_| anyhow!("--runahead wants a number (0 disables)"))?,
-                )
-            }
             "-h" | "--help" => {
                 println!("{HELP}");
                 std::process::exit(0);
@@ -123,7 +114,6 @@ fn parse_args() -> Result<Args> {
         system_dir,
         notes_dir,
         order,
-        runahead,
         debug_settings,
         debug_idle,
         shot,
@@ -132,7 +122,7 @@ fn parse_args() -> Result<Args> {
 
 const HELP: &str = "sixteen [--core <lib>] [--config sixteen.cfg]\n\
        [--save-dir DIR] [--system-dir DIR] [--notes-dir DIR]\n\
-       [--order shelf|name] [--runahead N]\n\
+       [--order shelf|name] \n\
        [--debug-settings main|controls --shot out.bmp]\n\
 \n\
 Idle (TV off) → selector → game → idle, one process. Mouse/gamepad only —\n\
@@ -409,7 +399,6 @@ fn main() -> Result<()> {
                 system_dir: args.system_dir.clone(),
                 save_dir: args.save_dir.clone(),
                 notes_dir: args.notes_dir.clone(),
-                runahead: args.runahead,
                 shot: None,
                 logo,
                 cartridge,

@@ -72,7 +72,6 @@ fn main() -> anyhow::Result<()> {
         system_dir: dirs::saves_dir(),
         save_dir: dirs::saves_dir(),
         notes_dir: dirs::notes_dir(),
-        runahead: None,
         shot: None,
         logo: Some(
             dirs::assets_dir()
@@ -106,7 +105,7 @@ fn main() -> anyhow::Result<()> {
     //     é stand-in, desbloqueio de verdade exigiria conta + unlock ao
     //     vivo). ---
     {
-        use sixteen_platform::{FrameRef, PixelFormat, RA_LOGO_IMG, DEMO_BADGE_IMG};
+        use sixteen_platform::{FrameRef, PixelFormat, DEMO_BADGE_IMG, RA_LOGO_IMG};
         let mut cab = plat
             .create_cabinet("SixteeN", 1280, 800, false)
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -148,11 +147,7 @@ fn main() -> anyhow::Result<()> {
         // da conta; aqui o círculo do RA serve de ícone).
         cab.set_image(DEMO_BADGE_IMG, 64, 64, &ra_badge());
         cab.push_osd(
-            &[
-                "CONQUISTA DESBLOQUEADA",
-                "Bem-vindo ao Mundo",
-                "+5 pontos",
-            ],
+            &["CONQUISTA DESBLOQUEADA", "Bem-vindo ao Mundo", "+5 pontos"],
             Some(DEMO_BADGE_IMG),
             std::time::Duration::from_secs(6),
         );
@@ -202,7 +197,6 @@ impl GameSpecExt for GameSpec {
             system_dir: self.system_dir.clone(),
             save_dir: self.save_dir.clone(),
             notes_dir: self.notes_dir.clone(),
-            runahead: self.runahead,
             shot: self.shot.clone(),
             logo: self.logo.clone(),
             cartridge: self.cartridge.clone(),
