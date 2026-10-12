@@ -1,0 +1,3423 @@
+{
+  "head" : {
+    "vars" : [ "gameLabel", "score" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "MIDI Maze"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Civilization"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4.51502/5"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q189784"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80/100"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q189784"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86/100"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q189784"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80/100"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Arkanoid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Arkanoid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Cannon Fodder"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Cannon Fodder"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q90994"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "2/10"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q90994"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q90994"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q90994"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q90994"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Civilization"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Civilization"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Civilization"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "James Pond 2: Codename: RoboCod"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "James Pond 2: Codename: RoboCod"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "James Pond 2: Codename: RoboCod"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "James Pond 2: Codename: RoboCod"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Jim Power in Mutant Planet"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Kick Off"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "98%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Kick Off"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "98%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mortal Kombat"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mortal Kombat"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q843486"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q843486"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "72%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q683630"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q683630"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Powermonger"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "83%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Powermonger"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Powermonger"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "97%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Chaos Engine"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Chaos Engine"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Chaos Engine"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Chaos Engine"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Humans"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Humans"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Humans"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Humans"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q220174"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q220174"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q220174"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q220174"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "MIDI Maze"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "MIDI Maze"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "56%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Worms"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Worms"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Caesars Palace"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q189784"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Earthworm Jim"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Earthworm Jim 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "FIFA Soccer 96"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "FIFA 97"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q134138"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Might and Magic III: Isles of Terra"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NBA Live 97"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Primal Rage"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rise of the Robots"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "28%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q610138"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "79%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "ActRaiser"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "96%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Darius Twin"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q389254"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super Ghouls 'n Ghosts"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "U.N. Squadron"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super Mario Kart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Final Fantasy Mystic Quest"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ultimate Mortal Kombat 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "8.2/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Fox"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Fox"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "34/40"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Romancing SaGa 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "27%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Romancing SaGa 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70/100"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4/5"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4,5/5"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "97%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "2,5/5"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Final Fantasy IV"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85/100"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mega Lo Mania"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Romancing SaGa"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "72/100"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "100%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Samurai Shodown"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Desert Strike"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "72%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Desert Strike"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Desert Strike"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Final Fight"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Final Fight"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Flashback"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Flashback"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Flashback"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mega Lo Mania"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mega Lo Mania"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mega Lo Mania"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "83%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Might and Magic II: Gates to Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Might and Magic II: Gates to Another World"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "99%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "10/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "98%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Soccer Kid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Soccer Kid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Soccer Kid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Soccer Kid"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Space Ace"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "32%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Space Ace"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Street Fighter II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Street Fighter II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "83%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Street Fighter II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "61%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Dr. Mario"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "10/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Columns"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Columns"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Raiden"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Raiden"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "62%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Prince of Persia 2: The Shadow and the Flame"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Prince of Persia 2: The Shadow and the Flame"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Parodius! From Myth to Laughter"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Parodius! From Myth to Laughter"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Fatal Fury: King of Fighters"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Blackthorne"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Eye of the Beholder"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "FIFA: Road to World Cup 98"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mortal Kombat 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Lost Vikings"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q921220"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q907618"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "F-Zero"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pilotwings"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "96%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super R-Type"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q853143"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "97%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q864177"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "72%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rampart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Zero the Kamikaze Squirrel"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "43%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Aquatic Games Starring James Pond and the Aquabats"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "50%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Lamborghini American Challenge"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Lamborghini American Challenge"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "72%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Dungeon Master"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "100%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Dungeon Master"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "100%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "First Samurai"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "First Samurai"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2045111"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ivan 'Ironman' Stewart's Super Off Road"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Operation Thunderbolt"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Operation Thunderbolt"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Operation Thunderbolt"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "5/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Operation Thunderbolt"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA Tour Golf"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA Tour Golf"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA Tour Golf"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2095462"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2095462"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2095462"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "76%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pit-Fighter"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "7/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pit-Fighter"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pit-Fighter"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Push-Over"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rampart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rampart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "63%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rampart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Rampart"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Sensible Soccer"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Sensible Soccer"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Shadow of the Beast"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "96%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Shadow of the Beast"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Shadow of the Beast"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Smash TV"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Smash TV"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "SWIV"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Duel: Test Drive II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Duel: Test Drive II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Addams Family"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Addams Family"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Theme Park"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Theme Park"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Theme Park"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Side Pocket"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "7/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ms. Pac-Man"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "6/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "SimCity 2000"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Syndicate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Syndicate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "California Games II"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "83%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NBA Jam"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "King of the Monsters"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "2020 Super Baseball"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Jungle Book"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pitfall: The Mayan Adventure"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "SimEarth"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Zoop"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Syndicate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Home Alone"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Trials of Mana"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "8.3/10"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2829467"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78.38%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2829467"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "59/100"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2829467"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65.17%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Aero the Acro-Bat 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "14%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Aero the Acro-Bat"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "11%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Feudal Bros: Tonosama #1"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "20%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Demolition Man"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "73%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2273067"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q2273067"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Alfred Chicken"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "55%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Alfred Chicken"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Alien 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Bombuzal"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Bombuzal"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Bombuzal"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Cool Spot"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "79%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Cool Spot"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Drakkhen"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Drakkhen"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Krusty's Fun House"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Lemmings 2: The Tribes"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Lethal Weapon"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Mr. Nutz"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Obitus"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Pinkie"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous II: Trials of the Olympian Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous II: Trials of the Olympian Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous II: Trials of the Olympian Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "88%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Populous II: Trials of the Olympian Gods"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "95%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Race Drivin'"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Race Drivin'"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "63%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Race Drivin'"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "63%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Race Drivin'"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Striker"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "86%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ultima VI: The False Prophet"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "97%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ultima VI: The False Prophet"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "55%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA European Tour"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "77%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA European Tour"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Out to Lunch"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "James Pond 3: Operation Starfish"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Top Gear 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "60%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Top Gear 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "48%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "RoboCop 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Sengoku"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Batman Forever"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "💣"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Brett Hull Hockey '95"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Brutal: Paws of Fury"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "62%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Maui Mallard in Cold Shadow"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "HardBall III"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Joe & Mac"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Joe & Mac"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NBA Live 98"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Street Fighter Alpha 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ultima VII: The Black Gate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "96%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Ninja Gaiden"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super Adventure Island"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Earth Defense Force"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super Tennis"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wing Commander"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Road Runner's Death Valley Rally"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Best of the Best: Championship Karate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: Deep Space Nine – Crossroads of Time"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "3/5"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: Deep Space Nine – Crossroads of Time"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4.7/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: Starfleet Academy – Starship Bridge Simulator"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4.33333/5"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: The Next Generation: Future's Past"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "4/5"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: The Next Generation: Future's Past"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "5.3/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Star Trek: The Next Generation: Future's Past"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "5/5"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Romancing SaGa 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "52%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Romancing SaGa 3"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75/100"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Putty Squad"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "43/100"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Märchen Adventure Cotton 100%"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "76/100"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Märchen Adventure Cotton 100%"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "50%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Best of the Best: Championship Karate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "77%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Best of the Best: Championship Karate"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "69%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "True Golf Classics: Waialae Country Club"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "68%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Big Run"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Big Run"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Goal! Two"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "77%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Goal! Two"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Goal! Two"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "John Madden Football"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "John Madden Football"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "79%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Nigel Mansell's World Championship Racing"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Putty"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q7798922"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "100%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q7798922"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "84%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q7798922"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "100%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Spindizzy Worlds"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q3511972"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q3511972"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "74%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q3511972"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Blues Brothers: Jukebox Adventure"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Blues Brothers: Jukebox Adventure"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "82%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Brainies"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Troddlers"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "87%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Troddlers"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "83%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Utopia: The Creation of a Nation"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Utopia: The Creation of a Nation"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "65%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Utopia: The Creation of a Nation"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wing Commander"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "97%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wing Commander"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "63%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wolfchild"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Dennis the Menace"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q3190026"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "66%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q3190026"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "73%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Putty Squad"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Magic Sword: Heroic Fantasy"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "9/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Heiankyo Alien"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "6/10"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q4047361"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q4047361"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "type" : "literal",
+        "value" : "Q4047361"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "94%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Hunt for Red October"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "1/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "BreakThru!"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "71%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Jack Nicklaus' Unlimited Golf & Course Design"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "The Lost Vikings 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Madden NFL 98"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Metal Marines"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "38%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Micro Machines 2: Turbo Tournament"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "60%/85%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NBA Live 95"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "81%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NBA Live 96"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NHL 96"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NHL 97"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NHL 98"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "NHL 95"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "74%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Oscar"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "92%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Paperboy 2"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "PGA Tour 96"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "78%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Powerslide"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Bubsy in: Claws Encounters of the Furred Kind"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wayne Gretzky and the NHLPA All-Stars"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "★★★"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wordtris"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "75%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "World Cup USA '94"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "59%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Worlds of Ultima: The Savage Empire"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "93%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Hit the Ice"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "89%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Where in the World Is Carmen Sandiego?"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "10/10"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "D-Force"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "61%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "New 3D Golf Simulation: Harukanaru Augusta"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "91%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Smart Ball"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "80%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Super Fire Pro Wrestling"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "59%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Young Merlin"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "90%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Home Alone"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "62%"
+      }
+    }, {
+      "gameLabel" : {
+        "xml:lang" : "en",
+        "type" : "literal",
+        "value" : "Wing Commander"
+      },
+      "score" : {
+        "type" : "literal",
+        "value" : "70%"
+      }
+    } ]
+  }
+}

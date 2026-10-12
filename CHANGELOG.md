@@ -7,6 +7,91 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.3.0] - 2026-10-11
+
+### Adicionado
+- **Infos unificadas embutidas, offline** — nome canônico, ano, editora,
+  região, **nota (IGDB)**, **nota de crítica** e os tempos do
+  HowLongToBeat numa tabela única por CRC32 (4.268 jogos de SNES),
+  gerada de DAT No-Intro + TOSEC + Wikidata + IGDB e compilada dentro do
+  binário: instala, solta a ROM e as infos estão lá — **sem DAT e sem
+  rede**. `tosec` e `hltb` saem do domínio, absorvidos por `infos.rs`.
+- **Estante de madeira na grade "todos os jogos"** — prateleiras com fita
+  LED, mão francesa e capas 3D transparentes pousadas com um suporte de
+  acrílico na base; as faixas de favoritos e jogados recentemente ficam
+  planas, sem prateleira.
+- **Botão de play no hover** — ícone de CD com seta no canto inferior
+  direito da capa sob o mouse; o contorno amarelo de seleção sai.
+- **Seções no painel de infos** — **Informações Gerais**, **IGDB** (com a
+  logo branca do press kit) e **HowLongToBeat** (com o ícone do site),
+  títulos em negrito (duplo impacto da fonte) e todo o conteúdo
+  centralizado; as barras do HLTB saem, ficando os valores centrados.
+
+### Modificado
+- **Site: capa preta de manual de SNES** — a capa do manual do proprietário
+  agora é preta como a capa dos manuais de SNES clássicos: faixa da marca
+  SixteeN ladeada por réguas vermelhas no topo, título "manual do
+  PROPRIETÁRIO" empilhado em duas cores e o print emoldurado sobre o
+  preto. As seções internas ganham a faixa vermelha lisa das páginas
+  internas do manual (número e título em branco, rótulo "SixteeN" à
+  direita), e o favicon passa ao losango de quatro cores com o "N" da
+  marca. Os textos deixam claro que o SixteeN é um frontend de console
+  para o snes9x — não um emulador novo.
+- **Site: prints de verdade, sem mocks** — todas as imagens do site agora
+  são capturas reais do app (`site_screens_real`): a tela inicial, a
+  estante com a biblioteca do autor (os dois Power Rangers), jogo comercial real
+  rodando no núcleo snes9x de verdade (herói, animação do cartucho e fotos
+  de conquistas — OSD do RA sobre o frame real do jogo), pelo novo exemplo
+  `site_screens_real`.
+- **Sem console na tela inicial** — igual ao PolystnX: o painel do idle
+  vira só a logo do app, o botão flutuante "Estante de games" e o
+  "Configurações" no rodapé. O slot de cartucho e as chaves Power/Reset/
+  Eject saem da tela inicial — a face do console vive só na tela de jogo
+  (a TV continua na estática do CH 3, e o resto do fluxo — eject, Power,
+  código Konami, aviso de núcleo — segue igual).
+
+### Corrigido
+- **Sem janela de console no Windows** — o `sixteen.exe` agora é um
+  aplicativo de interface gráfica de verdade (`windows_subsystem = "windows"`
+  no release): abrir o app não levanta mais um terminal preto junto com
+  a janela na tela inicial. Builds de desenvolvimento continuam com console
+  (logs do `env_logger` visíveis no terminal), e as ferramentas de CLI
+  (`emu-run`, `selector`) não mudam.
+- **Capa 3D transparente: franja cinza** — a matte do render não contamina
+  mais o contorno da caixa (limpeza no upload + sangria de borda), e a
+  transparência sobrevive a voltar de um jogo.
+
+## [1.2.0] - 2026-10-08
+- **Site: capa preta de manual de SNES** — a capa do manual do proprietário
+  agora é preta como a capa dos manuais de SNES clássicos: faixa da marca
+  SixteeN ladeada por réguas vermelhas no topo, título "manual do
+  PROPRIETÁRIO" empilhado em duas cores e o print emoldurado sobre o
+  preto. As seções internas ganham a faixa vermelha lisa das páginas
+  internas do manual (número e título em branco, rótulo "SixteeN" à
+  direita), e o favicon passa ao losango de quatro cores com o "N" da
+  marca. Os textos deixam claro que o SixteeN é um frontend de console
+  para o snes9x — não um emulador novo.
+- **Site: prints de verdade, sem mocks** — todas as imagens do site agora
+  são capturas reais do app (`site_screens_real`): a tela inicial, a
+  estante com a biblioteca do autor (os dois Power Rangers), jogo comercial real
+  rodando no núcleo snes9x de verdade (herói, animação do cartucho e fotos
+  de conquistas — OSD do RA sobre o frame real do jogo), pelo novo exemplo
+  `site_screens_real`.
+- **Sem console na tela inicial** — igual ao PolystnX: o painel do idle
+  vira só a logo do app, o botão flutuante "Estante de games" e o
+  "Configurações" no rodapé. O slot de cartucho e as chaves Power/Reset/
+  Eject saem da tela inicial — a face do console vive só na tela de jogo
+  (a TV continua na estática do CH 3, e o resto do fluxo — eject, Power,
+  código Konami, aviso de núcleo — segue igual).
+
+### Corrigido
+- **Sem janela de console no Windows** — o `sixteen.exe` agora é um
+  aplicativo de interface gráfica de verdade (`windows_subsystem = "windows"`
+  no release): abrir o app não levanta mais um terminal preto junto com a
+  janela na tela inicial. Builds de desenvolvimento continuam com console
+  (logs do `env_logger` visíveis no terminal), e as ferramentas de CLI
+  (`emu-run`, `selector`) não mudam.
+
 ## [1.2.0] - 2026-10-08
 
 ### Adicionado

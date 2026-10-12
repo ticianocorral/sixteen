@@ -24,6 +24,10 @@
 //! `core/` (see the settings screen, "Núcleo") — not included in the app
 //! itself, non-commercial snes9x license (see THIRD-PARTY-NOTICES.md).
 
+// GUI app: sem a janela de console do Windows na inicialização (só no
+// release — no dev o terminal continua mostrando os logs do env_logger).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
