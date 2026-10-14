@@ -362,6 +362,29 @@ impl Platform {
         // janela cobre a tela na hora, sem animação. Vale para janelas
         // criadas depois do hint (o init abaixo).
         sdl3::hint::set("SDL_VIDEO_MAC_FULLSCREEN_SPACES", "0");
+        // Renderer de hardware por padrão, na ordem do caminho provado de
+        // cada plataforma: no LINUX/macOS o OpenGL vem primeiro (XWayland/
+        // GLX no gamescope do modo de jogo; no macOS o caminho SDL_GPU/
+        // Metal travou dentro do update da textura do jogo no Mac de dev —
+        // diagnosticado no irmão PolystnX). `software` fecha a lista para o
+        // app nunca deixar de abrir. Prioridade DEFAULT: um SDL_RENDER_
+        // DRIVER no ambiente vence.
+        let render_drivers = if cfg!(any(target_os = "linux", target_os = "macos")) {
+            "opengl,opengles2,gpu,software"
+        } else {
+            "gpu,opengl,opengles2,software"
+        };
+        sdl3::hint::set("SDL_RENDER_DRIVER", render_drivers);
+        // Vsync FORA, explícito: o ritmo do jogo é o tick do loop de UI — um
+        // `present` bloqueando em FIFO derruba o tick à metade e o jogo vai
+        // em câmera lenta. Um SDL_RENDER_VSYNC no ambiente vence.
+        sdl3::hint::set("SDL_RENDER_VSYNC", "0");
+        // LINUX: vídeo x11 sempre (XWayland no Plasma e no gamescope) — o
+        // caminho wayland do SDL apresenta mal no modo de jogo. Um
+        // SDL_VIDEODRIVER no ambiente vence.
+        if cfg!(target_os = "linux") {
+            sdl3::hint::set("SDL_VIDEO_DRIVER", "x11");
+        }
         let sdl = sdl3::init()?;
         let video_subsystem = sdl.video()?;
         let audio_subsystem = sdl.audio()?;

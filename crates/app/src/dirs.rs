@@ -6,7 +6,7 @@
 //! macOS special case: the `.app` on this platform ships in `/Applications`
 //! (or wherever Finder drags it, often read-only-ish and not somewhere a
 //! user expects an app to scribble folders into). So on macOS the root
-//! isn't next to the executable at all — it's `~/Documents/SixteeN`,
+//! isn't next to the executable at all — it's `~/Library/Application Support/SixteeN`,
 //! created on first launch, same spirit as how a normal Mac app keeps its
 //! user data.
 //!
@@ -43,11 +43,20 @@ pub fn app_root() -> PathBuf {
     }
 }
 
-/// `~/Documents/SixteeN` — split out from `app_root` so it can be
-/// unit-tested with a synthetic home directory.
+/// `~/Library/Application Support/SixteeN` — split out from `app_root` so
+/// it can be unit-tested with a synthetic home directory.
+///
+/// POR QUE NÃO ~/Documents MAIS: Documents é sincronizado pelo iCloud Drive
+/// ("Desktop & Pastas de Documentos") e o file provider trava de forma
+/// intermitente — um stall no meio da leitura da ROM congela o jogo e a
+/// thread presa em leitura ininterruptível torna o processo imortal em TX
+/// (nem kill -9 colhe; diagnosticado no irmão PolystnX em 2026-10-13).
+/// Application Support nunca sincroniza.
 #[cfg(target_os = "macos")]
 fn macos_root_for(home: &Path) -> PathBuf {
-    home.join("Documents").join("SixteeN")
+    home.join("Library")
+        .join("Application Support")
+        .join("SixteeN")
 }
 
 /// XDG_DATA_HOME/.../SixteeN, falling back to ~/.local/share if unset.
@@ -139,7 +148,9 @@ fn legacy_app_root() -> Option<PathBuf> {
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        Some(home.join("Documents").join("SNES Xperience"))
+        // A raiz pré-port (SixteeN em Documents — o iCloud trap; ver o
+        // doc de `macos_root_for`).
+        Some(home.join("Documents").join("SixteeN"))
     }
     #[cfg(target_os = "linux")]
     {
@@ -306,10 +317,10 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn macos_root_is_documents_sixteen() {
+    fn macos_root_is_application_support_sixteen() {
         assert_eq!(
             super::macos_root_for(Path::new("/Users/rex")),
-            Path::new("/Users/rex/Documents/SixteeN")
+            Path::new("/Users/rex/Library/Application Support/SixteeN")
         );
     }
 

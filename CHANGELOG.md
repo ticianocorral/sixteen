@@ -7,6 +7,25 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.3.2] - 2026-10-13
+
+### Corrigido
+- **A raiz dos dados sai de ~/Documents no macOS** — Documents é
+  sincronizado pelo iCloud Drive e o file provider trava de forma
+  intermitente: um stall no meio da leitura da ROM congela o jogo e a
+  thread presa em leitura ininterruptível torna o processo imortal em TX
+  (nem kill -9 colhe; diagnosticado no irmão PolystnX). A raiz nova é
+  `~/Library/Application Support/SixteeN` (nunca sincroniza) e a pasta
+  antiga migra sozinha no primeiro boot.
+- **Renderer e vídeo com padrões à prova de gamescope** — OpenGL na
+  frente no Linux/macOS, vsync fora explicitamente e vídeo x11 no Linux:
+  o caminho wayland/SDL_GPU travava ou derrubava o tick à metade no modo
+  de jogo. O ambiente (SDL_RENDER_DRIVER/SDL_RENDER_VSYNC/
+  SDL_VIDEODRIVER) vence.
+
+### Adicionado
+- Linha `estado:` no log a cada 10 s durante o jogo (ramo do loop,
+  in_flight, frames) — a bússola de diagnóstico do irmão PolystnX.
 ## [1.3.1] - 2026-10-12
 
 ### Removido
