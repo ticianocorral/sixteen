@@ -116,8 +116,9 @@ capa. Dele para sempre: caixa nova, **contracapa** com arte completa e
 **manual** browseável (scans do usuário em `assets/manual/<jogo>/`, folheados
 como livro; segue o padrão de arrasta-png da casa).
 
-O jogo identifica-se pelo **mesmo identificador** de saves/anotações/arte
-(nome canônico No-Intro, ou nome de arquivo na falta de DAT — `domain::catalog`).
+O jogo identifica-se pelo **sha1 da ROM** — a mesma chave que o
+`library.json` (`RomRow.sha1`, sobrevive a renomes de arquivo); *títulos*
+são resolvidos na exibição via `CatalogEntry::title()`.
 
 ## 8. Primeira visita (onboarding, uma vez só)
 
@@ -159,10 +160,10 @@ atômica da casa):
   "wallet_cents": 0,
   "lifetime_earned_cents": 0, "lifetime_spent_cents": 0,
   "intro_done": false,
-  "owned": ["<game-id>", ...],
-  "service_game": "<game-id>" | null,
-  "active_ticket": { "game": "<game-id>", "deadline_unix": 0 } | null,
-  "hourly": { "game": "<game-id>", "swaps_used": 0, "active": false } | null,
+  "owned": ["<sha1>", ...],
+  "service_game": "<sha1>" | null,
+  "active_ticket": { "game": "<sha1>", "deadline_unix": 0 } | null,
+  "hourly": { "game": "<sha1>", "swaps_used": 0, "active": false } | null,
   "trophies": [{ "id": "primeiro-turno", "unlocked_unix": 0 }],
   "stats": { "ms_served": 0, "rentals": 0, "swaps": 0, "purchases": 0,
              "days_rented": 0, "blackout_saves": 0, "ms_by_game": {} }
