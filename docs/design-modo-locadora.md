@@ -185,14 +185,17 @@ atômica da casa):
 
 Multa por atraso, venda de jogos da coleção, troféus RetroAchievements,
 empréstimo entre usuários, grana real, nome editável da locadora
-(na v1 é um nome fixo só para a fantasia).
+(na v1 é um nome fixo só para a fantasia), reembolso de jogo apagado
+(a locadora não paga por jogo que sumiu da estante).
 
 ## 13. Testes (seguindo `cargo test` da casa)
 
 Regras de dinheiro (creditor por minuto sem deriva), limite de 2 trocas,
 ticket vencido recusa inserção e libera após devolução, corte de luz
 preserva progresso da carteira, sorteio único, troféus disparam uma vez,
-persistência sobrevive a boot sem acervo suficiente.
+persistência sobrevive a boot sem acervo suficiente. **Reconciliação de
+acervo:** jogo removido sai da coleção e encerra seu ticket/sessão/em
+serviço (sem reembolso); carteira, troféus e globais persistem.
 
 ## 14. Registro de decisões (conversa com o autor)
 
@@ -206,3 +209,23 @@ persistência sobrevive a boot sem acervo suficiente.
    comprar destrava (incentivo de compra).
 7. Tela inicial: estante = **FREE PLAY** na segunda linha; **MODO LOCADORA**
    abaixo. Mínimo de 3 jogos (proposto, configurável).
+8. **Apagou o jogo, zerou o progresso dele**: sai da coleção, ticket/sessão/
+   em serviço encerram, sem reembolso — a carteira e os troféus ficam.
+   Reconciliação roda no boot e ao abrir o balcão (§15).
+
+## 16. Regra do acervo — jogo removido, progresso zerado
+
+Quando ROMs são apagadas de `roms/` enquanto o modo existe, a locadora
+faz a **reconciliação** no boot e nas entradas do balcão:
+
+- O jogo que sumiu **sai da coleção** (`owned`): sem ROM, sem caixa —
+  a cópia também era física. **Sem reembolso.**
+- **Cartucho em serviço** removido → cargo vago (elege outro quando quiser).
+- **Ticket ativo** de jogo removido → devolvido *sem* contar prazo cumprido
+  e *sem* devolver grana (não foi devolução, foi sumiço).
+- **Hora avulsa** cujo cartucho remane → sessão encerrada.
+- **Carteira, troféus e contadores globais persistem** — grana do freguês
+  não é do jogo. Troféus já conquistados são para sempre; os contados
+  (Colegão/Lojista) apenas deixam de ser re-audiáveis.
+- **Borda honesta:** reconciliação acontece em boot/balcão; sessão em curso
+  com o jogo carregado termina normal, e o estado fecha no próximo bilhete.

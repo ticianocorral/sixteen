@@ -654,6 +654,98 @@ git commit -m "feat(locadora): coleção, eleição de em serviço, inseribilida
 
 ---
 
+### Task 3b: Reconciliação do acervo — jogo apagado, progresso dele zerado
+
+**Files:**
+- Modify: `crates/locadora/src/rules.rs`
+
+Regra do design §16: comparar `owned`/tickets/sessões contra o acervo real
+(sha1s presentes em `roms/`). **Sem reembolso; carteira e troféus ficam.**
+
+- [ ] **Step 1: Testes falhando (append no `mod tests` de rules.rs)**
+
+```rust
+    #[test]
+    fn reconcile_removes_missing_from_collection_and_sessions() {
+        let mut s = Persisted::default();
+        s.intro_done = true;
+        s.owned = vec!["fica".into(), "sai".into()];
+        s.service_game = Some("sai".into());
+        s.active_ticket = Some(Ticket { game: "sai".into(), deadline_unix: 9_999 });
+        s.wallet_cents = 777;
+        let removidos = s.reconcile_acervo(&["fica".into(), "outro".into()]);
+        // coleção enxuga, ticket devolvido sem crédito de prazo
+        assert_eq!(s.owned, vec!["fica".to_string()]);
+        assert_eq!(s.service_game, None);
+        assert_eq!(s.active_ticket, None);
+        assert_eq!(s.stats.returns_in_time, 0); // sumiço não é devolução
+        assert_eq!(s.wallet_cents, 777);        // carteira do freguês fica
+        assert_eq!(removidos, vec!["sai".to_string()]);
+        // idempotente
+        assert!(s.reconcile_acervo(&["fica".into()]).is_empty());
+    }
+
+    #[test]
+    fn reconcile_kills_hourly_session_of_removed_cart() {
+        let mut s = Persisted::default();
+        s.hourly = Some(HourlySession { game: "gone".into(), swaps_used: 1 });
+        s.stats.swaps = 1;
+        s.reconcile_acervo(&["fica".into()]);
+        assert_eq!(s.hourly, None);
+        assert_eq!(s.stats.swaps, 1); // histórico global persiste
+    }
+```
+
+**Nota pro executor:** a linha `eslint!(s)` do teste acima é ruído — não
+copie; o teste termina em `assert!(s.reconcile_acervo(...).is_empty());`.
+
+- [ ] **Step 2: Implementar**
+
+Em `rules.rs`, acima dos testes:
+
+```rust
+use std::collections::HashSet;
+
+impl Persisted {
+    /// Sincroniza com o acervo real (design §16). Devolve os sha1s que
+    /// saíram (o app pode usar para OSD "devolvido/máxima perdida").
+    /// Sem reembolso: carteira, troféus e stats globais persistem.
+    pub fn reconcile_acervo(&mut self, present: &[String]) -> Vec<String> {
+        let mural: HashSet<&str> =
+            present.iter().map(|s| s.as_str()).collect();
+        let mut removidos = Vec::new();
+        self.owned.retain(|g| {
+            if mural.contains(g.as_str()) { true }
+            else { removidos.push(g.clone()); false }
+        });
+        if self.service_game.as_deref().is_some_and(|g| !mural.contains(g)) {
+            self.service_game = None; // cargo vago
+        }
+        if self.active_ticket.as_deref().is_some_and(|(g, _)| !mural.contains(g)) {
+            self.active_ticket = None; // devolução forçada, sem credita prazo
+        }
+        if self.hourly.as_ref().is_some_and(|h| !mural.contains(h.game.as_str())) {
+            self.hourly = None; // sessão encerrada
+        }
+        removidos
+    }
+}
+```
+
+(Reconciliar também limpa `Ticket` cuja `game` saiu: usar
+`is_some_and` com decomposição do ticket ou match explícito — o executor
+escreve a forma que compila no dia; a semântica testada é a do Step 1.)
+
+- [ ] **Step 3: verde + commit**
+
+```bash
+cargo test -p sixteen-locadora
+git add crates/locadora
+git commit -m "feat(locadora): reconciliação do acervo — jogo apagado zera progresso dele"
+```
+
+---
+
 ### Task 4: Regras — salário, hora avulsa com trocas, blackout e ticket
 
 **Files:**
@@ -1319,7 +1411,25 @@ IdleExit::OpenLocadora => {
 
 (`LocadoraScreenPick` renomeia pra `Pick` local; seguir imports padrões.)
 
-- [ ] **Step 5: verificar headless + commit**
+- [ ] **Step 5: reconciliação do acervo na entrada (design §16, Task 3b)**
+
+Logo depois de carregar `loc` (antes do match de Pick):
+
+```rust
+let removidos = loc.reconcile_acervo(&catalog_sha1s);
+if !removidos.is_empty() {
+    loc.save(&dirs::locadora_path())?;
+    let n = removidos.len();
+    cab.push_osd(&[format!(
+        "acervo mudou: {n} cartucho(s) saíram da estante — sem reembolso, freguês"
+    )], None, 5);
+}
+```
+
+(`catalog_sha1s` — `Catalog::list(Order::Name)` → map por `rom.sha1`,
+computado uma vez por entrada, antes do gate do sorteio.)
+
+- [ ] **Step 6: verificar headless + commit**
 
 ```bash
 cargo test --workspace && cargo build
@@ -1695,5 +1805,6 @@ git commit -m "feat(locadora): parede de troféus, OSD de desbloqueio e docs"
 - [ ] `cargo test --workspace` e `cargo clippy --workspace` limpos.
 - [ ] Playtest do roteiro do design §8 completo no app real.
 - [ ] `config/locadora.json` sobrevive a boot, crash e arquivo corrupto (zera sem pânico).
+- [ ] Reconciliação: apagar uma ROM locada/em serviço → coleção atualiza, ticket/sessão/em serviço encerram, carteira e troféus persistem, sem reembolso.
 - [ ] Free play intocado: estante de games, runner, anotações e RA funcionam como hoje.
 - [ ] Menos de 3 jogos: MODO LOCADORA responde com OSD e não abre.
