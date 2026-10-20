@@ -67,6 +67,30 @@ const EDGE_HOT: (u8, u8, u8, u8) = (214, 78, 58, 255);
 const EDGE_GOLD: (u8, u8, u8, u8) = (214, 178, 84, 255);
 
 const CEREMONY_PHASE: Duration = Duration::from_millis(700);
+const TAKEBACK_TIME: Duration = Duration::from_millis(1700);
+const OSD_TROPHY_ID: u64 = 0x1D0C_E000_0000_0001;
+
+/// Cortinas do balcão: a compra descasca a etiqueta (§7); a devolução
+/// automática mostra a locadora levando o cartucho de volta (§6).
+enum Ceremony {
+    Peel { sha: String, started: Instant },
+    TakeBack { started: Instant, fined: i64 },
+}
+
+impl Ceremony {
+    fn sha(&self) -> Option<&str> {
+        match self {
+            Self::Peel { sha, .. } => Some(sha),
+            _ => None,
+        }
+    }
+    fn done(&self) -> bool {
+        match self {
+            Self::Peel { started, .. } => started.elapsed() > CEREMONY_PHASE * 3,
+            Self::TakeBack { started, .. } => started.elapsed() > TAKEBACK_TIME,
+        }
+    }
+}
 
 pub fn run(
     plat: &mut Platform,
@@ -100,7 +124,13 @@ pub fn run(
     let mut scroll: usize = 0;
     let mut cols: usize = 4; // recomputado a cada frame; o input usa o anterior
     // Overlays de vitrine (compra/contracapa/manual) e filas de decode.
-    let mut ceremony: Option<(String, Instant)> = None;
+    // Devolução automática aconteceu fora? O balcão abre com a cortina.
+    let mut ceremony: Option<Ceremony> = if let Some(fined) = loc.takeback_notice.take() {
+        let _ = loc.save(&dirs::locadora_path());
+        Some(Ceremony::TakeBack { started: Instant::now(), fined })
+    } else {
+        None
+    };
     let mut zoom: Option<String> = None; // sha com a contracapa aberta
     let mut manual: Option<(String, Vec<PathBuf>, usize)> = None; // sha, páginas, atual
     let mut art_cursor: usize = 0;
@@ -143,11 +173,9 @@ pub fn run(
         });
         let nav: Vec<MenuNav> = m.nav.clone();
 
-        // Cerimônia de compra ativa: o mundo espera (§7).
-        if let Some((_, started)) = &ceremony {
-            if started.elapsed() > CEREMONY_PHASE * 3 {
-                ceremony = None;
-            }
+        // Cortina ativa: o mundo espera (§6/§7).
+        if ceremony.as_ref().is_some_and(|c| c.done()) {
+            ceremony = None;
         }
         let busy = ceremony.is_some();
 
@@ -213,6 +241,12 @@ pub fn run(
                             if let Some(sha) = trio.get(*i).cloned() {
                                 let _ = loc.apply_intro(&trio, &sha);
                                 loc.save(&dirs::locadora_path())?;
+                                // A primeira lição com cerimônia: a etiqueta
+                                // velha descasca e o jogo nasce na coleção.
+                                ceremony = Some(Ceremony::Peel {
+                                    sha: sha.clone(),
+                                    started: Instant::now(),
+                                });
                                 announce(
                                     cab,
                                     &["este cartucho é SEU — foi isso que comprar te dá"],
@@ -300,7 +334,7 @@ pub fn run(
             view,
             selected,
             pointer,
-            ceremony: ceremony.as_ref().map(|(s, t)| (s.as_str(), *t)),
+            ceremony: ceremony.as_ref(),
             zoom: zoom.as_deref(),
             manual: manual
                 .as_ref()
@@ -333,7 +367,7 @@ pub fn run(
                 }
             }
         }
-        if let Some((sha, _)) = &ceremony {
+        if let Some(sha) = ceremony.as_ref().and_then(|c| c.sha()) {
             if let Some(e) = entries.iter().find(|e| &e.rom.sha1 == sha) {
                 let key = format!("cart:{}", e.rom.sha1);
                 if dec_tried.insert(key.clone()) {
@@ -402,7 +436,7 @@ struct Ui<'a> {
     view: View,
     selected: usize,
     pointer: Option<(i32, i32)>,
-    ceremony: Option<(&'a str, Instant)>,
+    ceremony: Option<&'a Ceremony>,
     zoom: Option<&'a str>,
     manual: Option<(&'a str, &'a [PathBuf], usize)>,
 }
@@ -645,8 +679,9 @@ fn draw_ui(
                     if rec.is_some() { EDGE_GOLD } else { EDGE },
                 );
                 if let Some(rec) = rec {
-                    d.fill(r.0 + 16, r.1 + 18, 20, 30, (GOLD.0, GOLD.1, GOLD.2, 255));
-                    d.fill(r.0 + 12, r.1 + 48, 28, 9, (GOLD.0, GOLD.1, GOLD.2, 200));
+                    d.fill(r.0 + 16, r.1 + 20, 24, 26, (28, 24, 22, 255));
+                    d.fill(r.0 + 12, r.1 + 48, 32, 8, (28, 24, 22, 255));
+                    draw_trophy_sprite(d, *t, r.0 + 16, r.1 + 16, true);
                     d.text(r.0 + 54, r.1 + 16, 1, GOLD, t.title());
                     d.text(
                         r.0 + 54,
@@ -656,8 +691,9 @@ fn draw_ui(
                         &format!("desde {}", fmt_deadline(rec.unlocked_unix)),
                     );
                 } else {
-                    d.fill(r.0 + 16, r.1 + 18, 20, 30, (40, 36, 34, 255));
-                    d.fill(r.0 + 12, r.1 + 48, 28, 9, (40, 36, 34, 255));
+                    d.fill(r.0 + 16, r.1 + 20, 24, 26, (24, 21, 20, 255));
+                    d.fill(r.0 + 12, r.1 + 48, 32, 8, (24, 21, 20, 255));
+                    draw_trophy_sprite(d, *t, r.0 + 16, r.1 + 16, false);
                     d.text(r.0 + 54, r.1 + 16, 1, DIM, "???");
                 }
                 d.text(r.0 + 16, r.1 + r.3 as i32 - 28, 1, DIM, t.hint());
@@ -666,7 +702,7 @@ fn draw_ui(
     }
 
     // --- overlays por cima de tudo --------------------------------------
-    if let Some((sha, started)) = ui.ceremony {
+    if let Some(Ceremony::Peel { sha, started }) = ui.ceremony {
         // Cerimônia de compra (§7): gasto → faixa descasca → caixa nova.
         let elapsed = started.elapsed().as_millis() as i64;
         let phase = (elapsed / CEREMONY_PHASE.as_millis() as i64).min(2);
@@ -697,6 +733,29 @@ fn draw_ui(
             d.star(r.0 + r.2 as i32 - 44, r.1 + r.3 as i32 - 120, 7, GOLD);
             d.text(r.0 + 20, r.1 + r.3 as i32 - 60, 1, GOLD, "SEU — COLEÇÃO, CAIXA NOVA!");
         }
+    }
+    if let Some(Ceremony::TakeBack { started, fined }) = ui.ceremony {
+        // Devolução automática (§6): o exemplar sobe e sai da tela — a
+        // locadora busca o cartucho que você não devolveu.
+        let t = started.elapsed().as_millis() as i64;
+        let total = TAKEBACK_TIME.as_millis() as i64;
+        let rise = (t * i64::from(h)) / total;
+        d.fill(0, 0, w as u32, h as u32, (8, 6, 8, 190));
+        let (bw, bh) = (240i32, 180i32);
+        let r = ((w - bw) / 2, (h - bh) / 2 - rise as i32, bw as u32, bh as u32);
+        // Cartucho genérico desenhado (sem arte: quem busca é a locadora).
+        d.fill(r.0, r.1, r.2, r.3, (36, 32, 30, 255));
+        d.fill(r.0 + 30, r.1, r.2 - 60, 26, (52, 46, 42, 255));
+        d.fill(r.0 + 24, r.1 + 34, r.2 - 48, r.3 - 60, (232, 222, 198, 230));
+        d.text(r.0 + 34, r.1 + r.3 as i32 - 40, 1, (60, 40, 30), "PROPRIEDADE DA LOCADORA");
+        d.outline(r.0, r.1, r.2, r.3, 2, EDGE);
+        let title = "DEVOLUÇÃO AUTOMÁTICA";
+        d.text((w - title.len() as i32 * GLYPH * 2) / 2, (h / 2 - 150).max(30), 2, ACCENT, title);
+        let line = format!(
+            "a locadora levou o cartucho de volta — multa: {}",
+            Money(*fined).fmt(ui.currency)
+        );
+        d.text((w - line.len() as i32 * GLYPH) / 2, (h / 2 + 130).min(h - 56), 1, TEXT, &line);
     }
     if let Some(sha) = ui.zoom {
         // Contracapa destravada pela compra (§7): zoom no tubo.
@@ -806,7 +865,7 @@ fn act(
     a: Action,
     selected: usize,
     view: &mut View,
-    ceremony: &mut Option<(String, Instant)>,
+    ceremony: &mut Option<Ceremony>,
     zoom: &mut Option<String>,
     manual: &mut Option<(String, Vec<PathBuf>, usize)>,
 ) -> Result<Option<Pick>> {
@@ -903,7 +962,10 @@ fn act(
                         // Cerimônia do label novo (§7) — o cartucho entra na
                         // fila de decode do frame e a cortina bloqueia 2.1s.
                         ensure_art_at(cab, art_cart_id(&e.rom.sha1), "cartridge", &e.rom.path);
-                        *ceremony = Some((e.rom.sha1.clone(), Instant::now()));
+                        *ceremony = Some(Ceremony::Peel {
+                            sha: e.rom.sha1.clone(),
+                            started: Instant::now(),
+                        });
                     }
                 } else {
                     announce(
@@ -944,7 +1006,13 @@ fn act(
     if !novos.is_empty() {
         loc.save(&dirs::locadora_path())?;
         for t in &novos {
-            announce(cab, &[&format!("🏆 TROFÉU: {}", t.title())]);
+            let (bw, bh, rgba) = badge_rgba(*t);
+            cab.set_image(OSD_TROPHY_ID, bw, bh, &rgba);
+            cab.push_osd(
+                &[&format!("🏆 TROFÉU: {}", t.title())],
+                Some(OSD_TROPHY_ID),
+                Duration::from_secs(6),
+            );
             crate::sfx::play(cab, crate::sfx::Sfx::Achievement);
         }
     }
@@ -1060,6 +1128,224 @@ fn art_back_id(sha: &str) -> u64 {
 
 fn manual_page_id(key: &str) -> u64 {
     0x1D0C_D000_0000_0000 | fnv(key)
+}
+
+// --- trofeuzinhos pixel-art (design §9) -------------------------------------
+// 12×12, '.' vazio, 'X' ouro, 'o' accent — desenhados na parede e no badge
+// do OSD. Personagens-tema de locadora, não personagens licenciados. kkk
+
+fn trophy_sprite(t: TrophyId) -> [&'static str; 12] {
+    match t {
+        // Ficha de catálogo: o primeiro dia na locadora.
+        TrophyId::BemVindoAFicha => [
+            "............",
+            ".oooooooooo.",
+            ".oXXXXXXXXo.",
+            ".oX......Xo.",
+            ".oX.oooo.Xo.",
+            ".oX......Xo.",
+            ".oX.ooo..Xo.",
+            ".oX......Xo.",
+            ".oX.oooo.Xo.",
+            ".oXXXXXXXXo.",
+            ".oooooooooo.",
+            "............",
+        ],
+        // Cartão de ponto: uma hora de trampo.
+        TrophyId::PrimeiroTurno => [
+            "....XXXX....",
+            "..XX....XX..",
+            ".X........X.",
+            ".X...oo...X.",
+            ".X...oo...X.",
+            ".X...ooo..X.",
+            ".X........X.",
+            ".X..oooo..X.",
+            ".X........X.",
+            "..XX....XX..",
+            "....XXXX....",
+            "............",
+        ],
+        // Cartucho: o vizinho do acervo.
+        TrophyId::VizinhoDoAcervo => [
+            ".XXXXXXXXXX.",
+            ".XooooooooX.",
+            ".XoXXXXXXoX.",
+            ".XoX....XoX.",
+            ".XoX.XX.XoX.",
+            ".XoX.XX.XoX.",
+            ".XoX....XoX.",
+            ".XoXXXXXXoX.",
+            ".XooooooooX.",
+            ".XXXXXXXXXX.",
+            "..XX....XX..",
+            "............",
+        ],
+        // Setas cruzadas: a troca de cartucho.
+        TrophyId::TrocaTroca => [
+            "....X.......",
+            "...XX...X...",
+            "..XXX..XX...",
+            ".XXXX.XXX...",
+            "...XXXXXXX..",
+            "....XXXXXX..",
+            "...XXXXXXXX.",
+            ".XXX..XXXX..",
+            "..XX...XXX..",
+            "...X....XX..",
+            "........X...",
+            "............",
+        ],
+        // Relógio carimbado: prazo cumprido.
+        TrophyId::PrazoCumprido => [
+            "....XXXX....",
+            "..XX.oo.XX..",
+            ".X...oo..oX.",
+            "X....oo...oX",
+            "X..........X",
+            "X....oo....X",
+            "X.....oooo.X",
+            ".X........X.",
+            "..XX....XX..",
+            "....XXXX....",
+            "............",
+            "............",
+        ],
+        // Caixas empilhadas: a coleção crescendo.
+        TrophyId::Colegao => [
+            "..XX....XX..",
+            "..XXXX..XXXX",
+            "..XooX..XooX",
+            "..XX....XX..",
+            "XXXXXXXXXXXX",
+            "XoXXXXXXXXoX",
+            "..XX....XX..",
+            "..XXXX..XXXX",
+            "..XooX..XooX",
+            "..XX....XX..",
+            "XXXXXXXXXXXX",
+            "............",
+        ],
+        // Balcão com toldo: a loja.
+        TrophyId::Lojista => [
+            ".oXoXoXoXoX.",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "....XXXX....",
+            "....X..X....",
+            "....X..X....",
+            "....XooX....",
+            "....X..X....",
+            "....X..X....",
+            "....XXXX....",
+            "............",
+            "............",
+        ],
+        // Coração com ficha: freguês fiel.
+        TrophyId::FreguesFiel => [
+            ".XX....XX...",
+            "XXXX..XXXX..",
+            "XXXX..XXXX..",
+            "XXXXXXXXXX..",
+            "XooXXXXXXX..",
+            ".XoXXXXXX...",
+            "..XXXXXX....",
+            "...XXXX.....",
+            "....XX......",
+            "............",
+            "............",
+            "............",
+        ],
+        // TV com estática: sobrevivente do corte.
+        TrophyId::SobreviventeDaEstatica => [
+            "XX........XX",
+            "X.XXoXoXXX.X",
+            "X.XoXoXoXX.X",
+            "X.XXoXoXXX.X",
+            "X.XoXoXoXX.X",
+            "X.XXoXoXXX.X",
+            "X..........X",
+            "XX........XX",
+            ".X..X..X..X.",
+            "............",
+            "............",
+            "............",
+        ],
+        // Caracol: todo mundo devolve tarde uma vez. kkk
+        TrophyId::DevolucaoAtrasada => [
+            "......XXXX..",
+            "....XXooooX.",
+            "...X..XXXooX",
+            "..X..X....oX",
+            ".X..X.....oX",
+            ".X..X.....oX",
+            "..X..X....oX",
+            "...X..XXXooX",
+            ".XXXXXXXXXXX",
+            "X..........X",
+            "XXXXXXXXXXXX",
+            "............",
+        ],
+    }
+}
+
+/// Desenha o sprite na parede (2px por pixel) — apagado quando não ganho.
+fn draw_trophy_sprite(d: &mut sixteen_platform::Screen, t: TrophyId, x: i32, y: i32, lit: bool) {
+    let s = 2i32;
+    for (row, line) in trophy_sprite(t).iter().enumerate() {
+        for (col, ch) in line.chars().enumerate() {
+            let c = match ch {
+                'X' => {
+                    if lit {
+                        GOLD
+                    } else {
+                        (70, 64, 60)
+                    }
+                }
+                'o' => {
+                    if lit {
+                        ACCENT
+                    } else {
+                        (54, 48, 46)
+                    }
+                }
+                _ => continue,
+            };
+            d.fill(
+                x + col as i32 * s,
+                y + row as i32 * s,
+                s as u32,
+                s as u32,
+                (c.0, c.1, c.2, 255),
+            );
+        }
+    }
+}
+
+/// RGBA 24×24 do sprite, pro badge do OSD de desbloqueio.
+fn badge_rgba(t: TrophyId) -> (u32, u32, Vec<u8>) {
+    let (w, h) = (24u32, 24u32);
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for (row, line) in trophy_sprite(t).iter().enumerate() {
+        for (col, ch) in line.chars().enumerate() {
+            let (r, g, b, a) = match ch {
+                'X' => (GOLD.0, GOLD.1, GOLD.2, 255),
+                'o' => (ACCENT.0, ACCENT.1, ACCENT.2, 255),
+                _ => continue,
+            };
+            let (px, py) = (col * 2, row * 2);
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    let i = (((py + dy) as u32 * w + (px + dx) as u32) * 4) as usize;
+                    out[i] = r;
+                    out[i + 1] = g;
+                    out[i + 2] = b;
+                    out[i + 3] = a;
+                }
+            }
+        }
+    }
+    (w, h, out)
 }
 
 #[cfg(test)]

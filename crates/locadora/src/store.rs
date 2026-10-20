@@ -31,6 +31,10 @@ pub struct Persisted {
     /// Sessão atual paga por cupom — end_hourly/start_ticket não debitam.
     #[serde(skip)]
     pub free_session: bool,
+    /// Devolução automática acabou de ro no runner: multa a anunciar no
+    /// balcão. Nunca persistido — o anúncio é desta visita só.
+    #[serde(skip)]
+    pub takeback_notice: Option<i64>,
     /// Relógio injetável para testes. Nunca persistido.
     #[serde(skip)]
     pub clock: Option<i64>,
@@ -89,6 +93,7 @@ impl Default for Persisted {
             rentals_per_game: HashMap::new(),
             coupons: 0,
             free_session: false,
+            takeback_notice: None,
             clock: None,
         }
     }

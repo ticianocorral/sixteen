@@ -2260,9 +2260,13 @@ pub fn run_game(
                                 }
                             }
                             sixteen_locadora::RentMode::Ticket => {
-                                if let sixteen_locadora::rules::TicketEvent::AutoReturned { .. } =
-                                    loca.loc.enforce_ticket()
+                                if let sixteen_locadora::rules::TicketEvent::AutoReturned {
+                                    fined,
+                                } = loca.loc.enforce_ticket()
                                 {
+                                    // O balcão anuncia com a cerimônia de
+                                    // levar o cartucho de volta (§6).
+                                    loca.loc.takeback_notice = Some(fined);
                                     cab.push_osd(
                                         &["a locadora levou o cartucho de volta — devolução automática"],
                                         None,
