@@ -57,7 +57,7 @@ Cada jogo aparece num dos estados da §7. Da prateleira saem as portas:
 |---|---|---|
 | **Salário do cartucho em serviço** | `+R$ 5,00/h` | Credita por minuto **proporcional**, só quando: console ligado **e** o cartucho em serviço está inserido. Acumulador por milissegundo jogado, sem deriva |
 | **Hora avulsa** (qualquer jogo não comprado) | `R$ 8,00/h` | Roda só com console ligado; direito a **2 trocas de cartucho** durante a sessão |
-| **Ticket de 48h corridas** | `R$ 12,00` | **1 jogo só**, levado "para casa": tempo **real**, vence mesmo desligado. Venceu → o cartucho não insere até devolver |
+| **Ticket de 48h corridas** | `R$ 12,00` | **1 jogo só**, levado "para casa": tempo **real**, vence mesmo desligado. Venceu → não insere até devolver; **+24h de atraso → devolução automática com multa de 30% do ganho do período** |
 | **Compra na loja** | `R$ 60,00` | Permanente: caixa nova, contracapa, manual, e é elegível como *cartucho em serviço* |
 | **Sorteio de boas-vindas** | grátis | Única vez: 3 jogos aleatórios do acervo → escolhe 1 → nasce **comprado de graça** e já entra *em serviço* |
 
@@ -89,9 +89,18 @@ com etiqueta gasta de novo.
 
 ### Ticket de 48h (levando para casa)
 Escolhe 1 jogo, paga `R$ 12,00`, recebe **prazo real** (agora + 48h de
-relógio corrido). O adesivo de prazo fica no cartucho. Venceu: no próximo
-boot (ou em tempo real, se o app estiver aberto) o cartucho é marcado como
-vencido — não insere até *Devolver*. **Sem multa na v1.**
+relógio corrido). O adesivo de prazo fica no cartucho. Venceu: o cartucho
+não insere mais até *Devolver*.
+
+**Devolução tardia (multa):** passado o prazo, o adesivo vira
+"ATRASADO". O jogador pode devolver manualmente nesse estado — ou a
+locadora **devolve automaticamente 24h depois do prazo**, levando o
+cartucho de volta. Nos dois casos a multa é **30% de tudo que a carteira
+ganhou durante o período do ticket** (na prática, o salário do cartucho
+em serviço nos dias locados — o ticket acumula esse ganho em
+`earned_cents`). A carteira nunca fica negativa: desconta o que houver.
+Devolução tardia **não conta** para o cartão de fidelidade e rende o
+troféu "Devolução Atrasada".
 
 ## 7. Física dos cartuchos e caixas
 
@@ -146,6 +155,9 @@ pedestal com cartão (título, jogo, data). Gatilhos determinísticos, locais:
 - **Lojista** — 10 jogos comprados
 - **Freguês fiel** — locou em 7 dias distintos
 - **Sobrevivente da estática** — voltou ao trampo depois do tubo apagar
+- **Devolução Atrasada** — devolveu (ou foi devolvido automaticamente)
+  depois do prazo. Não conta para o cartão de fidelidade. *"Todo mundo
+  devolve tarde uma vez."*
 
 V2 (fora do escopo): espelhar conquistas RetroAchievements como troféus.
 
@@ -162,11 +174,13 @@ atômica da casa):
   "intro_done": false,
   "owned": ["<sha1>", ...],
   "service_game": "<sha1>" | null,
-  "active_ticket": { "game": "<sha1>", "deadline_unix": 0 } | null,
+  "active_ticket": { "game": "<sha1>", "deadline_unix": 0, "earned_cents": 0 } | null,
   "hourly": { "game": "<sha1>", "swaps_used": 0, "active": false } | null,
   "trophies": [{ "id": "primeiro-turno", "unlocked_unix": 0 }],
   "stats": { "ms_served": 0, "rentals": 0, "swaps": 0, "purchases": 0,
-             "days_rented": 0, "blackout_saves": 0, "ms_by_game": {} }
+             "days_rented": 0, "blackout_saves": 0, "ms_by_game": {},
+             "returns_late": 0, "on_time_streak": 0 },
+  "rentals_per_game": { "<sha1>": 3 },
 }
 ```
 
@@ -183,7 +197,8 @@ atômica da casa):
 
 ## 12. Fora do escopo da v1
 
-Multa por atraso, venda de jogos da coleção, troféus RetroAchievements,
+Multa simples virou **devolução tardia com multa de 30% (§6)**. Fora do
+escopo da v1: venda de jogos da coleção, troféus RetroAchievements,
 empréstimo entre usuários, grana real, nome editável da locadora
 (na v1 é um nome fixo só para a fantasia), reembolso de jogo apagado
 (a locadora não paga por jogo que sumiu da estante).
@@ -196,6 +211,8 @@ preserva progresso da carteira, sorteio único, troféus disparam uma vez,
 persistência sobrevive a boot sem acervo suficiente. **Reconciliação de
 acervo:** jogo removido sai da coleção e encerra seu ticket/sessão/em
 serviço (sem reembolso); carteira, troféus e globais persistem.
+**Devolução tardia:** automática em prazo+24h (ou manual atrasada) com
+multa de 30% do `earned_cents` do ticket, carteira nunca negativa.
 
 ## 14. Registro de decisões (conversa com o autor)
 
@@ -211,7 +228,28 @@ serviço (sem reembolso); carteira, troféus e globais persistem.
    abaixo. Mínimo de 3 jogos (proposto, configurável).
 8. **Apagou o jogo, zerou o progresso dele**: sai da coleção, ticket/sessão/
    em serviço encerram, sem reembolso — a carteira e os troféus ficam.
-   Reconciliação roda no boot e ao abrir o balcão (§15).
+   Reconciliação roda no boot e ao abrir o balcão (§16).
+9. **Devolução tardia**: +24h do prazo → devolução automática com multa de
+   **30% do ganho do período do ticket** (`earned_cents`); devolução
+   manual atrasada paga a mesma multa. Carteira nunca negativa.
+10. **Extras aprovados da v1** (§17): cicatriz da estante, salário dobrado
+    no fim de semana, cartão de fidelidade, cartaz da semana, troféu
+    "Devolução Atrasada".
+
+## 17. Extras da v1 (aprovados)
+
+- **🩹 Cicatriz da estante:** `rentals_per_game` por sha1; a intensidade do
+  overlay de desgaste (§7) escala com o contador. O exemplar mais alugado
+  vira a lenda da prateleira.
+- **📈 Salário dobrado no fim de semana:** sábado/domingo o cartucho em
+  serviço paga `10,00/h` (dia do relógio do sistema; liga/desliga no cfg).
+- **🎟️ Cartão de fidelidade:** 5 devoluções no prazo (`on_time_streak` = 5)
+  rendem 1 cupom de locação grátis (avulsa ou ticket). Devolução atrasada
+  zera a sequência. Carimbos datilografados no balcão.
+- **🖼️ Cartaz da semana:** todo domingo, seed pelo número da semana escolhe
+  1 jogo em destaque — locação pela metade (avulsa `4,00/h`, ticket
+  `6,00`), com cartaz desenhado na vitrine. Determinístico pela data.
+- **😅 Troféu "Devolução Atrasada":** ver §6/§9.
 
 ## 16. Regra do acervo — jogo removido, progresso zerado
 

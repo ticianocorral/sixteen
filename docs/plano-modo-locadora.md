@@ -988,6 +988,170 @@ git commit -m "feat(locadora): economia — salário sem drift, hora avulsa, tro
 
 ---
 
+### Task 4b: Devolução tardia — automática em +24h, multa de 30% do período
+
+**Files:**
+- Modify: `crates/locadora/src/rules.rs`
+- Modify: `crates/locadora/src/store.rs` (`Ticket` ganha `earned_cents: i64`; `Stats` ganha `returns_late: u32` e `on_time_streak: u32`)
+
+- [ ] **Step 1: Testes falhando (append no `mod tests` de rules.rs)**
+
+```rust
+    #[test]
+    fn ticket_accumulates_earnings_of_the_period() {
+        let mut s = Persisted::default();
+        let p = Prices::default();
+        s.wallet_cents = 5000;
+        s.start_ticket("tkt", &p).unwrap();
+        s.credit_service_ms(60 * 60_000, &p); // 1h de trampo com ticket ativo
+        assert_eq!(s.active_ticket.as_ref().unwrap().earned_cents, 500);
+    }
+
+    #[test]
+    fn late_manual_return_fines_30_percent_of_period_earnings() {
+        let mut s = Persisted::default();
+        let p = Prices::default();
+        s.wallet_cents = 5000;
+        let start = s.start_ticket("tkt", &p).unwrap();
+        s.credit_service_ms(2 * 60 * 60_000, &p); // ganhou 1000 no período
+        // devolve 25h depois do prazo → atrasada: multa 30% de 1000 = 300
+        s.set_clock_for_test(start + 48 * 3600 + 25 * 3600);
+        let late = s.return_ticket();
+        assert!(late);
+        assert_eq!(s.stats.returns_late, 1);
+        assert_eq!(s.stats.on_time_streak, 0);
+        // saldo: 5000 + 1000 ganhos - 300 de multa = 5700
+        assert_eq!(s.wallet_cents, 5700);
+    }
+
+    #[test]
+    fn auto_return_kicks_in_at_deadline_plus_24h() {
+        let mut s = Persisted::default();
+        let p = Prices::default();
+        s.wallet_cents = 5000;
+        let start = s.start_ticket("tkt", &p).unwrap();
+        s.credit_service_ms(60 * 60_000, &p); // 500 no período
+        // no prazo+23h: nada acontece ainda
+        s.set_clock_for_test(start + 48 * 3600 + 23 * 3600);
+        assert_eq!(s.enforce_ticket(), TicketEvent::Nothing);
+        // no prazo+24h: locadora leva de volta, multa 30% de 500 = 150
+        s.set_clock_for_test(start + 48 * 3600 + 24 * 3600);
+        assert_eq!(s.enforce_ticket(), TicketEvent::AutoReturned { fined: 150 });
+        assert!(s.active_ticket.is_none());
+        assert_eq!(s.stats.returns_late, 1);
+        assert_eq!(s.wallet_cents, 5000 + 500 - 150);
+    }
+
+    #[test]
+    fn fine_never_pushes_wallet_negative() {
+        let mut s = Persisted::default();
+        let p = Prices::default();
+        s.wallet_cents = 1; // só o troco do ticket... não dá nem pro ticket
+        s.wallet_cents = 6000;
+        let start = s.start_ticket("tkt", &p).unwrap();
+        s.credit_service_ms(10 * 60 * 60_000, &p); // ganhou 5000 no período
+        s.set_clock_for_test(start + 100 * 3600);
+        s.enforce_ticket();
+        assert!(s.wallet_cents >= 0);
+        assert_eq!(s.wallet_cents, 6000 + 5000 - 5000); // 30% = 1500? NÃO: ver abaixo
+    }
+```
+
+**Nota de coerência (o executor ajusta):** no último teste, 30% de 5000
+= 1500, e o saldo final correto é `6000 + 5000 - 1500 = 9500`. O teste
+final fica `assert_eq!(s.wallet_cents, 9500);` — a linha comentada era
+o raciocínio, o assert é esse.
+
+- [ ] **Step 2: Implementar**
+
+`store.rs`: `pub struct Ticket { pub game: String, pub deadline_unix: i64,
+pub earned_cents: i64 }`; `Stats` ganha `returns_late: u32` e
+`on_time_streak: u32` (defaults 0).
+
+Em `rules.rs`:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TicketEvent { Nothing, AutoReturned { fined: i64 } }
+
+// relógio injetável para testes (padrão da crate: nada de std::time em regra)
+impl Persisted {
+    pub fn set_clock_for_test(&mut self, unix: i64) { self.clock = Some(unix); }
+    fn now(&self) -> i64 { self.clock.unwrap_or_else(crate::now_unix) }
+}
+```
+
+(`clock: Option<i64>` entra em `Persisted`, `#[serde(skip)]` — nunca
+persistido; o executor adiciona o campo e o `skip`.)
+
+No `credit_service_ms` (Task 4), logo depois de creditar:
+
+```rust
+if let Some(t) = &mut self.active_ticket { t.earned_cents += cents; }
+```
+
+Substituir `return_ticket` e adicionar `enforce_ticket`:
+
+```rust
+    /// Devolve o ticket AGORA. True = atrasado (multa aplicada).
+    pub fn return_ticket(&mut self) -> bool {
+        let now = self.now();
+        match self.active_ticket.take() {
+            None => false,
+            Some(t) => {
+                if now > t.deadline_unix {
+                    let fined = self.apply_late_fine(&t);
+                    self.stats.returns_late += 1;
+                    self.stats.on_time_streak = 0;
+                    let _ = fined;
+                    true // atrasada é atrasada, multada ou não
+                } else {
+                    self.stats.returns_in_time += 1;
+                    self.stats.on_time_streak += 1;
+                    if self.stats.on_time_streak >= 5 {
+                        self.coupons += 1;         // cupom de locação grátis (§17)
+                        self.stats.on_time_streak = 0;
+                    }
+                    false
+                }
+            }
+        }
+    }
+
+    /// Chamado no boot, na entrada do balcão e a cada segundo com o tubo
+    /// ligado (Task 11). Devolução automática 24h após o prazo (§6).
+    pub fn enforce_ticket(&mut self) -> TicketEvent {
+        let Some(t) = &self.active_ticket else { return TicketEvent::Nothing; };
+        let (deadline, earned) = (t.deadline_unix, t.earned_cents);
+        if self.now() >= deadline + 24 * 3600 {
+            let ticket = self.active_ticket.take().expect("acima");
+            let fined = self.apply_late_fine(&ticket);
+            self.stats.returns_late += 1;
+            self.stats.on_time_streak = 0;
+            TicketEvent::AutoReturned { fined }
+        } else { let _ = (deadline, earned); TicketEvent::Nothing }
+    }
+
+    /// Multa: 30% do ganho do período, limitado à carteira (nunca negativa).
+    fn apply_late_fine(&mut self, t: &crate::store::Ticket) -> i64 {
+        let fine = t.earned_cents * 30 / 100;
+        let fine = fine.min(self.wallet_cents);
+        self.wallet_cents -= fine;
+        self.lifetime_spent_cents += fine;
+        fine
+    }
+```
+
+- [ ] **Step 3: verde + workspace + commit**
+
+```bash
+cargo test -p sixteen-locadora && cargo test --workspace
+git add crates/locadora
+git commit -m "feat(locadora): devolução tardia — auto em +24h com multa de 30% do período"
+```
+
+---
+
 ### Task 5: Sorteio de boas-vindas + troféus
 
 **Files:**
@@ -1121,13 +1285,15 @@ pub enum TrophyId {
     Lojista,
     FreguesFiel,
     SobreviventeDaEstatica,
+    DevolucaoAtrasada,
 }
 
 impl TrophyId {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::BemVindoAFicha, Self::PrimeiroTurno, Self::VizinhoDoAcervo,
         Self::TrocaTroca, Self::PrazoCumprido, Self::Colegao,
         Self::Lojista, Self::FreguesFiel, Self::SobreviventeDaEstatica,
+        Self::DevolucaoAtrasada,
     ];
 
     pub fn title(&self) -> &'static str {
@@ -1141,6 +1307,7 @@ impl TrophyId {
             Self::Lojista => "Lojista",
             Self::FreguesFiel => "Freguês fiel",
             Self::SobreviventeDaEstatica => "Sobrevivente da estática",
+            Self::DevolucaoAtrasada => "Devolução Atrasada",
         }
     }
 
@@ -1162,6 +1329,7 @@ pub fn check_trophies(st: &mut Persisted, now: i64) -> Vec<TrophyId> {
             TrophyId::Lojista => st.stats.purchases >= 10,
             TrophyId::FreguesFiel => st.stats.rental_days >= 7,
             TrophyId::SobreviventeDaEstatica => st.stats.blackout_recoveries >= 1,
+            TrophyId::DevolucaoAtrasada => st.stats.returns_late >= 1,
         };
         if won {
             st.trophies.push(crate::store::TrophyRecord {
@@ -1201,6 +1369,135 @@ Ajustar `TrophyRecord` (Task 2) para `id: String` (já está) e marcar no
 cargo test -p sixteen-locadora && cargo test --workspace
 git add crates/locadora
 git commit -m "feat(locadora): sorteio de boas-vindas único e troféus determinísticos"
+```
+
+---
+
+### Task 5b: Extras do §17 — cicatriz, fim de semana, cupom e cartaz
+
+**Files:**
+- Modify: `crates/locadora/src/rules.rs` (contadores e regras)
+- Modify: `crates/locadora/src/prices.rs` (salário de fim de semana)
+- Modify: `crates/locadora/src/store.rs` (`rentals_per_game: HashMap<String, u32>`, `coupons: u32` em `Persisted`)
+
+- [ ] **Step 1: Testes falhando (append no `mod tests` de rules.rs)**
+
+```rust
+    #[test]
+    fn rentals_per_game_counts_each_open() {
+        let mut s = Persisted::default();
+        s.wallet_cents = 30_000;
+        let p = Prices::default();
+        s.start_hourly("a", &p).unwrap();
+        s.end_hourly(60_000, &p);
+        s.start_hourly("a", &p).unwrap();
+        s.end_hourly(60_000, &p);
+        s.start_ticket("b", &p).unwrap();
+        assert_eq!(s.rentals_per_game.get("a"), Some(&2));
+        assert_eq!(s.rentals_per_game.get("b"), Some(&1));
+    }
+
+    #[test]
+    fn weekend_pays_double_salary() {
+        let mut s = Persisted::default();
+        let p = Prices::default();
+        // sábado: 2026-10-24 12:00 UTC = unix 1792248000
+        assert_eq!(s.salary_rate_for(1_792_248_000, &p), 1000); // dobrado
+        // segunda: 2026-10-19 12:00 UTC = unix 1791816000
+        assert_eq!(s.salary_rate_for(1_791_816_000, &p), 500);
+        s.credit_service_ms_with_day(60 * 60_000, &p, 1_792_248_000);
+        assert_eq!(s.wallet_cents, 1000); // 1h de sábado
+    }
+
+    #[test]
+    fn coupon_spends_on_free_rental() {
+        let mut s = Persisted::default();
+        s.coupons = 1;
+        s.wallet_cents = 0;
+        let p = Prices::default();
+        assert_eq!(s.start_hourly("x", &p), Ok(()), "cupom paga a avulsa");
+        assert_eq!(s.coupons, 0);
+        s.end_hourly(60_000, &p); // sessão grátis: não debita
+        assert_eq!(s.wallet_cents, 0);
+    }
+
+    #[test]
+    fn weekly_poster_is_deterministic_by_week() {
+        let acervo: Vec<String> = (0..8).map(|i| format!("s{i}")).collect();
+        let a = crate::rules::poster_of_week(&acervo, 1_791_816_000);
+        let b = crate::rules::poster_of_week(&acervo, 1_791_816_000 + 3600);
+        assert_eq!(a, b); // mesma semana → mesmo cartaz
+        assert!(acervo.contains(&a));
+    }
+```
+
+- [ ] **Step 2: Implementar**
+
+`store.rs`: `pub rentals_per_game: HashMap<String, u32>` e `pub coupons: u32`
+em `Persisted` (import `std::collections::HashMap`; defaults vazios/0).
+
+`prices.rs`:
+
+```rust
+impl Prices {
+    /// §17: fim de semana paga o dobro (dia do unix; 5=sáb, 6=dom).
+    pub fn salary_rate_at(&self, unix: i64, weekend_double: bool) -> i64 {
+        let day = ((unix.div_euclid(86_400) + 4) % 7) as u32; // 0=1970-01-01(qui)
+        if weekend_double && (day == 5 || day == 6) { self.salary_per_hour * 2 }
+        else { self.salary_per_hour }
+    }
+}
+```
+
+`rules.rs`:
+
+```rust
+impl Persisted {
+    pub fn salary_rate_for(&self, unix: i64, p: &Prices) -> i64 {
+        p.salary_rate_at(unix, true) // cfg liga/desliga; app passa a flag
+    }
+
+    /// Crédito com dia explícito (o runner passa o unix do tick).
+    pub fn credit_service_ms_with_day(&mut self, ms: i64, p: &Prices, unix: i64) -> i64 {
+        let rate = self.salary_rate_for(unix, p);
+        // mesma matemática do credit_service_ms com rate variável:
+        self.stats.ms_served += ms;
+        self.service_pending_ms += ms;
+        let cents = self.service_pending_ms.checked_mul(rate)
+            .unwrap_or(i64::MAX) / 3_600_000;
+        if cents == 0 { return 0; }
+        self.service_pending_ms -= cents * 3_600_000 / rate;
+        self.wallet_cents += cents;
+        self.lifetime_earned_cents += cents;
+        if let Some(t) = &mut self.active_ticket { t.earned_cents += cents; }
+        cents
+    }
+
+    /// Cartaz da semana: xorshift sementado pelo nº da semana (unix/604800).
+    pub fn poster_of_week(acervo: &[String], unix: i64) -> String {
+        let week = (unix.div_euclid(604_800)) as u64;
+        crate::rules::draw_trio(acervo, week ^ 0x5EED_BEEF).first().cloned()
+            .unwrap_or_default()
+    }
+}
+```
+
+E nos `start_hourly`/`start_ticket`: incrementar
+`*self.rentals_per_game.entry(game.into()).or_insert(0) += 1;` (é a
+**cicatriz da estante** §17 — o overlay de desgaste escala por esse
+valor). Cupom: no domínio, se `coupons > 0` e a carteira não cobre o
+primeiro minuto, o cupom entra automaticamente
+(`self.coupons -= 1; self.free_session = true;` — campo `bool` em
+`Persisted`, consumido pelo `end_hourly`/`start_ticket` que então não
+debitam nada); com carteira cheia, é a UI do balcão que pergunta
+"usar cupom?".
+
+- [ ] **Step 3: verde + workspace + commit**
+
+```bash
+cargo test -p sixteen-locadora && cargo test --workspace
+git add crates/locadora
+git commit -m "feat(locadora): extras §17 — cicatriz, fim de semana, cupom de fidelidade e cartaz da semana"
 ```
 
 ---
@@ -1701,8 +1998,17 @@ if real_ms - billed_ms >= 1000 {
                 session_hourly_ms += since;
             }
             locadora::RentMode::Ticket => {
-                if let Some(t) = &loc.active_ticket {
-                    if crate::now_unix() >= t.deadline_unix { /* venceu com o tubo ligado */ }
+                // §6: prazo vencido → OSD; +24h → devolução automática com multa
+                match loc.enforce_ticket() {
+                    locadora::rules::TicketEvent::Nothing => {}
+                    locadora::rules::TicketEvent::AutoReturned { fined } => {
+                        cab.push_osd(&[format!(
+                            "devolução automática — a locadora levou o cartucho de volta (multa: {})",
+                            locadora::Money(fined).fmt(currency)
+                        )], None, 6);
+                        crate::sfx::play(cab, Sfx::Eject);
+                        save_loc(loc)?; // persiste já
+                    }
                 }
             }
         }
@@ -1766,7 +2072,8 @@ git commit -m "feat(app): runner credita debeatda freguesia por segundo e aplica
 
 - [ ] **Step 1: parede**
 
-Grade 3×3 dos 9 troféus (`TrophyId::ALL`), pedestal+figura desenhados
+Grade de 10 pedestres (`TrophyId::ALL`, 2 colunas × 5 linhas), cada um:
+mini-sprite desenhado
 proceduralmente sobre `d.fill` (pixel-art leve, estilo medal_rgba do
 ra.rs:780). Desbloqueado: figura pintada + título `t.title()` + data
 (fmt_deadline/unlocked). Trancado: pedestal vago, título "???".
