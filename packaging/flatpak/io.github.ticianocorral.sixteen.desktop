@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=SixteeN
+GenericName=SNES Emulator
+GenericName[pt_BR]=Emulador de Super Nintendo
+Comment=A whole SNES console on your TV — cabinet, CRT tube and cartridge
+Comment[pt_BR]=Um console de SNES inteiro na TV — gabinete, tubo CRT e cartucho
+Exec=sixteen
+Icon=io.github.ticianocorral.sixteen
+Terminal=false
+Categories=Game;Emulator;
+Keywords=emulator;snes;super nintendo;retro;games
+Keywords[pt_BR]=emulador;snes;super nintendo;retro;jogos
+StartupWMClass=sixteen

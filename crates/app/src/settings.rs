@@ -13,6 +13,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+#[allow(unused_imports)]
+use sixteen_platform::tr;
 use sixteen_platform::{
     Cabinet, GamepadBtn, MenuMode, MenuNav, PadButton, Platform, Screen, SettingsButton,
     SettingsPanelInfo,
@@ -37,7 +39,17 @@ const LIST_TOP: i32 = MARGIN + 50;
 /// The settings sections, in panel order — the tube shows one section's
 /// rows at a time; the panel's `Section(i)` buttons switch between them
 /// (plan revision: "se for interessante faça secoes na configuração").
-const SECTION_NAMES: [&str; 5] = ["jogo", "vídeo", "sistema", "conquistas", "controles"];
+/// Labels read the active language on every call (not a `const`: the
+/// English base and the pt-BR fallback are picked at runtime).
+fn section_names() -> [&'static str; 5] {
+    [
+        tr!("game", "jogo"),
+        tr!("video", "vídeo"),
+        tr!("system", "sistema"),
+        tr!("achievements", "conquistas"),
+        tr!("controls", "controles"),
+    ]
+}
 const SEC_JOGO: usize = 0;
 const SEC_VIDEO: usize = 1;
 const SEC_SISTEMA: usize = 2;
@@ -130,8 +142,14 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                     if login_connect {
                         cfg.ra_connect = Some(token);
                         let _ = cfg.save();
-                        login_status =
-                            LoginStatus::Ok("conta conectada — conquistas liberadas".to_string());
+                         login_status = tr!(
+                            LoginStatus::Ok(
+                                "account linked — achievements unlocked".to_string()
+                            ),
+                            LoginStatus::Ok(
+                                "conta conectada — conquistas liberadas".to_string()
+                            )
+                        );
                         login_connect = false;
                     } else {
                         login_status = LoginStatus::Ok(token);
@@ -205,7 +223,14 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                     // a submissão (plan revision: a web key ficou readonly).
                     let (user, senha) = (cfg.ra_user.clone(), ra_draft.trim().to_string());
                     if user.is_empty() || senha.is_empty() {
-                        login_status = LoginStatus::Failed("preencha usuário e senha".to_string());
+                        login_status = tr!(
+                            LoginStatus::Failed(
+                                "fill in the username and password".to_string()
+                            ),
+                            LoginStatus::Failed(
+                                "preencha usuário e senha".to_string()
+                            )
+                        );
                     } else {
                         login_status = LoginStatus::Checking;
                         let (tx, rx) = mpsc::channel();
@@ -231,8 +256,8 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
             // Clicks during editing do nothing (same rule as the shelf's
             // filter box): finish or cancel the field first.
             cab.set_settings_panel(SettingsPanelInfo {
-                title: "configurações".to_string(),
-                sections: SECTION_NAMES.iter().map(|s| s.to_string()).collect(),
+                title: tr!("settings", "configurações").to_string(),
+                sections: section_names().iter().map(|s| s.to_string()).collect(),
                 selected: sec,
             });
             let render = |d: &mut Screen| match sec {
@@ -290,7 +315,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                 match cab.hit_settings_button(ox, oy) {
                     Some(SettingsButton::Back) => return Ok(false),
                     Some(SettingsButton::Section(i)) => {
-                        sec = i.min(SECTION_NAMES.len() - 1);
+                        sec = i.min(section_names().len() - 1);
                         sel = 0;
                         controls_top = 0;
                     }
@@ -408,8 +433,8 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
         // The flat side panel — section buttons + Voltar, rebuilt every
         // frame like the shelf's own panel.
         cab.set_settings_panel(SettingsPanelInfo {
-            title: "configurações".to_string(),
-            sections: SECTION_NAMES.iter().map(|s| s.to_string()).collect(),
+            title: tr!("settings", "configurações").to_string(),
+            sections: section_names().iter().map(|s| s.to_string()).collect(),
             selected: sec,
         });
 
@@ -499,7 +524,10 @@ fn start_login_test(
         return;
     }
     if cfg.ra_user.is_empty() || cfg.ra_token.is_empty() {
-        *status = LoginStatus::Failed("preencha usuário e token antes".to_string());
+        *status = tr!(
+            LoginStatus::Failed("fill in the username and token first".to_string()),
+            LoginStatus::Failed("preencha usuário e token antes".to_string())
+        );
         return;
     }
     let (tx, rx) = mpsc::channel();
@@ -547,7 +575,10 @@ fn start_core_download(status: &mut CoreStatus, worker: &mut Option<Receiver<Cor
         return;
     }
     let Some(url) = core_update::core_download_url() else {
-        *status = CoreStatus::Failed("sem build automática pra esta plataforma".to_string());
+        *status = tr!(
+            CoreStatus::Failed("no automatic build for this platform".to_string()),
+            CoreStatus::Failed("sem build automática pra esta plataforma".to_string())
+        );
         return;
     };
     let (tx, rx) = mpsc::channel();
@@ -567,9 +598,9 @@ fn core_installed_label() -> Option<String> {
     let modified = std::fs::metadata(&path).ok()?.modified().ok()?;
     let days = modified.elapsed().unwrap_or_default().as_secs() / 86_400;
     Some(match days {
-        0 => "instalado hoje".to_string(),
-        1 => "instalado há 1 dia".to_string(),
-        n => format!("instalado há {n} dias"),
+        0 => tr!("installed today", "instalado hoje").to_string(),
+        1 => tr!("installed 1 day ago", "instalado há 1 dia").to_string(),
+        n => tr!(format!("installed {n} days ago"), format!("instalado há {n} dias")),
     })
 }
 
@@ -591,12 +622,20 @@ fn run_rom_rename() -> String {
                 log::info!("rom rename: {} -> {}", r.old, r.new);
             }
             match list.len() {
-                1 => "Renomear ROMs: 1 rom renomeada".to_string(),
-                n => format!("Renomear ROMs: {n} roms renomeadas"),
+                1 => tr!("Rename ROMs: 1 rom renamed", "Renomear ROMs: 1 rom renomeada").to_string(),
+                n => tr!(format!("Rename ROMs: {n} roms renamed"), format!("Renomear ROMs: {n} roms renomeadas")),
             }
         }
-        RenameOutcome::NothingToDo => "Renomear ROMs: nenhuma precisava de nome novo".to_string(),
-        RenameOutcome::NoDat => "Renomear ROMs: nointro.dat não encontrado".to_string(),
+        RenameOutcome::NothingToDo => tr!(
+            "Rename ROMs: nothing needed a new name",
+            "Renomear ROMs: nenhuma precisava de nome novo"
+        )
+        .to_string(),
+        RenameOutcome::NoDat => tr!(
+            "Rename ROMs: nointro.dat not found",
+            "Renomear ROMs: nointro.dat não encontrado"
+        )
+        .to_string(),
     }
 }
 
@@ -605,18 +644,21 @@ fn core_row_label(status: &CoreStatus) -> String {
         CoreStatus::Downloading { downloaded, total } => {
             let mb = *downloaded as f64 / 1_048_576.0;
             match total {
-                Some(t) => format!(
-                    "Núcleo: baixando... {mb:.1}/{:.1} MB",
-                    *t as f64 / 1_048_576.0
+                Some(t) => tr!(
+                    format!("Core: downloading... {mb:.1}/{:.1} MB", *t as f64 / 1_048_576.0),
+                    format!("Núcleo: baixando... {mb:.1}/{:.1} MB", *t as f64 / 1_048_576.0)
                 ),
-                None => format!("Núcleo: baixando... {mb:.1} MB"),
+                None => tr!(
+                    format!("Core: downloading... {mb:.1} MB"),
+                    format!("Núcleo: baixando... {mb:.1} MB")
+                ),
             }
         }
-        CoreStatus::Done => "Núcleo: atualizado com sucesso".to_string(),
-        CoreStatus::Failed(e) => format!("Núcleo: falha - {e}"),
+        CoreStatus::Done => tr!("Core: updated successfully", "Núcleo: atualizado com sucesso").to_string(),
+        CoreStatus::Failed(e) => tr!(format!("Core: failed - {e}"), format!("Núcleo: falha - {e}")),
         CoreStatus::Idle => match core_installed_label() {
-            Some(installed) => format!("Núcleo: atualizar ({installed})"),
-            None => "Núcleo: baixar".to_string(),
+            Some(installed) => tr!(format!("Core: update ({installed})"), format!("Núcleo: atualizar ({installed})")),
+            None => tr!("Core: download", "Núcleo: baixar").to_string(),
         },
     }
 }
@@ -655,39 +697,62 @@ fn bind_pad_row(plat: &mut Platform, cfg: &mut Config, row: usize, btn: GamepadB
 
 fn draw_jogo(d: &mut Screen, _cfg: &Config, sel: usize) {
     let x = MARGIN;
-    d.text(x, MARGIN, 2, TEXT, "jogo");
+    d.text(x, MARGIN, 2, TEXT, tr!("game", "jogo"));
     let mut y = LIST_TOP;
-    let rows = ["Controles".to_string()];
+    let rows = [tr!("Controls", "Controles").to_string()];
     for (i, row) in rows.iter().enumerate() {
         draw_row(d, x, y, row, i == sel);
         y += ROW_H;
     }
     draw_hint(
         d,
-        "clique numa opção pra mudar -- setas do gamepad ajustam, A confirma",
+        tr!(
+            "click an option to change it -- gamepad arrows adjust, A confirms",
+            "clique numa opção pra mudar -- setas do gamepad ajustam, A confirma"
+        ),
     );
 }
 
 fn draw_video(d: &mut Screen, cfg: &Config, sel: usize) {
     let x = MARGIN;
-    d.text(x, MARGIN, 2, TEXT, "vídeo");
+    d.text(x, MARGIN, 2, TEXT, tr!("video", "vídeo"));
     let mut y = LIST_TOP;
     let rows = [
-        format!(
-            "Tela cheia: {}",
-            if cfg.fullscreen {
-                "ligada"
-            } else {
-                "desligada"
-            }
+        tr!(
+            format!(
+                "Fullscreen: {}",
+                if cfg.fullscreen {
+                    tr!("on", "ligada")
+                } else {
+                    tr!("off", "desligada")
+                }
+            ),
+            format!(
+                "Tela cheia: {}",
+                if cfg.fullscreen {
+                    "ligada"
+                } else {
+                    "desligada"
+                }
+            )
         ),
-        format!(
-            "Chiado da TV fora do ar: {}",
-            if cfg.hiss_on_static {
-                "ligado"
-            } else {
-                "desligado"
-            }
+        tr!(
+            format!(
+                "TV static hiss: {}",
+                if cfg.hiss_on_static {
+                    tr!("on", "ligado")
+                } else {
+                    tr!("off", "desligado")
+                }
+            ),
+            format!(
+                "Chiado da TV fora do ar: {}",
+                if cfg.hiss_on_static {
+                    "ligado"
+                } else {
+                    "desligado"
+                }
+            )
         ),
     ];
     for (i, row) in rows.iter().enumerate() {
@@ -696,7 +761,10 @@ fn draw_video(d: &mut Screen, cfg: &Config, sel: usize) {
     }
     draw_hint(
         d,
-        "clique numa opção pra alternar (o chiado toca na TV desligada)",
+        tr!(
+            "click an option to toggle it (the hiss plays on the TV's off-air static)",
+            "clique numa opção pra alternar (o chiado toca na TV desligada)"
+        ),
     );
 }
 
@@ -708,27 +776,43 @@ fn draw_sistema(
     rename_status: Option<&str>,
 ) {
     let x = MARGIN;
-    d.text(x, MARGIN, 2, TEXT, "sistema");
+    d.text(x, MARGIN, 2, TEXT, tr!("system", "sistema"));
     let mut y = LIST_TOP;
     let rows = [
         core_row_label(core_status),
-        format!(
-            "Verificar atualizações ao abrir: {}",
-            if cfg.check_updates_on_start {
-                "sim"
-            } else {
-                "não"
-            }
+        tr!(
+            format!(
+                "Check for updates on launch: {}",
+                if cfg.check_updates_on_start {
+                    tr!("yes", "sim")
+                } else {
+                    tr!("no", "não")
+                }
+            ),
+            format!(
+                "Verificar atualizações ao abrir: {}",
+                if cfg.check_updates_on_start {
+                    "sim"
+                } else {
+                    "não"
+                }
+            )
         ),
         rename_status
-            .unwrap_or("Renomear ROMs para o padrão No-Intro")
+            .unwrap_or(tr!("Rename ROMs to the No-Intro naming", "Renomear ROMs para o padrão No-Intro"))
             .to_string(),
     ];
     for (i, row) in rows.iter().enumerate() {
         draw_row(d, x, y, row, i == sel);
         y += ROW_H;
     }
-    draw_hint(d, "clique numa opção pra executar ou alternar");
+    draw_hint(
+        d,
+        tr!(
+            "click an option to run or toggle it",
+            "clique numa opção pra executar ou alternar"
+        ),
+    );
 }
 
 fn draw_conquistas(
@@ -740,55 +824,69 @@ fn draw_conquistas(
     draft: &str,
 ) {
     let x = MARGIN;
-    d.text(x, MARGIN, 2, TEXT, "conquistas");
+    d.text(x, MARGIN, 2, TEXT, tr!("achievements", "conquistas"));
     let field = |row: usize, label: &str, value: &str| {
         if editing == Some(row) {
             format!("{label}: {draft}_")
         } else if value.is_empty() {
-            format!("{label}: (vazio)")
+            tr!(format!("{label}: (empty)"), format!("{label}: (vazio)"))
         } else {
             // Segredos (token, senha) não voltam para a tela, nem
             // mascarados — só a certeza de que estão lá.
             if row == RA_ROW_TOKEN {
-                format!("{label}: (configurado)")
+                tr!(format!("{label}: (set)"), format!("{label}: (configurado)"))
             } else {
                 format!("{label}: {value}")
             }
         }
     };
     let senha_label = if cfg.ra_connect.is_some() {
-        "Senha: (conectado)".to_string()
+        tr!("Password: (connected)", "Senha: (conectado)").to_string()
     } else {
-        "Senha: (vazio — conecta a lógica das conquistas)".to_string()
+        tr!(
+            "Password: (empty — unlocks the achievement logic)",
+            "Senha: (vazio — conecta a lógica das conquistas)"
+        )
+        .to_string()
     };
     let login_label = match login {
         LoginStatus::Idle => {
             if cfg.ra_user.is_empty() && cfg.ra_token.is_empty() {
-                "Testar login".to_string()
+                tr!("Test login", "Testar login").to_string()
             } else {
-                "Testar login (não testado)".to_string()
+                tr!("Test login (not tested yet)", "Testar login (não testado)").to_string()
             }
         }
-        LoginStatus::Checking => "Testar login: testando...".to_string(),
-        LoginStatus::Ok(l) => format!("Testar login: ok — {l}"),
-        LoginStatus::Failed(e) => format!("Testar login: {e}"),
+        LoginStatus::Checking => tr!("Test login: testing...", "Testar login: testando...").to_string(),
+        LoginStatus::Ok(l) => tr!(format!("Test login: ok — {l}"), format!("Testar login: ok — {l}")),
+        LoginStatus::Failed(e) => tr!(format!("Test login: {e}"), format!("Testar login: {e}")),
     };
     let rows = [
-        field(RA_ROW_USER, "Usuário", &cfg.ra_user),
-        field(RA_ROW_TOKEN, "Token da web API", &cfg.ra_token),
+        field(RA_ROW_USER, tr!("Username", "Usuário"), &cfg.ra_user),
+        field(RA_ROW_TOKEN, tr!("Web API token", "Token da web API"), &cfg.ra_token),
         if editing == Some(RA_ROW_SENHA) {
-            format!("Senha: {draft}_")
+            format!("{}: {draft}_", tr!("Password", "Senha"))
         } else {
             senha_label
         },
         login_label,
-        format!(
-            "Modo hardcore: {}",
-            if cfg.ra_hardcore {
-                "ligado (sem cheats/savestates)"
-            } else {
-                "desligado"
-            }
+        tr!(
+            format!(
+                "Hardcore mode: {}",
+                if cfg.ra_hardcore {
+                    tr!("on (no cheats/savestates)", "ligado (sem cheats/savestates)")
+                } else {
+                    tr!("off", "desligado")
+                }
+            ),
+            format!(
+                "Modo hardcore: {}",
+                if cfg.ra_hardcore {
+                    "ligado (sem cheats/savestates)"
+                } else {
+                    "desligado"
+                }
+            )
         ),
     ];
     let mut y = LIST_TOP;
@@ -808,17 +906,23 @@ fn draw_conquistas(
         y + 8 + 20,
         1,
         DIM,
-        "senha: a mesma do site — libera a lógica e o envio das conquistas",
+        tr!(
+            "password: the same as on the site — unlocks the logic and submission of achievements",
+            "senha: a mesma do site — libera a lógica e o envio das conquistas"
+        ),
     );
     draw_hint(
         d,
-        "clique edita, botão direito cola, cmd+c copia -- enter confirma, esc cancela",
+        tr!(
+            "click to edit, right-click to paste, cmd+c to copy -- enter confirms, esc cancels",
+            "clique edita, botão direito cola, cmd+c copia -- enter confirma, esc cancela"
+        ),
     );
 }
 
 fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting: Option<usize>) {
     let x = MARGIN;
-    d.text(x, MARGIN, 2, TEXT, "controles");
+    d.text(x, MARGIN, 2, TEXT, tr!("controls", "controles"));
     let mut y = LIST_TOP;
 
     let binds = cfg.keymap.describe();
@@ -829,7 +933,10 @@ fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting:
         let pad = pads.get(i).map(|(_, b)| b.as_str()).unwrap_or("-");
         let pad = if pad.is_empty() { "-" } else { pad };
         let label = if awaiting == Some(i) {
-            format!("{action}: aperte uma tecla ou botão do controle... (esc cancela)")
+            tr!(
+                format!("{action}: press a key or controller button... (esc cancels)"),
+                format!("{action}: aperte uma tecla ou botão do controle... (esc cancela)")
+            )
         } else {
             format!("{action}: {key} | controle: {pad}")
         };
@@ -839,7 +946,10 @@ fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting:
 
     draw_hint(
         d,
-        "clique numa ação pra trocar a tecla ou o botão do controle -- esc volta pro jogo",
+        tr!(
+            "click an action to change its key or controller button -- esc returns to the game",
+            "clique numa ação pra trocar a tecla ou o botão do controle -- esc volta pro jogo"
+        ),
     );
 }
 
@@ -866,8 +976,8 @@ pub fn capture_preview(
         _ => SEC_JOGO,
     };
     cab.set_settings_panel(SettingsPanelInfo {
-        title: "configurações".to_string(),
-        sections: SECTION_NAMES.iter().map(|s| s.to_string()).collect(),
+        title: tr!("settings", "configurações").to_string(),
+        sections: section_names().iter().map(|s| s.to_string()).collect(),
         selected: sec,
     });
     let render = |d: &mut Screen| match sec {

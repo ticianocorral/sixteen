@@ -131,6 +131,12 @@ pub fn library_path() -> PathBuf {
     config_dir().join("library.json")
 }
 
+/// O estado inteiro do Modo Locadora (docs/design-modo-locadora.md §10) —
+/// carteira, coleção, tickets, troféus — ao lado do library.json.
+pub fn locadora_path() -> PathBuf {
+    config_dir().join("locadora.json")
+}
+
 /// A No-Intro DAT (XML) for canonical ROM titles — optional, supplied by
 /// whoever runs the app (no direct download link exists on No-Intro's own
 /// site to fetch it automatically).

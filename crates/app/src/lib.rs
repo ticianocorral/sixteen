@@ -22,6 +22,7 @@ pub mod devmenu;
 pub mod dirs;
 pub mod exemplo;
 pub mod idle;
+pub mod locadora_screen;
 pub mod manual;
 pub mod ra;
 pub mod rom_rename;

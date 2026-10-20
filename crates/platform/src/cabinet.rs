@@ -498,6 +498,9 @@ enum ChinOsd {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelButton {
     Insert,
+    /// The idle screen's "MODO LOCADORA" button (docs/design-modo-locadora.md
+    /// §2) — third line of the home screen, below the shelf's FREE PLAY.
+    Locadora,
     Settings,
     /// The idle screen's dev-mode button (plan revision: "habilitar botão em
     /// cima da configuração") — only drawn while the app's dev mode is on,
@@ -4251,13 +4254,27 @@ fn draw_panel(
             btn_w,
             btn_h,
         );
-        let insert_drawn = draw_button(canvas, font, btn, "Estante de games", true);
+        let insert_drawn = draw_button(canvas, font, btn, "ESTANTE DE GAMES · FREE PLAY", true);
         cy = insert_drawn.bottom();
+
+        // O MODO LOCADORA (docs/design-modo-locadora.md §2) — a porta ao
+        // lado do free play: carteira, tickets e a fantasia inteira. Opt-in
+        // por boot; quem só quer jogar ignora pra sempre.
+        let loc_h = GLYPH_H + 12;
+        let loc_btn = Rect::new(
+            x + (inner_w as i32 - btn_w as i32) / 2,
+            cy + 8,
+            btn_w,
+            loc_h as u32,
+        );
+        let loc_drawn = draw_button(canvas, font, loc_btn, "MODO LOCADORA", true);
+        cy = loc_drawn.bottom();
 
         let btn_h = (GLYPH_H + 12) as i32;
         let settings = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
         let mut buttons = vec![
             (PanelButton::Insert, insert_drawn),
+            (PanelButton::Locadora, loc_drawn),
             (
                 PanelButton::Settings,
                 draw_button(canvas, font, settings, "Configurações", true),

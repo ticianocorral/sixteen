@@ -35,6 +35,7 @@ use anyhow::{anyhow, Context, Result};
 use sixteen_app::config::Config;
 use sixteen_app::core_update;
 use sixteen_app::idle::{self, IdleExit};
+use sixteen_locadora;
 use sixteen_app::runner::{run_game, GameExit, GameSpec};
 use sixteen_app::settings;
 use sixteen_app::shelf::{self, Pick, ShelfOpts};
@@ -299,6 +300,8 @@ fn main() -> Result<()> {
             &mut update_rx,
             core_path.is_some(),
             sixteen_app::dat_update::dat_installed(),
+            catalog.counts().unwrap_or(0),
+            cfg.locadora_needed as usize,
         )?;
         plat.set_konami_watch(false);
         // The idle screen's own "Baixar núcleo" button may have just
@@ -309,6 +312,86 @@ fn main() -> Result<()> {
         match exit {
             IdleExit::Quit => break 'app,
             IdleExit::OpenShelf => shelf_opts.fade_in = Some(idle_static),
+            IdleExit::OpenLocadora => {
+                // O Modo Locadora (docs/design-modo-locadora.md): o loop do
+                // balcão. Cada `Play` vira uma sessão de runner com a
+                // economia embutida; cada volta de tela persiste o estado.
+                let prices = sixteen_locadora::Prices {
+                    salary_per_hour: cfg.locadora_salary_cents,
+                    hourly_per_hour: cfg.locadora_hourly_cents,
+                    ticket_48h: cfg.locadora_ticket_cents,
+                    purchase: cfg.locadora_purchase_cents,
+                    weekend_double: cfg.locadora_weekend_double,
+                };
+                let mut loc = sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
+                let mut loca_static = idle::RESTING_STATIC;
+                'loca: loop {
+                    let pick = sixteen_app::locadora_screen::run(
+                        &mut plat,
+                        &mut cab,
+                        &catalog,
+                        &mut loc,
+                        &prices,
+                        &cfg.locadora_currency,
+                    )?;
+                    let (rom, sha, mode) = match pick {
+                        sixteen_app::locadora_screen::Pick::Quit => break 'app,
+                        sixteen_app::locadora_screen::Pick::Back => {
+                            idle_static = loca_static;
+                            continue 'app;
+                        }
+                        sixteen_app::locadora_screen::Pick::Play { rom, sha, mode } => (rom, sha, mode),
+                    };
+                    let Some(core) = &core_path else {
+                        if no_core_screen(&mut plat, &mut cab)? {
+                            break 'app;
+                        }
+                        continue 'loca;
+                    };
+                    // Arte de painel (logo/cartucho) resolvida como a estante
+                    // resolve — a animação do cartucho entra quando existir.
+                    let rom_str = rom.to_string_lossy().into_owned();
+                    let logo = sixteen_app::shelf::find_local_art(
+                        &sixteen_app::dirs::assets_dir().join("logo"),
+                        &rom_str,
+                    );
+                    let cartridge = sixteen_app::shelf::find_local_art(
+                        &sixteen_app::dirs::assets_dir().join("cartridge"),
+                        &rom_str,
+                    );
+                    let spec = GameSpec {
+                        core: core.clone(),
+                        rom,
+                        system_dir: args.system_dir.clone(),
+                        save_dir: args.save_dir.clone(),
+                        notes_dir: args.notes_dir.clone(),
+                        shot: None,
+                        logo,
+                        cartridge,
+                        shot_off: false,
+                        debug_note_capture: false,
+                        debug_shot_pause: false,
+                        debug_shot_modal: None,
+                        debug_cart_anim: None,
+                    };
+                    let is_service = loc.service_game.as_deref() == Some(sha.as_str());
+                    let mut session = sixteen_app::runner::LocaSession {
+                        loc: &mut loc,
+                        prices: &prices,
+                        currency: &cfg.locadora_currency,
+                        mode,
+                        is_service_cart: is_service,
+                    };
+                    match run_game(&mut plat, &mut cab, &spec, &cfg, Some(&mut session))? {
+                        GameExit::Ejected { static_level } => {
+                            loca_static = static_level;
+                        }
+                        GameExit::Quit => break 'app,
+                    }
+                    let _ = &session;
+                    loc.save(&sixteen_app::dirs::locadora_path())?;
+                }
+            }
             IdleExit::OpenDev => {
                 // O menu do devmode (plan revision: "por enquanto criar menu
                 // em branco apenas com o botão voltar") — `true` aqui é o
@@ -408,7 +491,7 @@ fn main() -> Result<()> {
                 debug_shot_modal: None,
                 debug_cart_anim: None,
             };
-            match run_game(&mut plat, &mut cab, &spec, &cfg)? {
+            match run_game(&mut plat, &mut cab, &spec, &cfg, None)? {
                 // The power-off ritual (desligar, snow, wait for eject)
                 // already ran inside run_game — the idle screen just eases
                 // in over what it left (plan §3.3, "a estante entra por

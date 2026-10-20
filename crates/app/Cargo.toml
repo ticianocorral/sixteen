@@ -23,6 +23,7 @@ path = "src/bin/selector.rs"
 sixteen-emulation = { path = "../emulation" }
 sixteen-platform = { path = "../platform" }
 sixteen-domain = { path = "../domain" }
+sixteen-locadora = { path = "../locadora" }
 sixteen-ntsc = { path = "../ntsc" }
 anyhow.workspace = true
 log.workspace = true

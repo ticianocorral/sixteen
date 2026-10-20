@@ -1,0 +1,63 @@
+# Manifest do SixteeN para o Flathub — o par de arquivos a colar na raiz do
+# fork do flathub/flathub (branch criada a partir de `new-pr`) é este aqui e
+# o cargo-sources.json gerado por gerar-cargo-sources.py.
+#
+# Diferenças para o flatpak de publicação própria
+# (packaging/flatpak/dev.ticianocorral.sixteen.yml): aqui o build NÃO usa
+# rede (regra do Flathub) — as dependências vêm do cargo-sources.json
+# (crates.io com sha256, incluindo o SDL embutido nos crates sdl3-src/
+# sdl3-image-src/sdl3-mixer-src que o feature vendored-sdl compila) e o
+# rustc/cargo vêm da extensão rust-stable do runtime (sem rustup/curl).
+id: io.github.ticianocorral.sixteen
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"  # VERIFICAR antes do PR: tem que ser a série mais nova do Flathub (flatpak remote-info flathub org.freedesktop.Platform)
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: sixteen
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  # Download do core snes9x (libretro) na primeira execução e do
+  # RetroAchievements, ambos acionados por quem usa — justificar na
+  # descrição do PR.
+  - --share=network
+  - --device=all
+  # Ler ROMs em qualquer pasta de casa — justificar na descrição do PR.
+  - --filesystem=home
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - "*.a"
+  - "*.la"
+modules:
+  - name: sixteen
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        # O repo tem rust-toolchain.toml (pedindo rustfmt/clippy); o cargo
+        # do SDK não é shim de rustup e ignora o arquivo — a variável é
+        # cinto de segurança caso a extensão embarque shims.
+        RUSTUP_TOOLCHAIN: stable
+        CARGO_NET_OFFLINE: "true"
+    build-commands:
+      - cargo build --release --offline --bin sixteen --features sixteen-platform/vendored-sdl
+      - install -Dm755 target/release/sixteen -t /app/bin/
+      - install -Dm644 packaging/flatpak/io.github.ticianocorral.sixteen.desktop -t /app/share/applications/
+      - install -Dm644 packaging/flatpak/io.github.ticianocorral.sixteen.metainfo.xml -t /app/share/metainfo/
+      - install -Dm644 packaging/linux/sixteen.png /app/share/icons/hicolor/256x256/apps/io.github.ticianocorral.sixteen.png
+      - install -Dm644 LICENSE -t /app/share/licenses/io.github.ticianocorral.sixteen/
+      - install -Dm644 THIRD-PARTY-NOTICES.md -t /app/share/licenses/io.github.ticianocorral.sixteen/
+    sources:
+      - type: git
+        url: https://github.com/ticianocorral/sixteen.git
+        tag: v1.3.1
+        commit: 2735eb1364bce0f1021743ab49a3bd19618007c9
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$
+      - cargo-sources.json

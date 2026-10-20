@@ -24,6 +24,8 @@ use std::time::{Duration, Instant};
 use std::sync::mpsc;
 
 use anyhow::Result;
+#[allow(unused_imports)]
+use sixteen_platform::tr;
 use sixteen_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen, UpdateArrow};
 
 use crate::core_update::{self, CoreUpdateMsg};
@@ -46,6 +48,10 @@ pub enum IdleExit {
     Quit,
     /// "Inserir cartucho" confirmed (Enter/gamepad) or clicked.
     OpenShelf,
+    /// "MODO LOCADORA" clicked (docs/design-modo-locadora.md §2) — only
+    /// reachable with enough ROMs on the shelf (the button itself answers
+    /// with an OSD when the acervo is short).
+    OpenLocadora,
     /// "Configurações" clicked — the only way into settings from here (no
     /// keyboard shortcut, mouse/gamepad only).
     OpenSettings,
@@ -130,18 +136,27 @@ impl Download {
             Ok(CoreUpdateMsg::Progress { downloaded, total }) => {
                 let mb = downloaded as f64 / 1_048_576.0;
                 self.label = match total {
-                    Some(t) => format!("baixando... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0),
-                    None => format!("baixando... {mb:.1} MB"),
+                    Some(t) => tr!(
+                        format!("downloading... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0),
+                        format!("baixando... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0)
+                    ),
+                    None => tr!(
+                        format!("downloading... {mb:.1} MB"),
+                        format!("baixando... {mb:.1} MB")
+                    ),
                 };
             }
             Ok(CoreUpdateMsg::Done) => {
                 self.done = true;
                 self.rx = None;
                 self.failed = false;
-                self.label = "instalado".to_string();
+                self.label = tr!("installed".to_string(), "instalado".to_string());
             }
             Ok(CoreUpdateMsg::Failed(e)) => {
-                self.label = format!("falha ao atualizar o núcleo: {e}");
+                self.label = tr!(
+                    format!("failed to update the core: {e}"),
+                    format!("falha ao atualizar o núcleo: {e}")
+                );
                 self.rx = None;
                 self.failed = true;
             }
@@ -165,6 +180,8 @@ pub fn run(
     notice_rx: &mut Option<Receiver<UpdateNotice>>,
     core_installed: bool,
     dat_installed: bool,
+    catalog_counts: usize,
+    locadora_needed: usize,
 ) -> Result<IdleExit> {
     // Whatever game was loaded before (if any) is gone now — without this the
     // panel keeps showing its stale logo/commands instead of the "Inserir
@@ -182,15 +199,16 @@ pub fn run(
     // the plain idle panel takes over (with the old core prompt if the
     // core is still missing).
     let mut setup = core_missing_at_start(core_installed, dat_installed);
-    let mut core = Download::idle("baixar núcleo snes9x");
+    let mut core =
+        Download::idle(tr!("download the snes9x core", "baixar núcleo snes9x"));
     if core_installed {
         core.done = true;
-        core.label = "instalado".to_string();
+        core.label = tr!("installed".to_string(), "instalado".to_string());
     }
-    let mut dat = Download::idle("baixar nointro.dat");
+    let mut dat = Download::idle(tr!("download nointro.dat", "baixar nointro.dat"));
     if dat_installed {
         dat.done = true;
-        dat.label = "instalado".to_string();
+        dat.label = tr!("installed".to_string(), "instalado".to_string());
     }
     let mut core_missing = !core_installed;
     // Feedback do download do núcleo na seta verde (plan revision: "cliquei
@@ -257,7 +275,7 @@ pub fn run(
             match rx.try_recv() {
                 Ok(pct) => {
                     update_pct = Some(pct);
-                    update_status = format!("baixando... {pct}%");
+                    update_status = tr!(format!("downloading... {pct}%"), format!("baixando... {pct}%"));
                     update_progress_rx = Some(rx);
                     break;
                 }
@@ -275,7 +293,10 @@ pub fn run(
                     // rodando — macOS troca o bundle, o inode vivo segue) e
                     // oferece o relançamento; falha cai no apply do
                     // arranque seguinte, que continua no lugar.
-                    update_status = format!("{file} baixado — aplicando...");
+                    update_status = tr!(
+                        format!("{file} downloaded — applying..."),
+                        format!("{file} baixado — aplicando...")
+                    );
                     update_pct = None;
                     update_rx = None;
                     let (tx, rx) = mpsc::channel();
@@ -286,7 +307,7 @@ pub fn run(
                     apply_rx = Some(rx);
                 }
                 Ok(Err(e)) => {
-                    update_status = format!("falhou: {e}");
+                    update_status = tr!(format!("failed: {e}"), format!("falhou: {e}"));
                     update_rx = None;
                 }
                 Err(TryRecvError::Disconnected) => update_rx = None,
@@ -300,12 +321,18 @@ pub fn run(
                         .as_ref()
                         .map(|u| u.tag.clone())
                         .unwrap_or_default();
-                    update_status = format!("atualizado para {tag}! reinicie para valer");
+                    update_status = tr!(
+                        format!("updated to {tag}! restart to apply"),
+                        format!("atualizado para {tag}! reinicie para valer")
+                    );
                     update_applied = true;
                     apply_rx = None;
                 }
                 Ok(Err(e)) => {
-                    update_status = format!("baixado, mas não aplicou ({e}) — tenta ao reiniciar");
+                    update_status = tr!(
+                        format!("downloaded, but couldn't apply ({e}) — tries again on restart"),
+                        format!("baixado, mas não aplicou ({e}) — tenta ao reiniciar")
+                    );
                     apply_rx = None;
                 }
                 Err(TryRecvError::Disconnected) => apply_rx = None,
@@ -354,7 +381,10 @@ pub fn run(
                             core.rx = Some(rx);
                             core.failed = false;
                         } else {
-                            core.label = "sem build automática - use configurações".to_string();
+                            core.label = tr!(
+                                "no automatic build - use settings".to_string(),
+                                "sem build automática - use configurações".to_string()
+                            );
                         }
                     }
                     Some(SetupButton::Dat) if dat.rx.is_none() && !dat.done => {
@@ -405,12 +435,16 @@ pub fn run(
             // Just dismissed: the same click/Confirm that dismissed the
             // setup screen must not also land on the idle panel below —
             // give it a frame of its own.
-            cab.set_idle_core_prompt(core_missing.then_some("Baixar núcleo snes9x"));
+            cab.set_idle_core_prompt(
+                core_missing.then_some(tr!("Download the snes9x core", "Baixar núcleo snes9x")),
+            );
             crate::runner::pace_frame(&mut next, frame);
             continue;
         }
 
-        cab.set_idle_core_prompt(core_missing.then_some("Baixar núcleo snes9x"));
+        cab.set_idle_core_prompt(
+            core_missing.then_some(tr!("Download the snes9x core", "Baixar núcleo snes9x")),
+        );
 
         // Tela de update do app aberta: dona do tubo (changelog + botão).
         if update_view.is_some() {
@@ -438,8 +472,10 @@ pub fn run(
                         match crate::update_check::relaunch() {
                             Ok(()) => return Ok(IdleExit::Quit),
                             Err(e) => {
-                                update_status =
-                                    format!("não consegui relançar ({e}) — abra o app de novo");
+                                update_status = tr!(
+                                    format!("couldn't relaunch ({e}) — open the app again"),
+                                    format!("não consegui relançar ({e}) — abra o app de novo")
+                                );
                             }
                         }
                     } else if in_update_rect(sx, sy, btn)
@@ -469,7 +505,7 @@ pub fn run(
                         update_rx = Some(rx);
                         update_progress_rx = Some(prx);
                         update_pct = None;
-                        update_status = "baixando...".to_string();
+                        update_status = tr!("downloading...".to_string(), "baixando...".to_string());
                     }
                 }
             }
@@ -518,9 +554,14 @@ pub fn run(
                             core.rx = Some(rx);
                             core.done = false;
                             core.failed = false;
-                            core.label = "baixando...".to_string();
+                            core.label = tr!("downloading...".to_string(), "baixando...".to_string());
                         }
-                        None => core.label = "sem build automática - use configurações".into(),
+                        None => {
+                            core.label = tr!(
+                                "no automatic build - use settings".into(),
+                                "sem build automática - use configurações".into()
+                            );
+                        }
                     }
                 }
                 _ => {}
@@ -531,6 +572,21 @@ pub fn run(
                 // baixou o snes9x") — os dois ficam inertes; o painel
                 // oferece o download do core no lugar.
                 Some(PanelButton::Insert) if !core_missing => return Ok(IdleExit::OpenShelf),
+                // A locadora (docs/design-modo-locadora.md §2): o botão
+                // existe sempre, mas responde com um aviso no tubo quando o
+                // acervo é curto demais pro sorteio (mínimo configurável).
+                Some(PanelButton::Locadora) => {
+                    if catalog_counts >= locadora_needed {
+                        return Ok(IdleExit::OpenLocadora);
+                    }
+                    cab.push_osd(
+                        &[&format!(
+                            "{catalog_counts}/{locadora_needed} jogos — acervo insuficiente para a locadora"
+                        )],
+                        None,
+                        std::time::Duration::from_secs(4),
+                    );
+                }
                 Some(PanelButton::Settings) if !core_missing => return Ok(IdleExit::OpenSettings),
                 // O botão só existe com o devmode ligado (só o painel o
                 // desenha), mas o gate fica explícito: sem devmode, cliques
@@ -547,10 +603,13 @@ pub fn run(
                             core.rx = Some(rx);
                             core.done = false;
                             core.failed = false;
-                            core.label = "baixando...".to_string();
+                            core.label = tr!("downloading...".to_string(), "baixando...".to_string());
                         }
                         None => {
-                            core.label = "Sem build automática - use configurações".to_string();
+                            core.label = tr!(
+                                "no automatic build - use settings".to_string(),
+                                "sem build automática - use configurações".to_string()
+                            );
                         }
                     }
                 }
@@ -576,7 +635,7 @@ pub fn run(
         let core_status = if core.rx.is_some() || core.failed {
             Some(core.label.clone())
         } else if let Some(until) = core_ok_until {
-            (Instant::now() < until).then(|| "núcleo atualizado!".to_string())
+            (Instant::now() < until).then(|| tr!("core updated!".to_string(), "núcleo atualizado!".to_string()))
         } else {
             None
         };
@@ -617,7 +676,7 @@ fn draw_update_view(
         UPDATE_MARGIN,
         2,
         SETUP_TEXT,
-        &format!("atualização {tag}"),
+        &tr!(format!("update {tag}"), format!("atualização {tag}")),
     );
     // Changelog em texto — o body vem em markdown do GitHub; as marcas
     // (#, *, `) são ruído no fonte de pixel.
@@ -643,13 +702,13 @@ fn draw_update_view(
     // Enquanto baixa/aplica o botão dorme (dim, sem hit) — o status ocupa
     // o lugar. Aplicado, ele acorda verde como "reiniciar agora" (o clique
     // relança pelo que está no disco e encerra a sessão).
-    let can_update = !busy && !applied && !status.contains("baixado");
+    let can_update = !busy && !applied && !status.contains(tr!("downloaded", "baixado"));
     let label = if applied {
-        "reiniciar agora"
+        tr!("restart now", "reiniciar agora")
     } else if can_update {
-        "atualizar"
+        tr!("update", "atualizar")
     } else {
-        "atualizado"
+        tr!("updated", "atualizado")
     };
     let active = can_update || applied;
     if active {
@@ -686,12 +745,13 @@ fn draw_update_view(
         2,
         (SETUP_TEXT.0, SETUP_TEXT.1, SETUP_TEXT.2, 255),
     );
+    let back_label = tr!("back", "voltar");
     d.text(
-        voltar.0 + (voltar.2 as i32 - "voltar".chars().count() as i32 * 18) / 2,
+        voltar.0 + (voltar.2 as i32 - back_label.chars().count() as i32 * 18) / 2,
         voltar.1 + 12,
         2,
         SETUP_TEXT,
-        "voltar",
+        back_label,
     );
     (btn, voltar)
 }
@@ -725,18 +785,21 @@ fn draw_setup(
     let center_x = |s: &str, scale: u32| (w - s.chars().count() as i32 * CELL * scale as i32) / 2;
 
     d.text(
-        center_x("bem-vindo ao sixteen", 3),
+        center_x(tr!("welcome to SixteeN", "bem-vindo ao sixteen"), 3),
         h * 12 / 100,
         3,
         SETUP_TEXT,
-        "bem-vindo ao sixteen",
+        tr!("welcome to SixteeN", "bem-vindo ao sixteen"),
     );
     d.text(
-        center_x("para jogar, faltam dois downloads", 1),
+        center_x(
+            tr!("two downloads missing before you can play", "para jogar, faltam dois downloads"),
+            1,
+        ),
         h * 12 / 100 + 74,
         1,
         SETUP_DIM,
-        "para jogar, faltam dois downloads",
+        tr!("two downloads missing before you can play", "para jogar, faltam dois downloads"),
     );
 
     fn draw_button(d: &mut Screen, r: &RectT, label: &str, color: (u8, u8, u8)) {
@@ -769,23 +832,26 @@ fn draw_setup(
         core_r.1 + core_r.3 as i32 + 8,
         1,
         SETUP_DIM,
-        "necessário para rodar os jogos",
+        tr!("required to run the games", "necessário para rodar os jogos"),
     );
     d.text(
         dat_r.0 + 4,
         dat_r.1 + dat_r.3 as i32 + 8,
         1,
         SETUP_DIM,
-        "opcional: nomes canônicos, ano e editora dos jogos",
+        tr!(
+            "optional: games' canonical names, year and publisher",
+            "opcional: nomes canônicos, ano e editora dos jogos"
+        ),
     );
 
-    draw_button(d, &cont_r, "continuar", SETUP_TEXT);
+    draw_button(d, &cont_r, tr!("continue", "continuar"), SETUP_TEXT);
     d.text(
-        center_x("enter também continua", 1),
+        center_x(tr!("enter also continues", "enter também continua"), 1),
         cont_r.1 + cont_r.3 as i32 + 10,
         1,
         SETUP_DIM,
-        "enter também continua",
+        tr!("enter also continues", "enter também continua"),
     );
 }
 
@@ -806,16 +872,16 @@ pub fn capture_preview(
             draw_setup(
                 d,
                 if core_installed {
-                    "instalado"
+                    tr!("installed", "instalado")
                 } else {
-                    "baixar núcleo snes9x"
+                    tr!("download the snes9x core", "baixar núcleo snes9x")
                 },
                 core_installed,
                 false,
                 if dat_installed {
-                    "instalado"
+                    tr!("installed", "instalado")
                 } else {
-                    "baixar nointro.dat"
+                    tr!("download nointro.dat", "baixar nointro.dat")
                 },
                 dat_installed,
                 false,

@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use sixteen_platform::{Cabinet, MenuMode, MenuNav, Platform, Screen};
 
+#[allow(unused_imports)]
+use sixteen_platform::tr;
+
 use crate::dirs;
 
 /// URL do pacote de exemplo (`exemplo-platformer-example.zip`: o
@@ -87,7 +90,8 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
     let mut rx: Option<Receiver<InstallMsg>> = None;
     // Status line under the button — hint while idle, live progress while
     // downloading, outcome afterwards (kept until the next attempt).
-    let mut status = String::from("baixa um pacote com uma rom e os assets dela");
+    let mut status =
+        String::from(tr!("downloads a package with one game and its assets", "baixa um pacote com uma rom e os assets dela"));
     let mut status_color = DIM;
     let mut busy = false;
 
@@ -97,23 +101,32 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
                 Ok(InstallMsg::Progress { downloaded, total }) => {
                     let mb = downloaded as f64 / 1_048_576.0;
                     status = match total {
-                        Some(t) => format!("baixando... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0),
-                        None => format!("baixando... {mb:.1} MB"),
+                        Some(t) => tr!(
+                            format!("downloading... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0),
+                            format!("baixando... {mb:.1}/{:.1} MB", t as f64 / 1_048_576.0),
+                        ),
+                        None => tr!(
+                            format!("downloading... {mb:.1} MB"),
+                            format!("baixando... {mb:.1} MB"),
+                        ),
                     };
                 }
                 Ok(InstallMsg::Done(n)) => {
                     rx = None;
                     busy = false;
                     status_color = GREEN;
-                    status = format!(
-                        "instalado! {n} arquivos — clique atualizar na estante para ver o jogo"
+                    status = tr!(
+                        format!(
+                            "{n} files installed — click refresh on the shelf to see the game"
+                        ),
+                        format!("instalado! {n} arquivos — clique atualizar na estante para ver o jogo")
                     );
                 }
                 Ok(InstallMsg::Failed(e)) => {
                     rx = None;
                     busy = false;
                     status_color = (240, 120, 110);
-                    status = format!("falha: {e}");
+                    status = tr!(format!("failed: {e}"), format!("falha: {e}"));
                 }
                 Err(TryRecvError::Disconnected) => {
                     rx = None;
@@ -161,7 +174,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
             rx = Some(r);
             busy = true;
             status_color = DIM;
-            status = "baixando...".to_string();
+            status = tr!("downloading...".to_string(), "baixando...".to_string());
         }
 
         let status = status.clone();
@@ -170,7 +183,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
         let render = move |d: &mut Screen| {
             let (w, h) = d.size();
             let (ix, iy, iw, ih) = install_rect(w, h);
-            let label = "instalar assets de exemplo";
+            let label = tr!("install example assets", "instalar assets de exemplo");
             let color = if busy { DIM } else { TEXT };
             d.outline(ix, iy, iw, ih, 2, (color.0, color.1, color.2, 255));
             d.text(
@@ -197,7 +210,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
 
             let (bx, by, bw, bh) = voltar_rect(w, h);
             d.outline(bx, by, bw, bh, 2, (TEXT.0, TEXT.1, TEXT.2, 255));
-            let label = "voltar";
+            let label = tr!("back", "voltar");
             d.text(
                 bx + (bw as i32 - label.chars().count() as i32 * CELL * 2) / 2,
                 by + (bh as i32 - 40) / 2,
@@ -226,9 +239,11 @@ fn try_install(
     tx: &mpsc::Sender<InstallMsg>,
 ) -> std::result::Result<usize, String> {
     if url.is_empty() {
-        return Err(
-            "pacote de exemplo ainda sem URL — defina EXEMPLO_ZIP_URL em devmenu.rs".to_string(),
-        );
+        return Err(tr!(
+            "example package still has no URL — define EXEMPLO_ZIP_URL in devmenu.rs",
+            "pacote de exemplo ainda sem URL — defina EXEMPLO_ZIP_URL em devmenu.rs"
+        )
+        .to_string());
     }
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
@@ -291,7 +306,11 @@ fn install_bytes(
         installed += 1;
     }
     if installed == 0 {
-        return Err("o zip não tem roms/ nem assets/ — formato inesperado".to_string());
+        return Err(tr!(
+            "the zip has neither roms/ nor assets/ — unexpected layout",
+            "o zip não tem roms/ nem assets/ — formato inesperado"
+        )
+        .to_string());
     }
     Ok(installed)
 }
@@ -311,7 +330,7 @@ pub fn capture_preview(cab: &mut Cabinet, path: &std::path::Path) -> Result<()> 
             TEXT,
             label,
         );
-        let hint = "baixa um pacote com uma rom e os assets dela";
+        let hint = tr!("downloads a package with one game and its assets", "baixa um pacote com uma rom e os assets dela");
         d.text(
             (w as i32 - hint.chars().count() as i32 * CELL) / 2,
             iy + ih as i32 + 18,

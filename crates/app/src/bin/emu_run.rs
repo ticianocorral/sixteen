@@ -250,7 +250,7 @@ fn main() -> Result<()> {
         debug_cart_anim: args.debug_cart_anim,
     };
     // Standalone: "back" and "close" both just end the process.
-    run_game(&mut platform, &mut cabinet, &spec, &cfg)?;
+    run_game(&mut platform, &mut cabinet, &spec, &cfg, None)?;
     log::info!("bye");
     Ok(())
 }

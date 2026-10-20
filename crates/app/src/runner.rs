@@ -56,8 +56,19 @@ pub enum GameExit {
 }
 
 /// Everything [`run_game`] needs for one session.
-pub struct GameSpec {
-    pub core: PathBuf,
+/// A sessão do Modo Locadora embutida numa partida (docs/design-modo-
+/// locadora.md §4): quem paga, quem debita e o que corta a luz. `None` =
+/// free play, o jogo de sempre sem economia nenhuma.
+pub struct LocaSession<'a> {
+    pub loc: &'a mut sixteen_locadora::Persisted,
+    pub prices: &'a sixteen_locadora::Prices,
+    pub currency: &'a str,
+    pub mode: sixteen_locadora::RentMode,
+    /// O cartucho da sessão é o "em serviço" (só ele fatura salário).
+    pub is_service_cart: bool,
+}
+
+pub struct GameSpec {    pub core: PathBuf,
     pub rom: PathBuf,
     pub system_dir: PathBuf,
     pub save_dir: PathBuf,
@@ -1069,6 +1080,7 @@ pub fn run_game(
     cab: &mut Cabinet,
     spec: &GameSpec,
     cfg: &Config,
+    mut loca: Option<&mut LocaSession<'_>>,
 ) -> Result<GameExit> {
     // --- load + identify -------------------------------------------------
     let mut core =
@@ -1443,6 +1455,10 @@ pub fn run_game(
     let mut powered_elapsed = Duration::ZERO;
     let mut powered_since = powered.then(Instant::now);
     let mut static_level = OFF_STATIC_LEVEL;
+    // Locadora: último milissegundo já faturado e ms de freguesia da sessão
+    // de hora avulsa (só cresce com o console ligado).
+    let mut billed_ms: i64 = 0;
+    let mut hourly_ms: i64 = 0;
     // Drives the one deliberate keyboard-typing exception (plan revision) —
     // the free-text note, a slot's caption, or a just-captured print's name
     // (see `NoteEdit`).
@@ -1668,6 +1684,7 @@ pub fn run_game(
                             PanelButton::Insert
                             | PanelButton::Settings
                             | PanelButton::Dev
+                            | PanelButton::Locadora
                             | PanelButton::CoreDownload
                             | PanelButton::PauseContinue
                             | PanelButton::PauseNotePrev
@@ -2212,6 +2229,53 @@ pub fn run_game(
                     }
                 };
                 let aspect = core.av_info().aspect_ratio;
+                // Locadora (§4): o bilhete corre por segundo com o console
+                // ligado — salário do em serviço, freguesia da avulsa e a
+                // devolução automática do ticket atrasado (+24h, §6).
+                let real_ms = live_session_time(powered_elapsed, powered_since).as_millis() as i64;
+                if real_ms - billed_ms >= 1000 {
+                    if let Some(loca) = loca.as_deref_mut() {
+                        match loca.mode {
+                            sixteen_locadora::RentMode::Service => {
+                                if loca.is_service_cart {
+                                    loca.loc.credit_service_ms_at(
+                                        real_ms - billed_ms,
+                                        loca.prices,
+                                        sixteen_locadora::rules::now_unix(),
+                                    );
+                                }
+                            }
+                            sixteen_locadora::RentMode::Hourly => {
+                                hourly_ms += real_ms - billed_ms;
+                                if loca.loc.hourly_blackout_at(hourly_ms, loca.prices) {
+                                    loca.loc.end_hourly(hourly_ms, loca.prices);
+                                    loca.loc.stats.blackout_recoveries += 1;
+                                    cab.push_osd(
+                                        &["cortou a grana no meio da partida — de volta ao balcão"],
+                                        None,
+                                        std::time::Duration::from_secs(5),
+                                    );
+                                    let burst = power_off_burst(plat, cab);
+                                    break 'run GameExit::Ejected { static_level: burst };
+                                }
+                            }
+                            sixteen_locadora::RentMode::Ticket => {
+                                if let sixteen_locadora::rules::TicketEvent::AutoReturned { .. } =
+                                    loca.loc.enforce_ticket()
+                                {
+                                    cab.push_osd(
+                                        &["a locadora levou o cartucho de volta — devolução automática"],
+                                        None,
+                                        std::time::Duration::from_secs(5),
+                                    );
+                                    let burst = power_off_burst(plat, cab);
+                                    break 'run GameExit::Ejected { static_level: burst };
+                                }
+                            }
+                        }
+                    }
+                    billed_ms = real_ms;
+                }
                 cab.set_session_time(live_session_time(powered_elapsed, powered_since));
                 cab.present_frame(&fref, aspect);
 
@@ -2281,6 +2345,16 @@ pub fn run_game(
         powered_elapsed += t.elapsed();
     }
     add_playtime(&spec.save_dir, &title, powered_elapsed.as_secs());
+
+    // Locadora: fecha a freguesia da hora avulsa com o total do console
+    // ligado (a devolução automática do ticket já correu por segundo; o
+    // salário foi creditado por segundo também). Persistência fica com o
+    // chamador — ele tem o caminho e salva a cada volta de tela.
+    if let Some(loca) = loca.as_deref_mut() {
+        if loca.mode == sixteen_locadora::RentMode::Hourly {
+            loca.loc.end_hourly(hourly_ms, loca.prices);
+        }
+    }
 
     if let Some(ra) = &mut ra_session {
         ra.save_progress();

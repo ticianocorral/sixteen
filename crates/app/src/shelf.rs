@@ -474,7 +474,7 @@ fn backcover_id(sha1: &str) -> u64 {
 /// If the exact stem misses, the trailing "(...)" tags are peeled one group at
 /// a time ("X (USA) (Rev 1)" -> "X (USA)" -> "X"), so a single base-named art
 /// file serves every variant ROM of the same game.
-fn find_local_art(dir: &Path, rom_path: &str) -> Option<PathBuf> {
+pub fn find_local_art(dir: &Path, rom_path: &str) -> Option<PathBuf> {
     let stem = Path::new(rom_path).file_stem()?.to_str()?;
     let mut candidates = vec![stem.to_string()];
     let mut cur = stem.to_string();
@@ -2934,7 +2934,7 @@ fn decode_art(path: &Path) -> Result<(u32, u32, Vec<u8>)> {
 
 /// Same decode, with an explicit size cap — the back cover's zoomed view
 /// re-decodes at full resolution so the enlargement stays crisp.
-fn decode_art_scaled(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>)> {
+pub(crate) fn decode_art_scaled(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>)> {
     let img = image::open(path)?.thumbnail(max, max).to_rgba8();
     let (w, h) = img.dimensions();
     Ok((w, h, img.into_raw()))

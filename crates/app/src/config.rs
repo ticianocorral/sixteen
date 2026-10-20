@@ -51,6 +51,15 @@ pub struct Config {
     /// keyboard — clones and native-driver paths can land a press in the
     /// wrong slot, so the layout is the user's to fix.
     pub padmap: PadMap,
+    /// Modo Locadora (docs/design-modo-locadora.md §4/§17): preços em
+    /// centavos, moeda, mínimo de jogos e o dobradouro de fim de semana.
+    pub locadora_needed: u32,
+    pub locadora_currency: String,
+    pub locadora_salary_cents: i64,
+    pub locadora_hourly_cents: i64,
+    pub locadora_ticket_cents: i64,
+    pub locadora_purchase_cents: i64,
+    pub locadora_weekend_double: bool,
     /// Where it was read from (or freshly written), for logging and for
     /// `save()`.
     pub source: Option<PathBuf>,
@@ -76,6 +85,22 @@ struct Raw {
     keyboard: BTreeMap<String, String>,
     #[serde(default)]
     gamepad: BTreeMap<String, String>,
+    #[serde(default)]
+    locadora: LocadoraRaw,
+}
+
+/// Seção `[locadora]` do cfg — tudo opcional, defaults do design (§4: salário
+/// 5,00/h; avulsa 8,00/h; ticket 12; compra 60; §17: dobradouro de fim de
+/// semana ligado; §2: mínimo de 3 jogos).
+#[derive(Deserialize, Default)]
+struct LocadoraRaw {
+    needed: Option<u32>,
+    currency: Option<String>,
+    salary_cents: Option<i64>,
+    hourly_cents: Option<i64>,
+    ticket_cents: Option<i64>,
+    purchase_cents: Option<i64>,
+    weekend_double: Option<bool>,
 }
 
 impl Config {
@@ -101,6 +126,13 @@ impl Config {
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
+            locadora_needed: 3,
+            locadora_currency: "R$".into(),
+            locadora_salary_cents: 500,
+            locadora_hourly_cents: 800,
+            locadora_ticket_cents: 1200,
+            locadora_purchase_cents: 6000,
+            locadora_weekend_double: true,
             source: path.clone(),
         };
 
@@ -153,6 +185,30 @@ impl Config {
         // respeita um que tenha sido colado à mão no arquivo.
         if let Some(c) = raw.ra_connect {
             self.ra_connect = (!c.is_empty()).then_some(c);
+        }
+        let l = &raw.locadora;
+        if let Some(v) = l.needed {
+            self.locadora_needed = v;
+        }
+        if let Some(v) = &l.currency {
+            if !v.trim().is_empty() {
+                self.locadora_currency = v.clone();
+            }
+        }
+        if let Some(v) = l.salary_cents {
+            self.locadora_salary_cents = v;
+        }
+        if let Some(v) = l.hourly_cents {
+            self.locadora_hourly_cents = v;
+        }
+        if let Some(v) = l.ticket_cents {
+            self.locadora_ticket_cents = v;
+        }
+        if let Some(v) = l.purchase_cents {
+            self.locadora_purchase_cents = v;
+        }
+        if let Some(v) = l.weekend_double {
+            self.locadora_weekend_double = v;
         }
         for (action, key) in &raw.keyboard {
             let Ok(b) = action.parse::<PadButton>() else {
@@ -218,6 +274,11 @@ impl Config {
         if let Some(connect) = &self.ra_connect {
             s.push_str(&format!("ra_connect = {connect:?}\n\n"));
         }
+        s.push_str("# Modo Locadora (docs/design-modo-locadora.md) — dinheiro fictício.\n");
+        s.push_str(&format!("[locadora]\nneeded = {}\ncurrency = {:?}\nsalary_cents = {}\nhourly_cents = {}\nticket_cents = {}\npurchase_cents = {}\nweekend_double = {}\n\n",
+            self.locadora_needed, self.locadora_currency, self.locadora_salary_cents,
+            self.locadora_hourly_cents, self.locadora_ticket_cents,
+            self.locadora_purchase_cents, self.locadora_weekend_double));
         s.push_str("[keyboard]\n");
         for (action, key) in self.keymap.describe() {
             s.push_str(&format!("{action} = {key:?}\n"));
@@ -258,6 +319,13 @@ mod tests {
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
+            locadora_needed: 3,
+            locadora_currency: "R$".into(),
+            locadora_salary_cents: 500,
+            locadora_hourly_cents: 800,
+            locadora_ticket_cents: 1200,
+            locadora_purchase_cents: 6000,
+            locadora_weekend_double: true,
             source: None,
         }
     }

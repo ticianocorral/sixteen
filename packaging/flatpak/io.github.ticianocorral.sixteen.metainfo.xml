@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Metainfo do SixteeN para o Flathub/AppStream. O id tem que bater com o
+     do manifest (io.github.ticianocorral.sixteen). Inglês como base (sem
+     xml:lang) e tradução pt-BR em cada elemento traduzível. -->
+<component type="desktop-application">
+  <id>io.github.ticianocorral.sixteen</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.ticianocorral">
+    <name translatable="no">ticianocorral</name>
+  </developer>
+  <name>SixteeN</name>
+  <summary>A whole SNES console on your TV — cabinet, CRT tube and cartridge</summary>
+  <summary xml:lang="pt-BR">Um console de SNES inteiro na sua TV — gabinete, tubo CRT e cartucho</summary>
+  <description>
+    <p>
+      SixteeN is a free, personal and non-commercial SNES emulator that
+      presents itself as a real console: instead of a bare window with a
+      game, you see the cabinet, the CRT tube with RF static on channel 3,
+      the game's side panel (logo label, cartridge in the slot, purple
+      Power and Reset switches) and a game shelf with 3D boxes.
+    </p>
+    <p xml:lang="pt-BR">
+      SixteeN é um emulador de Super Nintendo pessoal, livre e sem fins
+      comerciais que se apresenta como um console de verdade: em vez de só
+      uma janela com o jogo, você vê o gabinete, o tubo CRT com a estática
+      do RF no CH 3, o painel lateral do jogo (logo, cartucho no slot,
+      chaves Power e Reset roxas) e uma estante de games com capas 3D.
+    </p>
+    <p>
+      Games are managed like cartridges: inserting a game animates the
+      cartridge into the slot, and the console only boots when you flip
+      Power. Includes save states, a pause notebook with curated cheat
+      checklists and screenshot slots, RetroAchievements, an NTSC RF
+      filter and per-game play-time tracking. A database built into the
+      binary (4,268 SNES titles, derived from No-Intro, TOSEC, Wikidata
+      and IGDB) shows the canonical name, year, publisher, ratings and
+      HowLongToBeat times offline — no DAT files, no network.
+    </p>
+    <p xml:lang="pt-BR">
+      Os jogos são gerenciados como cartuchos: escolher um jogo anima o
+      cartucho entrando no slot, e o console só liga quando você aciona o
+      Power. Inclui save states, livro de pausa com cheats curados e slots
+      de captura de tela, RetroAchievements, filtro NTSC RF e tempo de
+      jogo por jogo. Um banco de dados embutido no binário (4.268 títulos
+      de SNES, derivado de No-Intro, TOSEC, Wikidata e IGDB) mostra nome
+      canônico, ano, editora, notas e os tempos do HowLongToBeat offline —
+      sem DAT e sem rede.
+    </p>
+    <p>
+      The snes9x libretro core is not bundled: the app downloads it on
+      first run from the official libretro buildbot, like any libretro
+      frontend. You provide your own legally dumped ROMs — place them in
+      the roms/ folder and download the core from the Settings screen.
+    </p>
+    <p xml:lang="pt-BR">
+      O núcleo snes9x (libretro) não vem embutido: o app baixa na primeira
+      execução do buildbot oficial do libretro, como o core de qualquer
+      front-end libretro. Você fornece as suas ROMs — coloque-as na pasta
+      roms/ e baixe o core pela tela de Configurações.
+    </p>
+    <p>
+      Note: the user interface is currently available in Portuguese
+      (Brazil) only.
+    </p>
+    <p xml:lang="pt-BR">
+      Nota: a interface do app está disponível, por enquanto, apenas em
+      português do Brasil.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.ticianocorral.sixteen.desktop</launchable>
+  <icon type="stock">io.github.ticianocorral.sixteen</icon>
+  <url type="homepage">https://github.com/ticianocorral/sixteen</url>
+  <url type="vcs-browser">https://github.com/ticianocorral/sixteen</url>
+  <url type="bugtracker">https://github.com/ticianocorral/sixteen/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ticianocorral/sixteen/v1.3.1/site/assets/screenshot.jpg</image>
+      <caption>A game running on the CRT tube, with the console panel beside it</caption>
+      <caption xml:lang="pt-BR">Um jogo rodando no tubo CRT, com o painel do console ao lado</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ticianocorral/sixteen/v1.3.1/site/assets/estante.jpg</image>
+      <caption>The game shelf with 3D boxes and wooden shelves</caption>
+      <caption xml:lang="pt-BR">A estante de games com capas 3D e prateleiras de madeira</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ticianocorral/sixteen/v1.3.1/site/assets/inicial.jpg</image>
+      <caption>Idle screen: the TV off the air on channel 3</caption>
+      <caption xml:lang="pt-BR">Tela inicial: a TV fora do ar no CH 3</caption>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#583a78</color>
+    <color type="primary" scheme_preference="dark">#4c2873</color>
+  </branding>
+  <content_rating type="oars-1.1" />
+  <requires>
+    <control>pointing</control>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>gamepad</control>
+  </supports>
+  <provides>
+    <binary>sixteen</binary>
+  </provides>
+  <categories>
+    <category>Game</category>
+    <category>Emulator</category>
+  </categories>
+  <releases>
+    <release version="1.3.1" date="2026-10-12">
+      <description>
+        <p>Removed the run-ahead option: the game always runs at full
+        speed now, with the lowest possible CPU and energy cost.</p>
+        <p xml:lang="pt-BR">Removido o run-ahead: o jogo roda sempre à
+        velocidade cheia, com o menor gasto de CPU e energia possível.</p>
+      </description>
+    </release>
+    <release version="1.3.0" date="2026-10-11">
+      <description>
+        <p>Unified game info built into the binary, offline: canonical
+        name, year, publisher, region, IGDB and critic ratings and
+        HowLongToBeat times for 4,268 SNES titles — no DAT files and no
+        network. New wooden shelf with LED strips in the all-games grid
+        and a play button on box hover.</p>
+        <p xml:lang="pt-BR">Infos unificadas embutidas no binário, offline:
+        nome canônico, ano, editora, região, notas da IGDB e de crítica e
+        os tempos do HowLongToBeat para 4.268 títulos de SNES — sem DAT e
+        sem rede. Estante de madeira nova com fita LED na grade de jogos e
+        botão de play no hover da capa.</p>
+      </description>
+    </release>
+    <release version="1.2.0" date="2026-10-08">
+      <description>
+        <p>Idle screen without the console face — the cabinet now lives
+        only in the game screen. Windows build no longer opens a terminal
+        window, and transparent 3D box rendering got fixed.</p>
+        <p xml:lang="pt-BR">Tela inicial sem o console — a face do aparelho
+        vive só na tela de jogo. O build do Windows não abre mais janela de
+        terminal, e o render da capa 3D transparente foi corrigido.</p>
+      </description>
+    </release>
+    <release version="1.1.7" date="2026-10-07">
+      <description>
+        <p>Brand override files from the old SNES Xperience era
+        (console.png/console-tag.png) no longer shadow the built-in logo
+        forever — on first run they are renamed to .bak.</p>
+        <p xml:lang="pt-BR">Overrides antigos da marca (console.png/
+        console-tag.png da era SNES Xperience) não substituem mais a logo
+        embutida para sempre — na primeira execução viram .bak.</p>
+      </description>
+    </release>
+    <release version="1.1.6" date="2026-10-07">
+      <description>
+        <p>The app is now called SixteeN (formerly SNES Xperience), with a
+        new logo and automatic migration of the old data folder on first
+        run. New Flatpak packaging for Linux.</p>
+        <p xml:lang="pt-BR">O app agora se chama SixteeN (era SNES
+        Xperience), com logo nova e migração automática da pasta de dados
+        antiga no primeiro arranque. Empacotamento Flatpak novo para
+        Linux.</p>
+      </description>
+    </release>
+  </releases>
+</component>
