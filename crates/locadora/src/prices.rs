@@ -31,10 +31,10 @@ impl Prices {
         Money::cents_from_ms(ms, self.salary_per_hour)
     }
 
-    /// Salário com regra de fim de semana (§17): dia do unix, 5=sáb, 6=dom.
+    /// Salário com regra de fim de semana (§17): dia do unix, 0=dom, 6=sáb.
     pub fn salary_rate_at(&self, unix: i64) -> i64 {
-        let day = unix.div_euclid(86_400).rem_euclid(7); // 0 = quinta (1970-01-01)
-        if self.weekend_double && (day == 5 || day == 6) {
+        let day = (unix.div_euclid(86_400) + 4).rem_euclid(7); // 1970-01-01 = quinta (4)
+        if self.weekend_double && (day == 0 || day == 6) {
             self.salary_per_hour * 2
         } else {
             self.salary_per_hour
@@ -79,10 +79,10 @@ mod tests {
     #[test]
     fn weekend_pays_double_on_saturday_and_sunday() {
         let p = Prices::default();
-        // 1970-01-01 foi quinta (day 0). Sábado = day 5 → unix 5*86400 - 1.
-        let saturday_noon = 5 * 86_400; // 1970-01-03 00:00 UTC
-        let sunday_noon = 6 * 86_400;
-        let monday_noon = 7 * 86_400;
+        // 1970-01-01 foi quinta. Sábado = 1970-01-03 (2 dias depois).
+        let saturday_noon = 2 * 86_400;
+        let sunday_noon = 3 * 86_400;
+        let monday_noon = 5 * 86_400; // 1970-01-05
         assert_eq!(p.salary_rate_at(saturday_noon), 1000);
         assert_eq!(p.salary_rate_at(sunday_noon), 1000);
         assert_eq!(p.salary_rate_at(monday_noon), 500);

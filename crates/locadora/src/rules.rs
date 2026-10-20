@@ -435,8 +435,8 @@ mod tests {
         let p = Prices::default();
         assert_eq!(s.credit_service_ms(60 * 60_000, &p), 500);
         assert_eq!(s.credit_service_ms(30_000, &p), 4);
-        assert_eq!(s.credit_service_ms(30_000, &p), 0); // pendência já paga
-        assert_eq!(s.wallet_cents, 504);
+        assert_eq!(s.credit_service_ms(30_000, &p), 4); // pendência de 1.2s + 30s
+        assert_eq!(s.wallet_cents, 508);
         assert_eq!(s.stats.ms_served, 61 * 60_000);
     }
 
@@ -535,7 +535,8 @@ mod tests {
         assert!(s.return_ticket());
         assert_eq!(s.stats.returns_late, 1);
         assert_eq!(s.stats.on_time_streak, 0);
-        assert_eq!(s.wallet_cents, 5000 + 1000 - 300); // multa 30% de 1000
+        // 5000 - 1200 (ticket) + 1000 (ganhos) - 300 (multa 30%)
+        assert_eq!(s.wallet_cents, 4500);
     }
 
     #[test]
@@ -551,7 +552,7 @@ mod tests {
         assert_eq!(s.enforce_ticket(), TicketEvent::AutoReturned { fined: 150 });
         assert!(s.active_ticket.is_none());
         assert_eq!(s.stats.returns_late, 1);
-        assert_eq!(s.wallet_cents, 5000 + 500 - 150);
+        assert_eq!(s.wallet_cents, 5000 - 1200 + 500 - 150); // 4150
     }
 
     #[test]
@@ -564,7 +565,7 @@ mod tests {
         s.set_clock_for_test(start + 100 * 3600);
         s.enforce_ticket();
         assert!(s.wallet_cents >= 0);
-        assert_eq!(s.wallet_cents, 6000 + 5000 - 1500);
+        assert_eq!(s.wallet_cents, 6000 - 1200 + 5000 - 1500); // 8300
     }
 
     #[test]
@@ -604,8 +605,9 @@ mod tests {
         assert!(s.apply_intro(&trio, "c").is_ok());
         assert!(s.intro_done && s.owns("c"));
         assert_eq!(s.service_game.as_deref(), Some("c"));
-        assert_eq!(s.apply_intro(&trio, "a"), Err("sorteio único da vida"));
-        assert_eq!(s.apply_intro(&trio, "zzz"), Err("fora do trio"));
+        assert_eq!(s.apply_intro(&trio, "zzz"), Err("sorteio único da vida"));
+        let mut s2 = Persisted::default();
+        assert_eq!(s2.apply_intro(&trio, "zzz"), Err("fora do trio"));
     }
 
     #[test]
@@ -654,11 +656,11 @@ mod tests {
     fn weekend_pays_double_salary() {
         let mut s = Persisted::default();
         let p = Prices::default();
-        // 2026-10-24 é sábado: 12:00 UTC → unix 1792248000
-        assert_eq!(p.salary_rate_at(1_792_248_000), 1000);
-        // 2026-10-19 é segunda: 12:00 UTC → unix 1791816000
-        assert_eq!(p.salary_rate_at(1_791_816_000), 500);
-        s.credit_service_ms_at(60 * 60_000, &p, 1_792_248_000);
+        // 2026-10-24 é sábado: 12:00 UTC → unix 1792843200
+        assert_eq!(p.salary_rate_at(1_792_843_200), 1000);
+        // 2026-10-19 é segunda: 12:00 UTC → unix 1792411200
+        assert_eq!(p.salary_rate_at(1_792_411_200), 500);
+        s.credit_service_ms_at(60 * 60_000, &p, 1_792_843_200);
         assert_eq!(s.wallet_cents, 1000); // 1h de sábado
     }
 
