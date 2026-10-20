@@ -124,8 +124,9 @@ pub fn run(
         if m.quit {
             return Ok(Pick::Quit);
         }
-        let click = m.click.map(|(x, y)| cab.window_to_output(x, y));
-        if let Some((ox, oy)) = click {
+        // Fechar/minimizar moram no espaço de SAÍDA (fora do tubo).
+        let click_out = m.click.map(|(x, y)| cab.window_to_output(x, y));
+        if let Some((ox, oy)) = click_out {
             if cab.hit_close_button(ox, oy) {
                 return Ok(Pick::Quit);
             }
@@ -133,7 +134,13 @@ pub fn run(
                 cab.minimize();
             }
         }
-        let pointer = m.pointer.map(|(x, y)| cab.window_to_output(x, y));
+        // O balcão é desenhado no espaço do TUBO (o buffer do CRT) — cliques
+        // e hover passam por hit_screen_point, igual ao zoom da estante.
+        let click = click_out.and_then(|(ox, oy)| cab.hit_screen_point(ox, oy));
+        let pointer = m.pointer.and_then(|(x, y)| {
+            let (ox, oy) = cab.window_to_output(x, y);
+            cab.hit_screen_point(ox, oy)
+        });
         let nav: Vec<MenuNav> = m.nav.clone();
 
         // Cerimônia de compra ativa: o mundo espera (§7).
