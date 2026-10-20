@@ -31,6 +31,8 @@ pub enum Pick {
 pub struct LocaDebug {
     pub shot: PathBuf,
     pub frame: u64,
+    /// Captura a gôndola da loja em vez do balcão.
+    pub loja: bool,
 }
 
 type RectT = (i32, i32, u32, u32);
@@ -354,7 +356,12 @@ pub fn run(
             let i = art_cursor % entries.len();
             art_cursor += 1;
             let e = &entries[i];
-            if art_tried.insert(e.rom.sha1.clone()) {
+            let owned = loc.owns(&e.rom.sha1);
+            // Acervo da locadora vira cartucho ensacado; coleção e loja usam
+            // a capa da caixa.
+            if !owned && art_tried.insert(format!("c:{}", e.rom.sha1)) {
+                ensure_art_at(cab, art_cart_id(&e.rom.sha1), "cartridge", &e.rom.path);
+            } else if art_tried.insert(format!("v:{}", e.rom.sha1)) {
                 ensure_cover(cab, &e.rom.path, &e.rom.sha1);
             }
         }
@@ -389,6 +396,9 @@ pub fn run(
                     view = View::Balcao;
                     #[allow(unused_assignments)]
                     {}
+                }
+                if dbg.loja {
+                    view = View::Loja;
                 }
                 let mut ui = Ui {
                     loc: &*loc,
@@ -554,6 +564,21 @@ fn draw_ui(
                 *scroll = sel_row + 1 - vis_rows;
             }
             let first = *scroll * cols_now;
+            // A prateleira em si: madeira no balcão, gôndola clara na loja.
+            for row_i in 0..vis_rows {
+                let by = list_top + row_i as i32 * (th + gap) + th;
+                if by > h - 90 {
+                    break;
+                }
+                if ui.view == View::Loja {
+                    d.fill(pad, by, (w - pad * 2) as u32, 12, (196, 198, 204, 255));
+                    d.fill(pad, by + 12, (w - pad * 2) as u32, 3, (140, 142, 148, 255));
+                } else {
+                    d.fill(pad, by, (w - pad * 2) as u32, 10, (96, 64, 38, 255));
+                    d.fill(pad, by + 10, (w - pad * 2) as u32, 3, (58, 38, 22, 255));
+                }
+            }
+
             for (k, e) in ui.entries.iter().enumerate().skip(first).take(vis_rows * cols_now) {
                 let col = (k % cols_now) as i32;
                 let row = (k / cols_now - *scroll) as i32;
@@ -567,37 +592,59 @@ fn draw_ui(
                 let owned = ui.loc.owns(&e.rom.sha1);
                 let is_service = ui.loc.service_game.as_deref() == Some(e.rom.sha1.as_str());
                 let is_poster = e.rom.sha1 == ui.poster;
+                let hov = ui.pointer.is_some_and(|(px, py)| hit(&r, px, py));
+                let tag = if ui.view == View::Loja {
+                    if owned { "SUA" } else { "VENDA" }.to_string()
+                } else {
+                    row_tag(ui.loc, e)
+                };
 
-                d.fill(r.0, r.1, r.2, r.3, PANEL);
-                if owned {
-                    // Caixa nova: contorno vivo, sem desgaste.
-                    d.outline(r.0, r.1, r.2, r.3, if sel { 3 } else { 2 }, (ACCENT.0, ACCENT.1, ACCENT.2, 255));
+                if ui.view == View::Loja {
+                    // GÔNDOLA: caixa plástica brilhando, etiqueta de preço.
+                    let price = if owned {
+                        None
+                    } else {
+                        Some(Money(ui.prices.purchase).fmt(ui.currency))
+                    };
+                    draw_store_box(
+                        d,
+                        r,
+                        art_id(&e.rom.sha1),
+                        &e.title(),
+                        price.as_deref(),
+                        owned,
+                        sel || hov,
+                    );
+                } else if owned {
+                    // Sua caixa nova na estante da coleção ( §7): capa lisa.
+                    draw_store_box(d, r, art_id(&e.rom.sha1), &e.title(), None, true, sel || hov);
                 } else {
-                    // Exemplar da locadora: cicatriz por uso (§17).
-                    d.fill(r.0, r.1, r.2, r.3, worn_alpha(ui.loc, &e.rom.sha1));
-                    d.outline(r.0, r.1, r.2, r.3, if sel { 3 } else { 1 }, if sel { EDGE_HOT } else { EDGE });
+                    // ACERVO DA LOCADORA: cartucho no saco plástico com
+                    // etiqueta de papel datilografada (§7).
+                    draw_rental_sleeve(
+                        d,
+                        r,
+                        art_cart_id(&e.rom.sha1),
+                        &e.title(),
+                        worn_alpha(ui.loc, &e.rom.sha1),
+                        &format!(
+                            "#{:03}",
+                            ui.loc.rentals_per_game.get(&e.rom.sha1).copied().unwrap_or(0) + 1
+                        ),
+                        is_poster,
+                        sel || hov,
+                    );
                 }
-                if is_poster && !owned {
-                    d.fill(r.0, r.1, r.2, 22, (46, 24, 20, 255));
-                    d.text(r.0 + 8, r.1 + 5, 1, GOLD, "CARTAZ DA SEMANA");
-                }
-                let cover = art_id(&e.rom.sha1);
-                if d.has_image(cover) {
-                    d.image_fit(cover, r.0 + 10, r.1 + 10 + if is_poster && !owned { 20 } else { 0 }, r.2 - 20, r.3 - 52 - if is_poster && !owned { 20 } else { 0 });
-                } else {
-                    d.text_wrapped(r.0 + 12, r.1 + 14, (r.2 as i32 - 24) as u32, 1, if sel { TEXT } else { DIM }, &e.title());
-                }
-                // Faixa inferior: título curto à esquerda, estado à direita.
-                d.fill(r.0, r.1 + r.3 as i32 - 34, r.2, 34, (12, 9, 11, 220));
-                let tag = row_tag(ui.loc, e);
-                let tag_w = tag.len() as i32 * GLYPH;
-                let title_max = ((r.2 as i32 - 20 - tag_w - 12) / GLYPH).max(6);
-                d.text(r.0 + 10, r.1 + r.3 as i32 - 26, 1, if sel { TEXT } else { DIM }, &short_title(&e.title(), title_max));
-                d.text(r.0 + r.2 as i32 - tag_w - 10, r.1 + r.3 as i32 - 26, 1, if sel { GOLD } else { DIM }, &tag);
                 if is_service {
                     d.fill(r.0, r.1, r.2, 20, (40, 28, 14, 235));
                     d.text(r.0 + 10, r.1 + 4, 1, GOLD, "EM SERVIÇO — paga por hora");
                 }
+                // Faixa inferior: título à esquerda, estado à direita.
+                d.fill(r.0, r.1 + r.3 as i32 - 24, r.2, 24, (12, 9, 11, 220));
+                let tag_w = tag.len() as i32 * GLYPH;
+                let title_max = ((r.2 as i32 - 20 - tag_w - 12) / GLYPH).max(6);
+                d.text(r.0 + 10, r.1 + r.3 as i32 - 19, 1, if sel { TEXT } else { DIM }, &short_title(&e.title(), title_max));
+                d.text(r.0 + r.2 as i32 - tag_w - 10, r.1 + r.3 as i32 - 19, 1, if sel { GOLD } else { DIM }, &tag);
                 rows.push((k, r));
             }
 
@@ -1064,9 +1111,112 @@ fn has_manual(rom_path: &str) -> bool {
     manual_pages(rom_path).is_some_and(|p| !p.is_empty())
 }
 
+/// O exemplar do acervo: cartucho dentro do **saco plástico** de locadora,
+/// com aba de pendurar e etiqueta de papel datilografada (§7). O desgaste
+/// vem do cicatriz (`worn`) e o exemplar em cartaz ganha selo dourado.
+#[allow(clippy::too_many_arguments)]
+fn draw_rental_sleeve(
+    d: &mut sixteen_platform::Screen,
+    r: (i32, i32, u32, u32),
+    cart: u64,
+    title: &str,
+    worn: (u8, u8, u8, u8),
+    exemplar: &str,
+    is_poster: bool,
+    hot: bool,
+) {
+    let (x, y, w, h) = (r.0, r.1, r.2 as i32, r.3 as i32);
+    // O saco: cinza translúcido, cantos quadrados, costura embaixo.
+    d.fill(x, y, w as u32, h as u32, (128, 134, 142, 60));
+    d.outline(x, y, w as u32, h as u32, 1, (170, 178, 188, 90));
+    d.fill(x + 6, y + h - 8, w as u32 - 12, 2, (190, 196, 204, 70));
+    // Aba de pendurar no topo, com o furinho redondo (fill escuro).
+    let tab_w = 56i32;
+    let tab = (x + (w - tab_w) / 2, y - 8, tab_w as u32, 12);
+    d.fill(tab.0, tab.1, tab.2, tab.3, (150, 156, 164, 80));
+    d.outline(tab.0, tab.1, tab.2, tab.3, 1, (190, 196, 204, 90));
+    d.fill(x + w / 2 - 5, y - 5, 10, 6, (16, 13, 15, 255));
+    // O cartucho dentro (arte do usuário) com a cicatriz por cima; sem
+    // arte, um cartucho cinza genérico pra caixa nunca ficar vazia.
+    let inner = (x + 14, y + 16, w - 28, h - 52);
+    if d.has_image(cart) {
+        d.image_fit(cart, inner.0, inner.1, inner.2 as u32, inner.3 as u32);
+    } else {
+        d.fill(inner.0, inner.1, inner.2 as u32, inner.3 as u32, (52, 48, 46, 255));
+        d.fill(inner.0 + 8, inner.1 + 10, inner.2 as u32 - 16, inner.3 as u32 - 24, (72, 66, 62, 255));
+    }
+    d.fill(inner.0, inner.1, inner.2 as u32, inner.3 as u32, worn);
+    // Etiqueta de papel datilografada atravessando o saco.
+    let ly = y + h - 58;
+    d.fill(x + 6, ly, w as u32 - 12, 44, (226, 216, 190, 240));
+    d.outline(x + 6, ly, w as u32 - 12, 44, 1, (120, 104, 78, 255));
+    d.text(x + 12, ly + 5, 1, (60, 44, 28), &short_title(title, (w as i32 - 34) / GLYPH));
+    d.text(x + 12, ly + 19, 1, (120, 60, 40), "PROPRIEDADE DA LOCADORA");
+    d.text(x + 12, ly + 32, 1, (90, 76, 54), &format!("{exemplar} · NÃO DOBRAR"));
+    // Selo do cartaz da semana no canto do saco.
+    if is_poster {
+        d.fill(x + w - 64, y + 8, 58, 18, (46, 24, 20, 235));
+        d.text(x + w - 58, y + 12, 1, GOLD, "CARTAZ 50%");
+    }
+    if hot {
+        d.outline(x - 2, y - 2, w as u32 + 4, h as u32 + 4, 2, EDGE_HOT);
+    }
+}
+
+/// A caixa de verdade (§7): moldura branca de game, capa, **plástico** por
+/// cima (faixa diagonal de brilho) e etiqueta de preço pendurada — a loja.
+#[allow(clippy::too_many_arguments)]
+fn draw_store_box(
+    d: &mut sixteen_platform::Screen,
+    r: (i32, i32, u32, u32),
+    cover: u64,
+    title: &str,
+    price: Option<&str>,
+    owned: bool,
+    hot: bool,
+) {
+    let (x, y, w, h) = (r.0, r.1, r.2 as i32, r.3 as i32);
+    // Caixa: face branca de game com a capa quase colada nas bordas.
+    d.fill(x, y, w as u32, h as u32, (238, 238, 236, 255));
+    let inset = 5i32;
+    if d.has_image(cover) {
+        d.image_fit(cover, x + inset, y + inset, (w - inset * 2) as u32, (h - inset * 2 - 26) as u32);
+    } else {
+        d.fill(x + inset, y + inset, (w - inset * 2) as u32, (h - inset * 2 - 26) as u32, (60, 60, 70, 255));
+        d.text_wrapped(x + inset + 8, y + inset + 10, (w - inset * 2 - 16) as u32, 1, TEXT, title);
+    }
+    // O plástico: brilho diagonal descendo pela capa (faixa em degraus).
+    let shine_h = h - inset * 2 - 26;
+    for k in 0..(shine_h / 4) {
+        let sx = x + inset + k * 2;
+        if sx > x + w - 8 {
+            break;
+        }
+        d.fill(sx, y + inset + k * 4, 6, 4, (255, 255, 255, 26));
+    }
+    d.fill(x + inset, y + h - 31, (w - inset * 2) as u32, 2, (255, 255, 255, 40));
+    // Faixa da caixa: nome do jogo em letra de fábrica.
+    d.fill(x + inset, y + h - 29, (w - inset * 2) as u32, 24, (24, 24, 28, 255));
+    d.text(x + inset + 6, y + h - 24, 1, TEXT, &short_title(title, (w - inset * 2 - 12) / GLYPH));
+    if owned {
+        d.fill(x + 6, y + 6, 74, 18, (24, 130, 80, 235));
+        d.text(x + 10, y + 9, 1, (235, 245, 238), "NA COLEÇÃO");
+    } else if let Some(p) = price {
+        // Etiqueta de gôndola pendurada no canto superior direito.
+        let tw = p.len() as i32 * GLYPH + 22;
+        let tr = (x + w - tw - 4, y + 6, tw as u32, 30);
+        d.fill(tr.0, tr.1, tr.2, tr.3, (248, 246, 238, 250));
+        d.outline(tr.0, tr.1, tr.2, tr.3, 1, (200, 40, 40, 255));
+        d.fill(tr.0 + 4, tr.1 + 4, 3, tr.3 - 8, (200, 40, 40, 255));
+        d.text(tr.0 + 12, tr.1 + 10, 1, (30, 30, 34), p);
+    }
+    if hot {
+        d.outline(x - 2, y - 2, w as u32 + 4, h as u32 + 4, 2, EDGE_HOT);
+    }
+}
+
 /// unix → "DD/MM hh:MM" (algoritmo civil de Howard Hinnant, std only).
-pub fn fmt_deadline(unix: i64) -> String {
-    let days = unix.div_euclid(86_400);
+pub fn fmt_deadline(unix: i64) -> String {    let days = unix.div_euclid(86_400);
     let secs = unix.rem_euclid(86_400);
     let (h, mi) = (secs / 3600, (secs % 3600) / 60);
     let z = days + 719_468;

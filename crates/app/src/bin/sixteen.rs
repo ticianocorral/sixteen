@@ -62,6 +62,8 @@ struct Args {
     /// Headless: abre a locadora, resolve o sorteio e captura o balcão em
     /// `--shot` no frame 30, depois sai (dev/testing).
     debug_locadora: bool,
+    /// Com `--debug-locadora-shot`: captura a loja em vez do balcão.
+    debug_locadora_loja: bool,
     shot: Option<PathBuf>,
 }
 
@@ -80,6 +82,7 @@ fn parse_args() -> Result<Args> {
     let mut debug_settings = None;
     let mut debug_idle = false;
     let mut debug_locadora = false;
+    let mut debug_locadora_loja = false;
     let mut shot = None;
 
     let mut it = std::env::args().skip(1);
@@ -94,6 +97,7 @@ fn parse_args() -> Result<Args> {
             "--debug-settings" => debug_settings = Some(val()?),
             "--debug-idle-shot" => debug_idle = true,
             "--debug-locadora-shot" => debug_locadora = true,
+            "--debug-locadora-loja" => debug_locadora_loja = true,
             "--shot" => shot = Some(val()?.into()),
             "--order" => {
                 order = match val()?.as_str() {
@@ -123,6 +127,7 @@ fn parse_args() -> Result<Args> {
         debug_settings,
         debug_idle,
         debug_locadora,
+        debug_locadora_loja,
         shot,
     })
 }
@@ -310,6 +315,7 @@ fn main() -> Result<()> {
             Some(sixteen_app::locadora_screen::LocaDebug {
                 shot: path.clone(),
                 frame: 30,
+                loja: args.debug_locadora_loja,
             }),
         )?;
         return Ok(());
@@ -358,6 +364,7 @@ fn main() -> Result<()> {
                             Some(sixteen_app::locadora_screen::LocaDebug {
                                 shot: path.clone(),
                                 frame: 30,
+                                loja: args.debug_locadora_loja,
                             }),
                         )?;
                     }
