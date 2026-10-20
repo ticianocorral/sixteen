@@ -59,6 +59,9 @@ struct Args {
     /// Headless: render the idle screen to `--shot` and exit (dev/testing) —
     /// shows the first-run setup screen when the core or the DAT is missing.
     debug_idle: bool,
+    /// Headless: abre a locadora, resolve o sorteio e captura o balcão em
+    /// `--shot` no frame 30, depois sai (dev/testing).
+    debug_locadora: bool,
     shot: Option<PathBuf>,
 }
 
@@ -76,6 +79,7 @@ fn parse_args() -> Result<Args> {
     let mut order = Order::Shelf;
     let mut debug_settings = None;
     let mut debug_idle = false;
+    let mut debug_locadora = false;
     let mut shot = None;
 
     let mut it = std::env::args().skip(1);
@@ -89,6 +93,7 @@ fn parse_args() -> Result<Args> {
             "--notes-dir" => notes_dir = Some(val()?.into()),
             "--debug-settings" => debug_settings = Some(val()?),
             "--debug-idle-shot" => debug_idle = true,
+            "--debug-locadora-shot" => debug_locadora = true,
             "--shot" => shot = Some(val()?.into()),
             "--order" => {
                 order = match val()?.as_str() {
@@ -117,6 +122,7 @@ fn parse_args() -> Result<Args> {
         order,
         debug_settings,
         debug_idle,
+        debug_locadora,
         shot,
     })
 }
@@ -286,6 +292,29 @@ fn main() -> Result<()> {
         update_rx = Some(rx);
     }
 
+    // Verificação headless do balcão (dev/testing): entra direto na
+    // locadora, resolve o sorteio, captura `--shot` no frame 30 e sai.
+    if args.debug_locadora {
+        let Some(path) = &args.shot else {
+            anyhow::bail!("--debug-locadora-shot needs --shot out.bmp");
+        };
+        let prices = locadora_prices(&cfg);
+        let mut loc = sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
+        sixteen_app::locadora_screen::run(
+            &mut plat,
+            &mut cab,
+            &catalog,
+            &mut loc,
+            &prices,
+            &cfg.locadora_currency,
+            Some(sixteen_app::locadora_screen::LocaDebug {
+                shot: path.clone(),
+                frame: 30,
+            }),
+        )?;
+        return Ok(());
+    }
+
     'app: loop {
         // O código Konami (↑↑↓↓←→←→BA) só é escutado na tela inicial — o
         // watcher liga aqui e desliga ao sair dela, para que navegar com
@@ -313,16 +342,31 @@ fn main() -> Result<()> {
             IdleExit::Quit => break 'app,
             IdleExit::OpenShelf => shelf_opts.fade_in = Some(idle_static),
             IdleExit::OpenLocadora => {
+                // Verificação headless: um frame do balcão no disco e sai.
+                if args.debug_locadora {
+                    if let Some(path) = &args.shot {
+                        let prices = locadora_prices(&cfg);
+                        let mut loc =
+                            sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
+                        sixteen_app::locadora_screen::run(
+                            &mut plat,
+                            &mut cab,
+                            &catalog,
+                            &mut loc,
+                            &prices,
+                            &cfg.locadora_currency,
+                            Some(sixteen_app::locadora_screen::LocaDebug {
+                                shot: path.clone(),
+                                frame: 30,
+                            }),
+                        )?;
+                    }
+                    break 'app;
+                }
                 // O Modo Locadora (docs/design-modo-locadora.md): o loop do
                 // balcão. Cada `Play` vira uma sessão de runner com a
                 // economia embutida; cada volta de tela persiste o estado.
-                let prices = sixteen_locadora::Prices {
-                    salary_per_hour: cfg.locadora_salary_cents,
-                    hourly_per_hour: cfg.locadora_hourly_cents,
-                    ticket_48h: cfg.locadora_ticket_cents,
-                    purchase: cfg.locadora_purchase_cents,
-                    weekend_double: cfg.locadora_weekend_double,
-                };
+                let prices = locadora_prices(&cfg);
                 let mut loc = sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
                 let mut loca_static = idle::RESTING_STATIC;
                 'loca: loop {
@@ -333,6 +377,7 @@ fn main() -> Result<()> {
                         &mut loc,
                         &prices,
                         &cfg.locadora_currency,
+                        None,
                     )?;
                     let (rom, sha, mode) = match pick {
                         sixteen_app::locadora_screen::Pick::Quit => break 'app,
@@ -507,6 +552,16 @@ fn main() -> Result<()> {
 
     log::info!("bye");
     Ok(())
+}
+
+fn locadora_prices(cfg: &Config) -> sixteen_locadora::Prices {
+    sixteen_locadora::Prices {
+        salary_per_hour: cfg.locadora_salary_cents,
+        hourly_per_hour: cfg.locadora_hourly_cents,
+        ticket_48h: cfg.locadora_ticket_cents,
+        purchase: cfg.locadora_purchase_cents,
+        weekend_double: cfg.locadora_weekend_double,
+    }
 }
 
 /// A game was picked but no core is available yet — points at the settings
