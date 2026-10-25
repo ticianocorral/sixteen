@@ -354,8 +354,11 @@ mod tests {
         };
         // O conteúdo DESENHA a imagem cobrindo a página inteira — o
         // pdfium (o renderizador atual) compõe a página de verdade.
-        let content = |img_ref: u32| -> Vec<u8> {
-            let body = format!("q 2 0 0 2 0 0 cm /Im{img_ref} Do Q\n");
+        let content = |_img_ref: u32| -> Vec<u8> {
+            // O operador `Do` usa o NOME no dicionário XObject (`/Im0`),
+            // não o número do objeto — pdfium tolera a discrepância (render
+            // da página inteira), o caminho lopdf filtra por esse nome.
+            let body = "q 2 0 0 2 0 0 cm /Im0 Do Q\n".to_string();
             let mut out = format!("<< /Length {} >>\nstream\n", body.len()).into_bytes();
             out.extend(body.into_bytes());
             out.extend(b"endstream");
