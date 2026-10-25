@@ -70,7 +70,7 @@ modules:
         # Preencher com `git rev-parse v1.3.2` depois de taggear a release
         # (e regenerar o cargo-sources.json se o Cargo.lock mudou).
         tag: v1.3.3
-        commit: e64d6af0432f8485795fc48d014356b78e7df848
+        commit: afd6d03741c057663a69a0f98df1da63e47e78f2
         x-checker-data:
           type: git
           tag-pattern: ^v([\d.]+)$
