@@ -109,16 +109,44 @@ alinhado com o do Flathub (runtime 26.08, `--device=dri`+`udev`, sem
 8. **GitHub com 2FA ativo** — obrigatório para virar maintainer do repo do
    app; o convite expira em 1 semana.
 
-## Passo a passo da submissão (depois do seu ok)
+## Passo a passo da submissão — feito por VOCÊ, à mão
 
-1. Fork de `flathub/flathub` **com "Copy the master branch only"
-   DESMARCADO** (ou `gh repo fork --clone flathub/flathub`).
-2. Na fork, crie uma branch a partir de `new-pr`.
-3. Copie para a raiz **apenas** o `io.github.ticianocorral.sixteen.yml` e o
-   `cargo-sources.json` (com o `commit` da tag preenchido!). Commit e push.
-4. Abra o PR com **base em `new-pr`** (não em `master`!) e título
-   `Add io.github.ticianocorral.sixteen` — corpo em `DESCRICAO-PR.md` +
-   template do Flathub.
+> ⚠️ **Por que à mão:** a [política de IA do Flathub](https://docs.flathub.org/docs/for-app-authors/requirements#generative-ai-policy)
+> proíbe manifest com conteúdo gerado/assistido por IA **e** proíbe agentes
+> de abrir/automatizar o PR de submissão (inclui mensagens de commit,
+> descrições e respostas à review). Violação pode resultar em rejeição —
+> a primeira tentativa (PR #10839) foi fechada pelo bot por checklist
+> incompleta e serviu de lição. Os arquivos aqui são **rascunho de
+> referência**: reescreva o yml com suas palavras/decisões antes de subir.
+
+0. **PR #10839** — já fechado pelo submission-checker (corpo sem o
+   template). **Não reabra**; abra um novo, esta vez completo.
+1. **Vídeo obrigatório** — o template do Flathub pede um vídeo do app
+   rodando **via Flatpak no Linux**. Instale o `.flatpak` da release
+   (ou o build local do passo abaixo), grave a tela mostrando a TV
+   ligando, cartucho entrando, jogo rodando e a estante, e suba no
+   YouTube (público ou não-listado).
+2. Fork de `flathub/flathub` com "Copy the master branch only"
+   DESMARCADO; branch a partir de `new-pr`.
+3. Copie para a raiz **apenas** o `io.github.ticianocorral.sixteen.yml`
+   e o `cargo-sources.json` (commit da tag `v1.3.3`:
+   `afd6d03741c057663a69a0f98df1da63e47e78f2`). **Reescreva/reveja o yml
+   você mesmo** (ele é curto; as decisões estão comentadas) e faça o
+   commit com mensagem sua.
+4. Abra o PR com **base em `new-pr`** (não em `master`!), título
+   `Add io.github.ticianocorral.sixteen`, e preencha o **template com
+   TODAS as checklists marcadas** (é o que o bot confere; um item sem
+   `[X]` = fechamento automático). Fatos para as respostas:
+   - Descrição do app: o texto de `DESCRICAO-PR.md` (reescreva com as
+     suas palavras).
+   - App ID: `io.github.ticianocorral.sixteen` (reverse-DNS do GitHub,
+     4 componentes).
+   - Autoria: você é o autor/upstream (link do repo).
+   - Disclosure de IA (obrigatório, honesto): código do app e packaging
+     desenvolvidos com assistentes de IA sob sua autoria/revisão;
+     indicar partes e extensão aproximada. O item "não usei IA para
+     abrir/automatizar ESTE PR" só pode ser marcado se for verdade —
+     por isso este PR tem que ser aberto por você, à mão.
 5. Comente `bot, build` para disparar o build de teste (screenshots não
    aparecem nele — normal).
 6. Responda todos os comentários dos reviewers; nunca feche o PR para
@@ -127,6 +155,16 @@ alinhado com o do Flathub (runtime 26.08, `--device=dri`+`udev`, sem
 7. Aprovado → os reviewers fazem merge num repo novo da org Flathub e você
    é convidado como maintainer (aceitar em 1 semana). Publicação ~1–2h
    depois.
+
+### Lições da primeira tentativa (PR #10839)
+
+- O bot `submission-checker` fecha PR cujo corpo não tem TODAS as
+  checklists do template marcadas — roda de hora em hora.
+- `--device=udev` NÃO existe no flatpak (tipos válidos: `dri`, `all`,
+  `kvm`, `shm`); gamepads = `--device=all` (precedente RetroArch) — o
+  build de teste do CI próprio pegou isso antes da review do Flathub.
+- O PR precisa do template `.github/pull_request_template.md` do
+  flathub/flathub como corpo, com os `[ ]` virados `[X]`.
 
 ## Manutenção pós-publicação
 
