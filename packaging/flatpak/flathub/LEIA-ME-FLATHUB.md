@@ -42,8 +42,9 @@ alinhado com o do Flathub (runtime 26.08, `--device=dri`+`udev`, sem
 4. **Sem permissão de filesystem** — o app só acessa a própria raiz de
    dados (`XDG_DATA_HOME` do sandbox): o antigo `--filesystem=home` não
    correspondia a nenhum código (não há leitor de ROM fora de `roms/`).
-   `--device=dri` (GPU) + `--device=udev` (gamepads) no lugar de
-   `--device=all`.
+   `--device=dri` (GPU) no lugar de `--device=all` não seria suficiente
+   (o flatpak não tem device type `udev`; gamepads precisam dos nós de
+   dispositivo que `all` expõe).
 5. **Core snes9x com download verificado** — em vez do nightly sem versão
    do buildbot, o core vem do asset da release do próprio projeto no
    GitHub e só instala/carrega se o SHA-256 do binário bater com o hash

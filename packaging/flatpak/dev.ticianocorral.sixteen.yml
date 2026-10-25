@@ -23,7 +23,7 @@ finish-args:
   - --socket=wayland
   - --socket=pulseaudio
   - --device=dri
-  - --device=udev
+  - --device=all
 cleanup:
   - /include
   - /lib/cmake

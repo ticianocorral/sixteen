@@ -49,7 +49,9 @@ Homepage: https://github.com/ticianocorral/sixteen
   badge art) and the user-triggered snes9x core download described above
   (first run, from the project's GitHub release, SHA-256 verified).
 - `--device=dri` — GPU rendering (SDL3 renderer).
-- `--device=udev` — gamepads/joysticks via SDL's evdev/hidraw backend.
+- `--device=all` — gamepads/joysticks via SDL's evdev/hidraw backend
+  (flatpak has no `udev` device type; `all` is what grants access to the
+  device nodes — the same pattern RetroArch uses on Flathub).
 - No filesystem permissions beyond the sandbox's own `XDG_DATA_HOME`:
   the app reads and writes exclusively under
   `~/.var/app/io.github.ticianocorral.sixteen/data/SixteeN`

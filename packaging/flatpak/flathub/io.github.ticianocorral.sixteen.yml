@@ -27,9 +27,11 @@ finish-args:
   # self-update do app fica desabilitado dentro do Flatpak: quem atualiza
   # é o próprio Flathub.
   - --share=network
-  # dri = GPU (render SDL3); udev = gamepads via evdev/hidraw.
+  # dri = GPU (render SDL3); all = gamepads via hidraw/evdev (o flatpak
+  # não tem um device type "udev" — all é o que dá acesso aos nós de
+  # dispositivo; mesmo padrão do RetroArch no Flathub).
   - --device=dri
-  - --device=udev
+  - --device=all
   # Nenhum acesso a filesystem além do XDG_DATA_HOME do sandbox: o app só
   # lê/grava em ~/.var/app/io.github.ticianocorral.sixteen/data/SixteeN
   # (roms/, saves/, core/...). ROMs de outras pastas entram copiadas para
