@@ -111,7 +111,7 @@
     <category>Emulator</category>
   </categories>
   <releases>
-    <release version="1.3.2" date="2026-10-24">
+    <release version="1.3.3" date="2026-10-25">
       <description>
         <p>New Library screen: magazines and manuals as PDFs on the TV
         tube, with page-by-page reading and zoom.</p>
