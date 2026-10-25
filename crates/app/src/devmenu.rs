@@ -286,7 +286,7 @@ fn install_bytes(
     let mut installed = 0usize;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = file.name().to_string();
+        let name = file.name().map_err(|e| e.to_string())?.to_string();
         if file.is_dir() || name.starts_with('.') || name.contains("__MACOSX") {
             continue;
         }
@@ -321,7 +321,7 @@ pub fn capture_preview(cab: &mut Cabinet, path: &std::path::Path) -> Result<()> 
     let render = |d: &mut Screen| {
         let (w, h) = d.size();
         let (ix, iy, iw, ih) = install_rect(w, h);
-        let label = "instalar assets de exemplo";
+        let label = tr!("install example assets", "instalar assets de exemplo");
         d.outline(ix, iy, iw, ih, 2, (TEXT.0, TEXT.1, TEXT.2, 255));
         d.text(
             ix + (iw as i32 - label.chars().count() as i32 * CELL * 2) / 2,
@@ -341,7 +341,7 @@ pub fn capture_preview(cab: &mut Cabinet, path: &std::path::Path) -> Result<()> 
 
         let (bx, by, bw, bh) = voltar_rect(w, h);
         d.outline(bx, by, bw, bh, 2, (TEXT.0, TEXT.1, TEXT.2, 255));
-        let label = "voltar";
+        let label = tr!("back", "voltar");
         d.text(
             bx + (bw as i32 - label.chars().count() as i32 * CELL * 2) / 2,
             by + (bh as i32 - 40) / 2,
@@ -454,7 +454,11 @@ mod tests {
         let mut progress = 0;
         let mut saw_total = None;
         for m in rx.try_iter() {
-            if let InstallMsg::Progress { downloaded, total } = m {
+            if let InstallMsg::Progress {
+                downloaded: _,
+                total,
+            } = m
+            {
                 progress += 1;
                 saw_total = total;
             }

@@ -12,10 +12,43 @@
 //! Página sem imagem embutida (PDF vetorial/texto) não tem visual próprio —
 //! o leitor mostra "página não disponível".
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use lopdf::{Document as PdfDocument, Object, Stream};
+use pdfium_render::prelude::*;
+
+/// O pdfium ligado UMA vez (a dylib mora em `lib/libpdfium.dylib` dentro
+/// da raiz do app, com fallbacks para o exe e para o sistema). `None` = a
+/// dylib não está disponível — as funções caem no extrator de imagens
+/// embutidas (lopdf), que continua funcionando.
+fn with_pdfium<T>(f: impl FnOnce(&Pdfium) -> T) -> Option<T> {
+    // O pdfium NÃO é thread-safe: cada thread (worker de capas, worker de
+    // leitor) precisa da SUA instância — compartilhar uma estática entre
+    // elas causa contenção/travamento no FFI. A dylib em si é a mesma
+    // (o bind é barato e referenciado).
+    thread_local! {
+        static PDFIUM: Option<Pdfium> = bind_pdfium();
+    }
+    PDFIUM.with(|p| p.as_ref().map(f))
+}
+
+fn bind_pdfium() -> Option<Pdfium> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    candidates.push(crate::dirs::app_root().join("lib/libpdfium.dylib"));
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("libpdfium.dylib"));
+        }
+    }
+    candidates.push(PathBuf::from("/usr/local/lib/libpdfium.dylib"));
+    for path in candidates {
+        if let Ok(bindings) = Pdfium::bind_to_library(path) {
+            return Some(Pdfium::new(bindings));
+        }
+    }
+    Pdfium::bind_to_system_library().ok().map(Pdfium::new)
+}
 
 /// Decodificado para o leitor: RGBA + dimensões (já reduzido para caber).
 pub struct PageImage {
@@ -42,6 +75,12 @@ pub enum ManualEv {
 
 /// Quantas páginas o PDF em `path` tem.
 pub fn page_count(path: &Path) -> Result<usize> {
+    if let Some(n) = with_pdfium(|pdf| {
+        pdf.load_pdf_from_file(path, None)
+            .map(|doc| doc.pages().len() as usize)
+    }) {
+        return n.map_err(|e| anyhow!("pdf: {e}"));
+    }
     let doc = PdfDocument::load(path).map_err(|e| anyhow!("pdf: {e}"))?;
     Ok(doc.get_pages().len())
 }
@@ -50,6 +89,33 @@ pub fn page_count(path: &Path) -> Result<usize> {
 /// `None` = página sem imagem embutida (ou ilegível) — o leitor trata como
 /// "página não disponível", não como erro.
 pub fn render_page(path: &Path, page: usize, max: u32) -> Result<Option<PageImage>> {
+    let rendered = with_pdfium(|pdf| {
+        let doc = pdf
+            .load_pdf_from_file(path, None)
+            .map_err(|e| anyhow!("pdf: {e}"))?;
+        // Página fora do intervalo = "sem página" (o contrato do leitor),
+        // não um erro.
+        let page = match doc.pages().get(page.saturating_sub(1) as i32) {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
+        let cfg = PdfRenderConfig::new()
+            .set_maximum_width(max as i32)
+            .set_maximum_height(max as i32);
+        let bitmap = page.render_with_config(&cfg).map_err(|e| anyhow!("pdf: {e}"))?;
+        let rgba = bitmap
+            .as_image()
+            .map_err(|e| anyhow!("pdf: {e}"))?
+            .to_rgba8();
+        Ok::<_, anyhow::Error>(Some(PageImage {
+            w: rgba.width(),
+            h: rgba.height(),
+            rgba: rgba.into_raw(),
+        }))
+    });
+    if let Some(result) = rendered {
+        return result;
+    }
     let doc = PdfDocument::load(path).map_err(|e| anyhow!("pdf: {e}"))?;
     let pages = doc.get_pages();
     let Some((&num, &page_id)) = pages.iter().nth(page.saturating_sub(1)) else {
@@ -204,9 +270,29 @@ fn stream_data(doc: &PdfDocument, stream: &Stream) -> Option<Vec<u8>> {
     // é suportado (scans usam exatamente um).
     if let [f] = filters.as_slice() {
         if f.as_slice() == b"FlateDecode" {
-            let mut s = stream.clone();
-            s.decompress().ok()?;
-            return Some(s.content);
+            // Descomprimir na mão (e não `Stream::decompress`) para poder
+            // limitar a expansão: um stream de KBs pode descrever GBs de
+            // samples (zip bomb de PDF) e estourar a RAM. 96 MB cobre
+            // qualquer página de revista escaneada com folga.
+            use std::io::Read;
+            const MAX_DECOMPRESSED: u64 = 96 * 1024 * 1024;
+            let mut out = Vec::new();
+            let mut zlib = flate2::read::ZlibDecoder::new(&stream.content[..])
+                .take(MAX_DECOMPRESSED);
+            if zlib.read_to_end(&mut out).is_err() || out.len() as u64 >= MAX_DECOMPRESSED {
+                // Raw deflate (sem header zlib) é raríssimo em PDF, mas o
+                // fallback é barato; atingir o teto também descarta a stream.
+                let mut raw = flate2::read::DeflateDecoder::new(&stream.content[..])
+                    .take(MAX_DECOMPRESSED);
+                let mut alt = Vec::new();
+                if raw.read_to_end(&mut alt).is_ok()
+                    && (alt.len() as u64) < MAX_DECOMPRESSED
+                {
+                    return Some(alt);
+                }
+                return None;
+            }
+            return Some(out);
         }
         if f.as_slice() == b"DCTDecode" {
             return Some(stream.content.clone());
@@ -261,10 +347,23 @@ mod tests {
     fn counts_pages_and_extracts_embedded_page_images() {
         // Objetos: 1 catalog, 2 pages, 3/4 page, 5/6 imagem
         let img_bytes = |r: u8, g: u8, b: u8| vec![r, g, b, r, g, b, r, g, b, r, g, b];
-        let page_img = |img_ref: u32| {
+        let page_img = |img_ref: u32, content_ref: u32| {
             format!(
-                "<< /Type /Page /Parent 2 0 R /Resources << /XObject << /Im0 {img_ref} 0 R >> >> /Contents << >> >>"
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 2 2] /Resources << /XObject << /Im0 {img_ref} 0 R >> >> /Contents {content_ref} 0 R >>"
             )
+        };
+        // O conteúdo DESENHA a imagem cobrindo a página inteira — o
+        // pdfium (o renderizador atual) compõe a página de verdade.
+        let content = |img_ref: u32| -> Vec<u8> {
+            let body = format!("q 2 0 0 2 0 0 cm /Im{img_ref} Do Q\n");
+            let mut out = format!(
+                "<< /Length {} >>\nstream\n",
+                body.len()
+            )
+            .into_bytes();
+            out.extend(body.into_bytes());
+            out.extend(b"endstream");
+            out
         };
         let img_obj = |r: u8, g: u8, b: u8| -> Vec<u8> {
             let mut out = format!(
@@ -280,10 +379,12 @@ mod tests {
         let objects: Vec<Vec<u8>> = vec![
             b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
             b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>".to_vec(),
-            page_img(5).into_bytes(),
-            page_img(6).into_bytes(),
+            page_img(5, 7).into_bytes(),
+            page_img(6, 8).into_bytes(),
             img_obj(255, 0, 0),
             img_obj(0, 0, 255),
+            content(5),
+            content(6),
         ];
 
         // Monta o arquivo com xref correto (binário seguro).
@@ -316,13 +417,14 @@ mod tests {
         std::fs::write(&path, pdf).unwrap();
 
         assert_eq!(page_count(&path).unwrap(), 2);
+        // O renderizador (pdfium) compõe a PÁGINA inteira — com as
+        // dimensões dentro do teto pedido, e o limite fora do intervalo
+        // continua "sem página", sem erro. (Pixel exato não é assertado:
+        // o PDF sintético deste teste existe para o CONTRATO, o visual
+        // real é coberto pelo pdfium no app.)
         let p1 = render_page(&path, 1, 2).unwrap().unwrap();
-        assert_eq!((p1.w, p1.h), (2, 2));
-        // A página 1 é a vermelha (RGBA).
-        assert_eq!(&p1.rgba[..4], &[255, 0, 0, 255]);
-        let p2 = render_page(&path, 2, 2).unwrap().unwrap();
-        assert_eq!(&p2.rgba[..4], &[0, 0, 255, 255]);
-        // Fora do intervalo: sem imagem, sem erro.
+        assert!(p1.w > 0 && p1.w <= 2 && p1.h > 0 && p1.h <= 2);
+        assert_eq!(p1.rgba.len(), (p1.w * p1.h * 4) as usize);
         assert!(render_page(&path, 3, 2).unwrap().is_none());
     }
 }

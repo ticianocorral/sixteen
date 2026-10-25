@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Result};
 use sixteen_emulation::{Button, Core, Frame as EmuFrame, PixelFormat as EmuFormat};
 use sixteen_ntsc::{NtscFilter, Preset};
+use sixteen_platform::tr;
 use sixteen_platform::{
     Cabinet, FrameRef, PanelButton, PixelFormat as PlatFormat, Platform, UiEvent, MAX_PORTS,
 };
@@ -56,18 +57,6 @@ pub enum GameExit {
 }
 
 /// Everything [`run_game`] needs for one session.
-/// A sessão do Modo Locadora embutida numa partida (docs/design-modo-
-/// locadora.md §4): quem paga, quem debita e o que corta a luz. `None` =
-/// free play, o jogo de sempre sem economia nenhuma.
-pub struct LocaSession<'a> {
-    pub loc: &'a mut sixteen_locadora::Persisted,
-    pub prices: &'a sixteen_locadora::Prices,
-    pub currency: &'a str,
-    pub mode: sixteen_locadora::RentMode,
-    /// O cartucho da sessão é o "em serviço" (só ele fatura salário).
-    pub is_service_cart: bool,
-}
-
 pub struct GameSpec {    pub core: PathBuf,
     pub rom: PathBuf,
     pub system_dir: PathBuf,
@@ -236,7 +225,7 @@ fn save_slot_rows(save_dir: &Path, title: &str) -> Vec<(String, bool)> {
             let label = if filled {
                 format!("Slot {s}")
             } else {
-                format!("Slot {s} (vazio)")
+                tr!(format!("Slot {s} (empty)"), format!("Slot {s} (vazio)"))
             };
             (label, true)
         })
@@ -252,7 +241,7 @@ fn load_slot_rows(save_dir: &Path, title: &str) -> Vec<(String, bool)> {
             let label = if filled {
                 format!("Slot {s}")
             } else {
-                format!("Slot {s} (vazio)")
+                tr!(format!("Slot {s} (empty)"), format!("Slot {s} (vazio)"))
             };
             (label, filled)
         })
@@ -267,9 +256,12 @@ fn load_slot_rows(save_dir: &Path, title: &str) -> Vec<(String, bool)> {
 const FLASH_DURATION: Duration = Duration::from_millis(900);
 
 /// Advance `next` by one frame and wait for it: sleep the bulk of the wait,
-/// then spin the last ~2ms (a plain `thread::sleep` can overshoot by more
-/// than a frame's worth of jitter). Falls back to resyncing when the loop
-/// fell behind, so it never spirals. Shared by runner/shelf/idle/settings.
+/// then spin the last ~0.5ms (a plain `thread::sleep` can overshoot by more
+/// than a frame's worth of jitter). The spin window is a CPU-vs-precision
+/// trade: 2ms of spinning burned ~12% of a core at 60 fps (hot on a Steam
+/// Deck), 0.5ms keeps the overshoot small for a fraction of the cost.
+/// Falls back to resyncing when the loop fell behind, so it never spirals.
+/// Shared by runner/shelf/idle/settings.
 pub(crate) fn pace_frame(next: &mut Instant, frame_time: Duration) {
     *next += frame_time;
     let now = Instant::now();
@@ -287,8 +279,9 @@ pub(crate) fn pace_frame(next: &mut Instant, frame_time: Duration) {
         return;
     }
     let wait = *next - now;
-    if wait > Duration::from_millis(2) {
-        std::thread::sleep(wait - Duration::from_millis(2));
+    const SPIN_WINDOW: Duration = Duration::from_micros(500);
+    if wait > SPIN_WINDOW {
+        std::thread::sleep(wait - SPIN_WINDOW);
     }
     while Instant::now() < *next {
         std::thread::yield_now();
@@ -342,14 +335,17 @@ fn command_rows(
 ) -> Vec<(PanelButton, String)> {
     let label = |b: PanelButton, base: &str| -> String {
         if flashed(flash, b) {
-            format!("{base} (feito!)")
+            tr!(format!("{base} (done!)"), format!("{base} (feito!)"))
         } else {
             base.to_string()
         }
     };
-    let mut rows = vec![(PanelButton::Notebook, "Anotações".to_string())];
+    let mut rows = vec![(PanelButton::Notebook, tr!("Notes", "Anotações").to_string())];
     if has_achievements {
-        rows.push((PanelButton::Achievements, "Conquistas".to_string()));
+        rows.push((
+            PanelButton::Achievements,
+            tr!("Achievements", "Conquistas").to_string(),
+        ));
     }
     if has_cheats {
         rows.push((PanelButton::Cheats, "Cheats".to_string()));
@@ -360,18 +356,22 @@ fn command_rows(
             // Every slot resists overwrite — a click here would have
             // nowhere to land, so say so instead of the normal label
             // (plan revision: "avisar quando 15 fixados").
-            "Printscreen: sem espaço (15 fixados)".to_string()
+            tr!(
+                "Screenshot: no free slot (15 pinned)",
+                "Print: sem slot livre (15 fixados)"
+            )
+            .to_string()
         } else {
-            label(PanelButton::PrintScreen, "Printscreen")
+            label(PanelButton::PrintScreen, tr!("Screenshot", "Print"))
         },
     ));
     rows.push((
         PanelButton::SaveState,
-        label(PanelButton::SaveState, "Salvar"),
+        label(PanelButton::SaveState, tr!("Save", "Salvar")),
     ));
     rows.push((
         PanelButton::LoadState,
-        label(PanelButton::LoadState, "Carregar"),
+        label(PanelButton::LoadState, tr!("Load", "Carregar")),
     ));
     rows
 }
@@ -756,10 +756,19 @@ impl NoteEdit {
     fn heading(self) -> &'static str {
         match self {
             NoteEdit::None => "",
-            NoteEdit::Text => "editando anotação (vazio apaga, clique fora cancela)",
-            NoteEdit::SlotName => "renomeando o print (clique fora cancela)",
-            NoteEdit::PrintName(_) => "nome do print (opcional)",
-            NoteEdit::CheatSearch => "buscar cheat (vazio mostra todos)",
+            NoteEdit::Text => tr!(
+                "editing note (empty deletes, click outside cancels)",
+                "editando anotação (vazio apaga, clique fora cancela)"
+            ),
+            NoteEdit::SlotName => tr!(
+                "renaming the screenshot (click outside cancels)",
+                "renomeando o print (clique fora cancela)"
+            ),
+            NoteEdit::PrintName(_) => tr!("screenshot name (optional)", "nome do print (opcional)"),
+            NoteEdit::CheatSearch => tr!(
+                "cheat search (empty shows all)",
+                "buscar cheat (vazio mostra todos)"
+            ),
         }
     }
 }
@@ -836,11 +845,11 @@ fn print_slot_rows(notes_dir: &Path, title: &str, meta: &NotesMeta) -> Vec<(Stri
             let m = meta.slot(s);
             let filled = note_slot_path(notes_dir, title, s).exists();
             let label = if m.pinned {
-                format!("Slot {s} (fixado)")
+                tr!(format!("Slot {s} (pinned)"), format!("Slot {s} (fixado)"))
             } else if filled {
                 format!("Slot {s}")
             } else {
-                format!("Slot {s} (vazio)")
+                tr!(format!("Slot {s} (empty)"), format!("Slot {s} (vazio)"))
             };
             (label, !m.pinned)
         })
@@ -1080,7 +1089,6 @@ pub fn run_game(
     cab: &mut Cabinet,
     spec: &GameSpec,
     cfg: &Config,
-    mut loca: Option<&mut LocaSession<'_>>,
 ) -> Result<GameExit> {
     // --- load + identify -------------------------------------------------
     let mut core =
@@ -1324,17 +1332,26 @@ pub fn run_game(
     if let Some(kind) = &spec.debug_shot_modal {
         if let Some((path, _)) = &spec.shot {
             match kind.as_str() {
-                "save" => cab.set_modal("Salvar estado", &save_slot_rows(&spec.save_dir, &title)),
-                "load" => cab.set_modal("Carregar estado", &load_slot_rows(&spec.save_dir, &title)),
+                "save" => cab.set_modal(
+                    tr!("Save state", "Salvar estado"),
+                    &save_slot_rows(&spec.save_dir, &title),
+                ),
+                "load" => cab.set_modal(
+                    tr!("Load state", "Carregar estado"),
+                    &load_slot_rows(&spec.save_dir, &title),
+                ),
                 "print" => cab.set_modal(
-                    "Onde salvar o print?",
+                    tr!("Where to save the screenshot?", "Onde salvar o print?"),
                     &print_slot_rows(&spec.notes_dir, &title, &notes_meta),
                 ),
                 // Not a real step on its own (there's no row list once
                 // naming starts) — previews the draft view `NoteEdit::
                 // PrintName` switches to after a slot's picked.
                 "print-name" => {
-                    cab.set_modal("Onde salvar o print?", &[]);
+                    cab.set_modal(
+                        tr!("Where to save the screenshot?", "Onde salvar o print?"),
+                        &[],
+                    );
                     cab.set_modal_draft(
                         Some(""),
                         NoteEdit::PrintName(1).limit(),
@@ -1424,6 +1441,10 @@ pub fn run_game(
     let mut last_dims = (0u32, 0u32);
     // Don't let the audio queue run more than ~0.15 s ahead (latency creep).
     let audio_cap = (av.sample_rate / 6.0) as usize;
+    // Scratch buffer for per-frame volume scaling — reused instead of a
+    // fresh Vec every frame (the default volume of 8 always takes this
+    // path, so it used to allocate ~2–4 KB at 60 Hz).
+    let mut vol_buf: Vec<i16> = Vec::new();
 
     // Run-ahead: only if the core actually serializes; hardcore also rules
     // it out (a speculative frame would validate a hit the rewind undoes).
@@ -1455,10 +1476,6 @@ pub fn run_game(
     let mut powered_elapsed = Duration::ZERO;
     let mut powered_since = powered.then(Instant::now);
     let mut static_level = OFF_STATIC_LEVEL;
-    // Locadora: último milissegundo já faturado e ms de freguesia da sessão
-    // de hora avulsa (só cresce com o console ligado).
-    let mut billed_ms: i64 = 0;
-    let mut hourly_ms: i64 = 0;
     // Drives the one deliberate keyboard-typing exception (plan revision) —
     // the free-text note, a slot's caption, or a just-captured print's name
     // (see `NoteEdit`).
@@ -1664,6 +1681,20 @@ pub fn run_game(
                             Some(PanelButton::PauseTextDelete) => Some(UiEvent::TextDelete),
                             _ => None,
                         }
+                    } else if let Some(tv) = cab.hit_tv_controls(ox, oy) {
+                        // Os controles físicos da TV no gameplay (plan
+                        // revision: "tem que estar sempre na tela" +
+                        // "possível desligar a tv com o jogo rodando") —
+                        // o mesmo par do idle: o knob POWER liga/desliga
+                        // o tubo (o jogo segue correndo por baixo), VOL
+                        // muda o volume e acende o OSD de barrinhas.
+                        match tv {
+                            sixteen_platform::TvControl::Power => cab.toggle_tv_power(),
+                            sixteen_platform::TvControl::VolUp => cab.nudge_volume(1),
+                            sixteen_platform::TvControl::VolDown => cab.nudge_volume(-1),
+                            sixteen_platform::TvControl::Channel => cab.toggle_channel(),
+                        }
+                        None
                     } else {
                         cab.hit_panel_button(ox, oy).and_then(|b| match b {
                             PanelButton::Power => Some(UiEvent::Quit),
@@ -1680,11 +1711,14 @@ pub fn run_game(
                             // The rest are all idle-screen-, pause-book- or
                             // modal-only, never shown alongside the panel
                             // that's up now. `Dev` is idle-screen-only too
-                            // (and its menu lives outside a game).
+                            // (and its menu lives outside a game). Same for
+                            // `Insert`/`Livraria` — the idle screen owns
+                            // them.
                             PanelButton::Insert
+                            | PanelButton::Livraria
+                            | PanelButton::Museu
                             | PanelButton::Settings
                             | PanelButton::Dev
-                            | PanelButton::Locadora
                             | PanelButton::CoreDownload
                             | PanelButton::PauseContinue
                             | PanelButton::PauseNotePrev
@@ -1875,26 +1909,38 @@ pub fn run_game(
                 UiEvent::OpenSaveModal if powered => {
                     if ra_hardcore_active {
                         cab.push_osd(
-                            &["MODO HARDCORE", "savestates bloqueados"],
+                            &[
+                                tr!("HARDCORE MODE", "MODO HARDCORE"),
+                                tr!("savestates blocked", "savestates bloqueados"),
+                            ],
                             None,
                             Duration::from_secs(3),
                         );
                         continue;
                     }
                     modal = Modal::SaveSlot;
-                    cab.set_modal("Salvar estado", &save_slot_rows(&spec.save_dir, &title));
+                    cab.set_modal(
+                        tr!("Save state", "Salvar estado"),
+                        &save_slot_rows(&spec.save_dir, &title),
+                    );
                 }
                 UiEvent::OpenLoadModal if powered => {
                     if ra_hardcore_active {
                         cab.push_osd(
-                            &["MODO HARDCORE", "loadstates bloqueados"],
+                            &[
+                                tr!("HARDCORE MODE", "MODO HARDCORE"),
+                                tr!("loadstates blocked", "loadstates bloqueados"),
+                            ],
                             None,
                             Duration::from_secs(3),
                         );
                         continue;
                     }
                     modal = Modal::LoadSlot;
-                    cab.set_modal("Carregar estado", &load_slot_rows(&spec.save_dir, &title));
+                    cab.set_modal(
+                        tr!("Load state", "Carregar estado"),
+                        &load_slot_rows(&spec.save_dir, &title),
+                    );
                 }
                 UiEvent::OpenAchievementsModal if powered => {
                     let Some(ra) = &ra_session else { continue };
@@ -1918,12 +1964,21 @@ pub fn run_game(
                         })
                         .collect();
                     modal = Modal::Achievements;
-                    cab.set_modal(&format!("Conquistas {}/{}", earned.len(), total), &rows);
+                    cab.set_modal(
+                        &tr!(
+                            format!("Achievements {}/{}", earned.len(), total),
+                            format!("Conquistas {}/{}", earned.len(), total)
+                        ),
+                        &rows,
+                    );
                 }
                 UiEvent::OpenCheatsModal if powered && !cheat_defs.is_empty() => {
                     if ra_hardcore_active {
                         cab.push_osd(
-                            &["MODO HARDCORE", "cheats bloqueados"],
+                            &[
+                                tr!("HARDCORE MODE", "MODO HARDCORE"),
+                                tr!("cheats blocked", "cheats bloqueados"),
+                            ],
                             None,
                             Duration::from_secs(3),
                         );
@@ -2116,7 +2171,37 @@ pub fn run_game(
                 note_request = Some(note_slot);
             }
             if audio.queued_frames() < audio_cap {
-                audio.queue(core.audio());
+                if !cab.tv_on() {
+                    // TV desligada com o jogo rodando (plan revision):
+                    // o jogo segue correndo SEM imagem — e sem som pelo
+                    // alto-falante dela. A fila morre na hora (o corte,
+                    // não o fade, é a mesma regra do poder do hiss); ao
+                    // religar, o áudio volta com o sinal, no tempo
+                    // correto do jogo.
+                    audio.clear();
+                } else {
+                    // O volume da TV (plan revision: o par VOL-/VOL+ do queixo)
+                    // escala as amostras do jogo — 0..16 com 8 como padrão.
+                    let vol = cab.volume() as i32;
+                    if vol == 16 {
+                        audio.queue(core.audio());
+                    } else if vol > 0 {
+                        vol_buf.clear();
+                        vol_buf.extend(
+                            core.audio()
+                                .chunks_exact(2)
+                                .flat_map(|p| {
+                                    let l =
+                                        (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+                                    let r =
+                                        (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+                                    [l, r]
+                                }),
+                        );
+                        audio.queue(&vol_buf);
+                    }
+                    // vol == 0: mudo, nada entra na fila
+                }
             }
 
             // Earned do servidor chegando: une no set da sessão (memória e
@@ -2179,13 +2264,16 @@ pub fn run_game(
                     }
                     cab.push_osd(
                         &[
-                            "CONQUISTA DESBLOQUEADA",
+                            tr!("ACHIEVEMENT UNLOCKED", "CONQUISTA DESBLOQUEADA"),
                             &unlock.title,
-                            &format!("+{} pontos", unlock.points),
+                            &tr!(
+                                format!("+{} points", unlock.points),
+                                format!("+{} pontos", unlock.points)
+                            ),
                             if unlock.hardcore {
-                                "modo hardcore"
+                                tr!("hardcore mode", "modo hardcore")
                             } else {
-                                "modo softcore"
+                                tr!("softcore mode", "modo softcore")
                             },
                         ],
                         Some(osd_badge_id(&unlock.badge)),
@@ -2229,57 +2317,6 @@ pub fn run_game(
                     }
                 };
                 let aspect = core.av_info().aspect_ratio;
-                // Locadora (§4): o bilhete corre por segundo com o console
-                // ligado — salário do em serviço, freguesia da avulsa e a
-                // devolução automática do ticket atrasado (+24h, §6).
-                let real_ms = live_session_time(powered_elapsed, powered_since).as_millis() as i64;
-                if real_ms - billed_ms >= 1000 {
-                    if let Some(loca) = loca.as_deref_mut() {
-                        match loca.mode {
-                            sixteen_locadora::RentMode::Service => {
-                                if loca.is_service_cart {
-                                    loca.loc.credit_service_ms_at(
-                                        real_ms - billed_ms,
-                                        loca.prices,
-                                        sixteen_locadora::rules::now_unix(),
-                                    );
-                                }
-                            }
-                            sixteen_locadora::RentMode::Hourly => {
-                                hourly_ms += real_ms - billed_ms;
-                                if loca.loc.hourly_blackout_at(hourly_ms, loca.prices) {
-                                    loca.loc.end_hourly(hourly_ms, loca.prices);
-                                    loca.loc.stats.blackout_recoveries += 1;
-                                    cab.push_osd(
-                                        &["cortou a grana no meio da partida — de volta ao balcão"],
-                                        None,
-                                        std::time::Duration::from_secs(5),
-                                    );
-                                    let burst = power_off_burst(plat, cab);
-                                    break 'run GameExit::Ejected { static_level: burst };
-                                }
-                            }
-                            sixteen_locadora::RentMode::Ticket => {
-                                if let sixteen_locadora::rules::TicketEvent::AutoReturned {
-                                    fined,
-                                } = loca.loc.enforce_ticket()
-                                {
-                                    // O balcão anuncia com a cerimônia de
-                                    // levar o cartucho de volta (§6).
-                                    loca.loc.takeback_notice = Some(fined);
-                                    cab.push_osd(
-                                        &["a locadora levou o cartucho de volta — devolução automática"],
-                                        None,
-                                        std::time::Duration::from_secs(5),
-                                    );
-                                    let burst = power_off_burst(plat, cab);
-                                    break 'run GameExit::Ejected { static_level: burst };
-                                }
-                            }
-                        }
-                    }
-                    billed_ms = real_ms;
-                }
                 cab.set_session_time(live_session_time(powered_elapsed, powered_since));
                 cab.present_frame(&fref, aspect);
 
@@ -2309,7 +2346,7 @@ pub fn run_game(
                     print_capture = Some(frame.clone());
                     modal = Modal::PrintSlot;
                     cab.set_modal(
-                        "Onde salvar o print?",
+                        tr!("Where to save the screenshot?", "Onde salvar o print?"),
                         &print_slot_rows(&spec.notes_dir, &title, &notes_meta),
                     );
                 }
@@ -2322,6 +2359,8 @@ pub fn run_game(
                         break 'run GameExit::Quit;
                     }
                 }
+
+                core.recycle_frame(frame);
             }
 
             // Periodically flush battery SRAM if it changed.
@@ -2349,16 +2388,6 @@ pub fn run_game(
         powered_elapsed += t.elapsed();
     }
     add_playtime(&spec.save_dir, &title, powered_elapsed.as_secs());
-
-    // Locadora: fecha a freguesia da hora avulsa com o total do console
-    // ligado (a devolução automática do ticket já correu por segundo; o
-    // salário foi creditado por segundo também). Persistência fica com o
-    // chamador — ele tem o caminho e salva a cada volta de tela.
-    if let Some(loca) = loca.as_deref_mut() {
-        if loca.mode == sixteen_locadora::RentMode::Hourly {
-            loca.loc.end_hourly(hourly_ms, loca.prices);
-        }
-    }
 
     if let Some(ra) = &mut ra_session {
         ra.save_progress();

@@ -21,6 +21,7 @@ use sixteen_domain::{Catalog, CatalogEntry, Order};
 use sixteen_platform::{
     Cabinet, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton, ShelfPanelInfo,
 };
+use sixteen_platform::tr;
 
 use crate::idle;
 
@@ -63,7 +64,10 @@ const RECENT_LABEL_H: i32 = 24;
 /// titulo (Todos os jogos)") — mirrors the "jogados recentemente" label
 /// above the recent strip, so both sections read the same way.
 const ALL_GAMES_LABEL_H: i32 = 24;
-const ALL_GAMES_TITLE: &str = "todos os jogos";
+/// O rótulo da seção principal — função porque `tr!` não cabe em `const`.
+fn all_games_title() -> &'static str {
+    tr!("all games", "todos os jogos")
+}
 
 /// A "favoritos" strip above the recent one (plan revision: "adicionar
 /// marcador de favorito nos jogos; mostrar em uma categoria acima dos
@@ -73,7 +77,10 @@ const ALL_GAMES_TITLE: &str = "todos os jogos";
 /// stay one cursor-move away instead of being cut off by a hard cap. The
 /// label height mirrors the other two sections'.
 const FAV_LABEL_H: i32 = 24;
-const FAV_TITLE: &str = "favoritos";
+/// O rótulo da faixa de favoritos — função porque `tr!` não cabe em `const`.
+fn fav_title() -> &'static str {
+    tr!("favorites", "favoritos")
+}
 /// Hard caps well past what fits on screen at once — the strips scroll, but
 /// a run of thousands of played games shouldn't grow them without bound.
 const STRIP_CAP: usize = 60;
@@ -104,6 +111,12 @@ const TILE_BG: (u8, u8, u8, u8) = (34, 34, 40, 255);
 const HILITE: (u8, u8, u8, u8) = (240, 200, 80, 255);
 const TEXT: (u8, u8, u8) = (232, 232, 232);
 const DIM: (u8, u8, u8) = (150, 150, 158);
+/// A linguagem "fósforo" dos botões que vivem dentro da TV (plan revision):
+/// sem caixa, texto na cor da chave Power/Reset do console (o violeta
+/// `SWITCH_PURPLE` do cabinet, aqui clareado para ler contra o fundo escuro
+/// do tubo) com um sublinhado no ativo, dim no inativo — o mesmo jeito do
+/// OSD "CH 3", só que na cor do console em vez do verde.
+const FOSFORO: (u8, u8, u8) = (186, 138, 244);
 /// Text color on top of the `HILITE` selection bar in list mode — dark, for
 /// contrast against the bright fill.
 const HILITE_TEXT: (u8, u8, u8) = (24, 20, 12);
@@ -259,18 +272,19 @@ fn draw_manual_view(
     let prev = (w / 2 - btn.0 as i32 - 90, h - 64, btn.0, btn.1);
     let next = (w / 2 + 90, h - 64, btn.0, btn.1);
 
+    let pages_label = if pages > 0 {
+        pages.to_string()
+    } else {
+        "…".to_string()
+    };
     d.text(
         MARGIN,
         MARGIN,
         2,
         TEXT,
-        &format!(
-            "manual — página {page} de {pages}",
-            pages = if pages > 0 {
-                pages.to_string()
-            } else {
-                "…".to_string()
-            }
+        &tr!(
+            format!("manual — page {page} of {pages_label}"),
+            format!("manual — página {page} de {pages_label}"),
         ),
     );
     let id = manual_page_id(sha1, page);
@@ -283,24 +297,29 @@ fn draw_manual_view(
     if page_ready {
         d.image_fit(id, area.0, area.1, area.2, area.3);
     } else if pages > 0 {
-        d.text(MARGIN, area.1 + 20, 1, DIM, "renderizando a página...");
+        d.text(
+            MARGIN,
+            area.1 + 20,
+            1,
+            DIM,
+            tr!("rendering the page...", "renderizando a página..."),
+        );
     } else {
-        d.text(MARGIN, area.1 + 20, 1, DIM, "abrindo o manual...");
+        d.text(
+            MARGIN,
+            area.1 + 20,
+            1,
+            DIM,
+            tr!("opening the manual...", "abrindo o manual..."),
+        );
     }
 
     let mut draw_nav = |r: &(i32, i32, u32, u32), label: &str| {
-        d.outline(r.0, r.1, r.2, r.3, 2, (TEXT.0, TEXT.1, TEXT.2, 255));
-        d.text(
-            r.0 + (r.2 as i32 - label.chars().count() as i32 * 9) / 2,
-            r.1 + 7,
-            1,
-            TEXT,
-            label,
-        );
+        draw_fosforo_btn(d, *r, label, true);
     };
-    draw_nav(&prev, "< página");
-    draw_nav(&next, "página >");
-    draw_nav(&voltar, "voltar");
+    draw_nav(&prev, tr!("< page", "< página"));
+    draw_nav(&next, tr!("page >", "página >"));
+    draw_nav(&voltar, tr!("back", "voltar"));
     (prev, next, voltar)
 }
 
@@ -342,16 +361,7 @@ pub fn strip_arrow_rects(scr_w: u32, y0: i32) -> StripArrows {
 fn draw_strip_arrows(d: &mut Screen, scr_w: u32, y0: i32, scroll: usize, len: usize, vis: usize) {
     let (left, right) = strip_arrow_rects(scr_w, y0);
     for (rect, glyph, more) in [(left, "<", scroll > 0), (right, ">", scroll + vis < len)] {
-        let (bx, by, bw, bh) = rect;
-        d.outline(bx, by, bw, bh, 1, (150, 150, 158, 255));
-        d.fill(bx + 1, by + 1, bw - 2, bh - 2, (34, 34, 40, 255));
-        d.text(
-            bx + (bw as i32 - 9) / 2,
-            by + (bh as i32 - 20) / 2,
-            1,
-            if more { TEXT } else { DIM },
-            glyph,
-        );
+        draw_fosforo_btn(d, rect, glyph, more);
     }
 }
 
@@ -376,23 +386,32 @@ fn draw_achievements_view(
 
     match data {
         None => {
-            d.text(x, MARGIN, 2, DIM, "conquistas indisponíveis");
+            d.text(
+                x,
+                MARGIN,
+                2,
+                DIM,
+                tr!("achievements unavailable", "conquistas indisponíveis"),
+            );
         }
         Some(list) => {
             let (all_pts, got_pts) = list.points();
             d.text_wrapped(x, MARGIN, (w - MARGIN * 2) as u32, 2, TEXT, &list.title);
+            let earned_n = list.earned.len();
+            let total_n = list.achievements.len();
+            let hardcore_n = list.earned.values().filter(|&&hc| hc).count();
             d.text(
                 x,
                 MARGIN + 56,
                 1,
                 DIM,
-                &format!(
-                    "conquistas {}/{} ({} hardcore) — {} de {} pontos",
-                    list.earned.len(),
-                    list.achievements.len(),
-                    list.earned.values().filter(|&&hc| hc).count(),
-                    got_pts,
-                    all_pts
+                &tr!(
+                    format!(
+                        "achievements {earned_n}/{total_n} ({hardcore_n} hardcore) — {got_pts} of {all_pts} points"
+                    ),
+                    format!(
+                        "conquistas {earned_n}/{total_n} ({hardcore_n} hardcore) — {got_pts} de {all_pts} pontos"
+                    ),
                 ),
             );
             let rows = (h - MARGIN * 2 - 130) / ROW_H;
@@ -430,7 +449,7 @@ fn draw_achievements_view(
             }
             if list.achievements.len() > visible {
                 let note = if top + visible < list.achievements.len() {
-                    "v para rolar"
+                    tr!("v to scroll", "v para rolar")
                 } else {
                     "^ v"
                 };
@@ -439,29 +458,8 @@ fn draw_achievements_view(
         }
     }
 
-    // "voltar" — same flat style the back-cover zoom uses.
-    d.outline(
-        voltar.0,
-        voltar.1,
-        voltar.2,
-        voltar.3,
-        1,
-        (150, 150, 158, 255),
-    );
-    d.fill(
-        voltar.0 + 1,
-        voltar.1 + 1,
-        voltar.2 - 2,
-        voltar.3 - 2,
-        (34, 34, 40, 255),
-    );
-    d.text(
-        voltar.0 + (voltar.2 as i32 - 9 * 6) / 2,
-        voltar.1 + (voltar.3 as i32 - 20) / 2,
-        1,
-        TEXT,
-        "voltar",
-    );
+    // "voltar" — a linguagem fósforo do resto dos botões dentro da TV.
+    draw_fosforo_btn(d, voltar, tr!("back", "voltar"), true);
     voltar
 }
 
@@ -654,8 +652,14 @@ fn draw_expositor(d: &mut Screen, x: i32, y: i32, w: u32, h: u32) {
 
 fn game_info_lines(entry: &CatalogEntry, playtime_secs: u64) -> Vec<(String, String)> {
     vec![
-        ("cartucho".to_string(), cart_size(entry.rom.size)),
-        ("tempo total".to_string(), format_playtime(playtime_secs)),
+        (
+            tr!("cartridge", "cartucho").to_string(),
+            cart_size(entry.rom.size),
+        ),
+        (
+            tr!("total time", "tempo total").to_string(),
+            format_playtime(playtime_secs),
+        ),
     ]
 }
 
@@ -676,8 +680,16 @@ const HLTB_ICON_IMG: u64 = 0x484C_5442;
 /// (`sixteen_domain::hltb`), nada de rede.
 fn hltb_bars(i: &sixteen_domain::InfosData, icon: u64) -> sixteen_platform::HltbBars {
     let estilos = [
-        ("história principal", i.hltb_main, (52, 124, 246)),
-        ("principal + extras", i.hltb_extra, (86, 88, 204)),
+        (
+            tr!("main story", "história principal"),
+            i.hltb_main,
+            (52, 124, 246),
+        ),
+        (
+            tr!("main + extras", "principal + extras"),
+            i.hltb_extra,
+            (86, 88, 204),
+        ),
     ];
     let maior = estilos
         .iter()
@@ -745,9 +757,9 @@ fn cart_size(bytes: u64) -> String {
         .find(|&s| mbit <= s)
         .unwrap_or(mbit);
     if snapped == 1 {
-        "1 mega".to_string()
+        tr!("1 meg", "1 mega").to_string()
     } else {
-        format!("{snapped} megas")
+        tr!(format!("{snapped} megs"), format!("{snapped} megas"))
     }
 }
 
@@ -756,12 +768,12 @@ fn cart_size(bytes: u64) -> String {
 /// than a confusing "0min".
 fn format_playtime(secs: u64) -> String {
     if secs == 0 {
-        return "nunca".to_string();
+        return tr!("never", "nunca").to_string();
     }
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     match (h, m) {
-        (0, 0) => "menos de 1min".to_string(),
+        (0, 0) => tr!("under 1 min", "menos de 1min").to_string(),
         (0, m) => format!("{m}min"),
         (h, m) => format!("{h}h {m}min"),
     }
@@ -1011,16 +1023,25 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
         let (scr_w, _) = cab.shelf_screen_size();
         let render = |d: &mut Screen| {
             draw_refresh_button(d, refresh_rect);
-            d.text(MARGIN, MARGIN, 2, TEXT, "nenhuma rom encontrada");
+            d.text(
+                MARGIN,
+                MARGIN,
+                2,
+                TEXT,
+                tr!("your shelf is empty", "sua estante está vazia"),
+            );
             d.text_wrapped(
                 MARGIN,
                 MARGIN + 40,
                 scr_w.saturating_sub(MARGIN as u32 * 2),
                 1,
                 DIM,
-                "copie seus arquivos .sfc/.smc/.zip para a pasta roms/, ao lado \
-                 do executável, e clique em Atualizar (ou volte e abra a estante \
-                 de novo).",
+                tr!(
+                    "drop your .sfc/.smc/.zip files into the roms/ folder and \
+                     click Refresh (or go back and open the shelf again).",
+                    "solte seus .sfc/.smc/.zip na pasta roms/ e clique em \
+                     Atualizar (ou volte e abra a estante de novo)."
+                ),
             );
         };
         cab.frame_shelf(BG, render);
@@ -2010,27 +2031,40 @@ pub fn run(
             last_focus = focus_key;
         }
         if let Some(e) = focused {
+            // Same one-decode-per-frame cap the grid uses: focusing a game
+            // used to decode up to three JPEGs (logo + cartridge + back
+            // cover) in a single frame — a hitch on every D-pad move.
+            let mut focus_budget = 1usize;
             let wid = wheel_id(&e.rom.sha1);
-            if !cab.has_image(wid) && tried_logo.insert(e.rom.sha1.clone()) {
+            if focus_budget > 0 && !cab.has_image(wid) && tried_logo.insert(e.rom.sha1.clone()) {
                 if let Some(path) = find_local_art(&logo_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
                         cab.set_image(wid, w, h, &rgba);
+                        focus_budget -= 1;
                     }
                 }
             }
             let cid = cartridge_id(&e.rom.sha1);
-            if !cab.has_image(cid) && tried_cartridge.insert(e.rom.sha1.clone()) {
+            if focus_budget > 0
+                && !cab.has_image(cid)
+                && tried_cartridge.insert(e.rom.sha1.clone())
+            {
                 if let Some(path) = find_local_art(&cartridge_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
                         cab.set_image(cid, w, h, &rgba);
+                        focus_budget -= 1;
                     }
                 }
             }
             let bid = backcover_id(&e.rom.sha1);
-            if !cab.has_image(bid) && tried_backcover.insert(e.rom.sha1.clone()) {
+            if focus_budget > 0
+                && !cab.has_image(bid)
+                && tried_backcover.insert(e.rom.sha1.clone())
+            {
                 if let Some(path) = find_local_art(&backcover_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
                         cab.set_image(bid, w, h, &rgba);
+                        focus_budget -= 1;
                     }
                 }
             }
@@ -2234,16 +2268,22 @@ pub fn run(
                 if let Some(i) = &infos {
                     // o lançamento vai pelo campo `release` do painel
                     if let Some(editora) = &i.publisher {
-                        info.push(("editora".to_string(), editora.clone()));
+                        info.push((
+                            tr!("publisher", "editora").to_string(),
+                            editora.clone(),
+                        ));
                     }
                     if let Some(regiao) = &i.region {
                         if regiao != "outra" {
-                            info.push(("região".to_string(), regiao.clone()));
+                            info.push((tr!("region", "região").to_string(), regiao.clone()));
                         }
                     }
                     if let Some(critica) = &i.nota_critica {
                         if !critica.is_empty() {
-                            info.push(("nota (crítica)".to_string(), critica.clone()));
+                            info.push((
+                                tr!("rating", "nota (crítica)").to_string(),
+                                critica.clone(),
+                            ));
                         }
                     }
                 }
@@ -2264,8 +2304,11 @@ pub fn run(
                     if let Some((earned, total, award)) = tally {
                         let pct = (earned * 100 + total / 2).checked_div(total).unwrap_or(0);
                         info.push((
-                            "conquistas".to_string(),
-                            format!("{earned} de {total} ({pct}%)"),
+                            tr!("achievements", "conquistas").to_string(),
+                            tr!(
+                                format!("{earned} of {total} ({pct}%)"),
+                                format!("{earned} de {total} ({pct}%)")
+                            ),
                         ));
                         // "zerado (softcore)" / "mastered" — o prêmio em
                         // palavras, junto das infos (plan revision).
@@ -2354,7 +2397,7 @@ pub fn run(
                     achievements_reason: ra_state
                         .and_then(|g| g.as_ref())
                         .filter(|g| g.unsupported)
-                        .map(|_| "versão sem suporte".to_string()),
+                        .map(|_| tr!("unsupported version", "versão sem suporte").to_string()),
                     manual_first_page: manual_path
                         .is_some()
                         .then(|| manual_page_id(&e.rom.sha1, 1)),
@@ -2364,7 +2407,7 @@ pub fn run(
                 }
             }
             None => ShelfPanelInfo {
-                title: "nenhum jogo encontrado".to_string(),
+                title: tr!("no games found", "nenhum jogo encontrado").to_string(),
                 logo_img: None,
                 cartridge_img: None,
                 backcover_img: None,
@@ -2419,7 +2462,10 @@ pub fn run(
             let count_label = if filter_query.is_empty() {
                 format!("{} games", view.len())
             } else {
-                format!("{} de {} games", view.len(), all.len())
+                tr!(
+                    format!("{} of {} games", view.len(), all.len()),
+                    format!("{} de {} games", view.len(), all.len())
+                )
             };
             d.text(MARGIN, MARGIN - 12, 2, DIM, &count_label);
             draw_filter_box(d, filter_rect, &filter_query, &filter_draft, editing_filter);
@@ -2436,7 +2482,7 @@ pub fn run(
             };
 
             if show_fav {
-                d.text(MARGIN, MARGIN + HEADER_H, 1, DIM, FAV_TITLE);
+                d.text(MARGIN, MARGIN + HEADER_H, 1, DIM, fav_title());
                 for (i, entry) in favorites
                     .iter()
                     .enumerate()
@@ -2492,7 +2538,7 @@ pub fn run(
                     MARGIN + HEADER_H + fav_block_h,
                     1,
                     DIM,
-                    "jogados recentemente",
+                    tr!("recently played", "jogados recentemente"),
                 );
                 for (i, entry) in recent
                     .iter()
@@ -2540,7 +2586,7 @@ pub fn run(
                 );
             }
 
-            d.text(MARGIN, all_games_label_y, 1, DIM, ALL_GAMES_TITLE);
+            d.text(MARGIN, all_games_label_y, 1, DIM, all_games_title());
 
             if grid.list_mode {
                 // Multicart menu: a plain numbered list, selection as an
@@ -2629,7 +2675,7 @@ pub fn run(
         if let Some(img) = zoom_close {
             match focused {
                 Some(_) => {
-                    let r = cab.frame_image_zoom(img, "voltar");
+                    let r = cab.frame_image_zoom(img, tr!("back", "voltar"));
                     zoom_rect = (r.x(), r.y(), r.width(), r.height());
                 }
                 None => zoom_close = None,
@@ -2818,7 +2864,13 @@ fn draw_history_list(
     sel: Option<usize>,
     scr_w: u32,
 ) {
-    d.text(MARGIN, MARGIN - 12, 2, DIM, "histórico - mais jogados");
+    d.text(
+        MARGIN,
+        MARGIN - 12,
+        2,
+        DIM,
+        tr!("history - most played", "histórico - mais jogados"),
+    );
     if ranked.is_empty() {
         d.text_wrapped(
             MARGIN,
@@ -2826,7 +2878,10 @@ fn draw_history_list(
             scr_w.saturating_sub(MARGIN as u32 * 2),
             1,
             DIM,
-            "nenhum jogo tem tempo registrado ainda -- jogue algo com o console ligado.",
+            tr!(
+                "no game has recorded time yet -- play something with the console on.",
+                "nenhum jogo tem tempo registrado ainda -- jogue algo com o console ligado."
+            ),
         );
         return;
     }
@@ -2867,7 +2922,7 @@ fn draw_filter_box(
     } else if !query.is_empty() {
         (query.to_string(), TEXT)
     } else {
-        ("buscar...".to_string(), DIM)
+        (tr!("search...", "buscar...").to_string(), DIM)
     };
     let max_chars = ((fw as i32 - 16) / 9).max(4) as usize;
     let shown: String = if raw.chars().count() > max_chars {
@@ -2879,18 +2934,30 @@ fn draw_filter_box(
     d.text(fx + 8, fy + (fh as i32 - 16) / 2, 1, color, &shown);
 }
 
-/// The "Histórico" button — same plain box look as the filter box, just a
-/// static label (plan revision: "colocar um botão para histórico").
-fn draw_history_button(d: &mut Screen, (bx, by, bw, bh): (i32, i32, u32, u32)) {
-    d.outline(bx, by, bw, bh, 1, (150, 150, 158, 255));
-    d.fill(bx + 1, by + 1, bw - 2, bh - 2, (34, 34, 40, 255));
-    d.text(bx + 8, by + (bh as i32 - 16) / 2, 1, TEXT, "histórico");
+/// The "Histórico"/"Atualizar" buttons — a linguagem fósforo (plan
+/// revision): sem caixa, o rótulo em `FOSFORO` com sublinhado, dentro do
+/// mesmo rect de sempre (o hit-test não muda).
+fn draw_history_button(d: &mut Screen, r: (i32, i32, u32, u32)) {
+    draw_fosforo_btn(d, r, tr!("history", "histórico"), true);
 }
 
-fn draw_refresh_button(d: &mut Screen, (bx, by, bw, bh): (i32, i32, u32, u32)) {
-    d.outline(bx, by, bw, bh, 1, (150, 150, 158, 255));
-    d.fill(bx + 1, by + 1, bw - 2, bh - 2, (34, 34, 40, 255));
-    d.text(bx + 8, by + (bh as i32 - 16) / 2, 1, TEXT, "atualizar");
+fn draw_refresh_button(d: &mut Screen, r: (i32, i32, u32, u32)) {
+    draw_fosforo_btn(d, r, tr!("refresh", "atualizar"), true);
+}
+
+/// Um botão da linguagem fósforo: texto centrado no rect, `FOSFORO` com
+/// sublinhado quando ativo, `DIM` sem sublinhado quando inativo — sem
+/// caixa nenhuma, o OSD é o próprio texto. O rect de clique continua sendo
+/// o que o caller guarda (a geometria não muda, só o desenho).
+fn draw_fosforo_btn(d: &mut Screen, (bx, by, bw, bh): (i32, i32, u32, u32), label: &str, ativo: bool) {
+    let (cor, sub) = if ativo { (FOSFORO, true) } else { (DIM, false) };
+    let tw = label.chars().count() as i32 * 9;
+    let tx = bx + (bw as i32 - tw).max(0) / 2;
+    let ty = by + (bh as i32 - 20) / 2;
+    d.text(tx, ty, 1, cor, label);
+    if sub {
+        d.fill(tx, ty + 21, tw.max(9) as u32, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+    }
 }
 
 /// A thin vertical scroll indicator at the grid's right edge (plan revision:
@@ -2984,15 +3051,18 @@ mod cart_tests {
 
     #[test]
     fn cart_size_matches_the_box_labels() {
+        // O rótulo do cartucho agora sai do `tr!` — fixa o inglês para o
+        // resultado não depender do locale da máquina.
+        tr::set_lang(Some(tr::Lang::En));
         let mib = 1024 * 1024;
-        assert_eq!(cart_size(4 * mib), "32 megas"); // SF Alpha 2
-        assert_eq!(cart_size(512 * 1024), "4 megas"); // Super Mario World
-        assert_eq!(cart_size(3 * mib), "24 megas"); // e.g. Mortal Kombat II? no — 24 Mbit carts exist
-        assert_eq!(cart_size(6 * mib), "48 megas"); // Tales of Phantasia
-                                                    // Copier headers don't inflate the cartridge.
-        assert_eq!(cart_size(512 * 1024 + 512), "4 megas");
-        assert_eq!(cart_size(4 * mib + 512), "32 megas");
+        assert_eq!(cart_size(4 * mib), "32 megs"); // SF Alpha 2
+        assert_eq!(cart_size(512 * 1024), "4 megs"); // Super Mario World
+        assert_eq!(cart_size(3 * mib), "24 megs"); // e.g. Mortal Kombat II? no — 24 Mbit carts exist
+        assert_eq!(cart_size(6 * mib), "48 megs"); // Tales of Phantasia
+                                                   // Copier headers don't inflate the cartridge.
+        assert_eq!(cart_size(512 * 1024 + 512), "4 megs");
+        assert_eq!(cart_size(4 * mib + 512), "32 megs");
         // Below the smallest mask: rounds up to it.
-        assert_eq!(cart_size(8 * 1024), "2 megas");
+        assert_eq!(cart_size(8 * 1024), "2 megs");
     }
 }

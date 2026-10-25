@@ -147,7 +147,7 @@ def cartucho_limpo():
     arr[y0:y1, x0:x1, :3] = original * (1 - mescla) + preench * mescla
 
     saida = Image.fromarray(np.uint8(arr.clip(0, 255)))
-    saida.save(SAIDA / "exemplo-cartucho.png")
+    saida.save(SAIDA / "example-cartridge.png")
     return saida
 
 
@@ -233,7 +233,7 @@ def cover():
         ancora="mm",
     )
 
-    im.convert("RGB").save(SAIDA / "exemplo-cover.png")
+    im.convert("RGB").save(SAIDA / "example-cover.png")
     return im
 
 
@@ -315,7 +315,7 @@ def backcover():
                    fonte("Arial Narrow Bold.ttf", 24), CINZA_TEXTO,
                    espaco=4, ancora="mm")
 
-    im.convert("RGB").save(SAIDA / "exemplo-backcover.png")
+    im.convert("RGB").save(SAIDA / "example-backcover.png")
     return im
 
 
@@ -482,7 +482,7 @@ def manual(cap):
     paginas.append(im)
 
     primeira = paginas[0].convert("RGB")
-    primeira.save(SAIDA / "exemplo-manual.pdf", save_all=True,
+    primeira.save(SAIDA / "example-manual.pdf", save_all=True,
                   append_images=[p.convert("RGB") for p in paginas[1:]],
                   resolution=150.0, title="Jogo Exemplo — Manual")
     return paginas
@@ -490,13 +490,13 @@ def manual(cap):
 
 def main():
     cap = cartucho_limpo()
-    print("exemplo-cartucho.png ok")
+    print("example-cartridge.png ok")
     cover()
-    print("exemplo-cover.png ok")
+    print("example-cover.png ok")
     backcover()
-    print("exemplo-backcover.png ok")
+    print("example-backcover.png ok")
     manual(cap)
-    print("exemplo-manual.pdf ok")
+    print("example-manual.pdf ok")
 
 
 if __name__ == "__main__":

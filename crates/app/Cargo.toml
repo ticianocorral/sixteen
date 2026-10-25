@@ -23,7 +23,6 @@ path = "src/bin/selector.rs"
 sixteen-emulation = { path = "../emulation" }
 sixteen-platform = { path = "../platform" }
 sixteen-domain = { path = "../domain" }
-sixteen-locadora = { path = "../locadora" }
 sixteen-ntsc = { path = "../ntsc" }
 anyhow.workspace = true
 log.workspace = true
@@ -33,10 +32,14 @@ sixteen-ra.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
+sha2.workspace = true
+hex.workspace = true
 toml = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-zip = { version = "8", default-features = false, features = ["deflate"] }
-lopdf = "0.36"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+lopdf = "0.42"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+pdfium-render = { version = "0.9.4", features = ["image_api"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

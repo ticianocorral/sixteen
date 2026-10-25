@@ -19,6 +19,7 @@ use sdl3::render::{
 };
 use sdl3::{AudioSubsystem, VideoSubsystem};
 
+use crate::tr;
 use crate::{audio::AudioOut, PlatformError};
 
 /// CRT tube shape. `WARP` is how hard the edges bow (0 = flat); `VIGNETTE` is
@@ -31,8 +32,8 @@ const CRT_GRID: usize = 32;
 /// fractions (a bit more at the bottom for the "chin"); everything outside is
 /// the cabinet face, chamfered down to a near-black recess at the screen edge.
 const BEZEL_SIDE: f32 = 0.070;
-const BEZEL_TOP: f32 = 0.070;
-const BEZEL_CHIN: f32 = 0.110;
+const BEZEL_TOP: f32 = 0.050;
+const BEZEL_CHIN: f32 = 0.095;
 /// Cabinet face — dark warm-grey plastic. Reads as a surface, still far darker
 /// than a lit game screen (plan §3.2).
 const CABINET: (u8, u8, u8) = (40, 37, 33);
@@ -175,7 +176,36 @@ const SWITCH_THUMB_WALL_LIT_DIM: (u8, u8, u8) = (52, 49, 45);
 /// drawn on top when lit.
 const LED_ON: (u8, u8, u8) = (214, 44, 40);
 const LED_ON_HI: (u8, u8, u8) = (255, 150, 140);
+/// O LED verde do queixo da TV (a foto do painel real: pontinho verde
+/// ao lado do POWER).
+const LED_TV_ON: (u8, u8, u8) = (64, 220, 96);
+const LED_TV_ON_HI: (u8, u8, u8) = (170, 255, 190);
 const LED_OFF: (u8, u8, u8) = (56, 26, 26);
+
+/// O plástico do queixo sombreado (o assento do knob de POWER, o sulco
+/// das barras apagadas do OSD) — um passo abaixo do `CABINET`.
+const PLASTICO_ESC: (u8, u8, u8) = (24, 22, 20);
+
+/// O prateado das TVs antigas (plan revision: "botoes de volume e power
+/// da tv ... tom prateado como tv antiga") — alumínio pintado, cinza
+/// claro e frio, a família oposta do cinza quente do cartucho
+/// (`EJECT_LIT.body`). O estado liga/desliga mora no quão acesa a chapa
+/// está (`PRATA` / `PRATA_DIM`), com a gravação escura como tinta dos
+/// rótulos (`PRATA_INK`) — como os dials antigos marcavam POWER/VOL.
+const PRATA: (u8, u8, u8) = (184, 187, 195);
+/// O brilho fosco do topo da chapa (metal, não plástico).
+const PRATA_HI: (u8, u8, u8) = (234, 236, 242);
+/// Desligada: a chapa passa a aço no escuro, um passo acima do `CABINET`.
+const PRATA_DIM: (u8, u8, u8) = (104, 106, 116);
+/// A tinta gravada dos rótulos/indicadores sobre a chapa acesa.
+const PRATA_INK: (u8, u8, u8) = (34, 36, 44);
+/// A gravação apagada sobre a chapa desligada.
+const PRATA_INK_DIM: (u8, u8, u8) = (168, 170, 178);
+
+/// A linguagem fósforo dos botões que vivem dentro da TV (plan revision) —
+/// o violeta da chave Power/Reset (`SWITCH_PURPLE`) clareado para ler contra
+/// o fundo escuro do tubo; a estante a chama de `FOSFORO` também.
+const FOSFORO: (u8, u8, u8) = (186, 138, 244);
 
 /// The panel's cartridge slot (plan revision: the reference photo — a
 /// cartridge standing upright, plugged into the console's loading base) —
@@ -373,6 +403,24 @@ pub struct Cabinet {
     /// XORSHIFT state for the hiss samples — same generator the power
     /// bursts use, so the texture of the noise matches.
     hiss_rng: u32,
+    /// O estado da TV (plan revision: "ao abrir o app a tv estiver desligada
+    /// e fazer um botao de power") — desligada, aquecendo (o warm-up do
+    /// tubo: ponto -> linha -> raster abrindo), ligada, ou colapsando (o
+    /// desligar: imagem -> linha -> ponto -> afterglow). `None` = ligada,
+    /// o estado de sempre de todo o app antes desta revisão.
+    tv_power: Option<TvPower>,
+    /// Volume da TV, 0..=16 — o OSD de barrinhas e o `AudioOut` do jogo
+    /// leem daqui (`volume()`). Persistência fica com o caller via
+    /// `set_volume`.
+    volume: u8,
+    /// Até quando o OSD de volume fica na tela — a cada mudança o deadline
+    /// renova; expirado, as barrinhas somem (como o CH 3 dos TVs reais).
+    volume_osd_until: Option<Instant>,
+    /// Os rects dos controles do queixo desenhados no último frame de
+    /// estático — `(power, vol_down, vol_up)`, em coordenadas de output;
+    /// `hit_tv_power`/`hit_volume` consultam.
+    tv_power_buttons: Option<TvChinControls>,
+
     /// The idle screen's core-download prompt (plan revision): `Some(label)`
     /// draws a warning plus this button in the idle panel — the label is the
     /// app's own live status ("Baixar núcleo" / progress text). `None`
@@ -402,6 +450,9 @@ pub struct Cabinet {
     /// always draws it instead: no signal, same as an old TV parked on
     /// channel 3.
     ch3_until: Option<Instant>,
+    /// O canal em que a TV está — só 3 ou 4, como TV de tubo de verdade
+    /// com o console no 3. CH-/CH+ do queixo alternam.
+    tv_channel: u8,
     /// Where the cabinet actually drew last frame, in real window/output
     /// pixels — native for displays in the 16:10..16:9 band, else a centered
     /// 16:9 letterbox/pillarbox (plan: don't distort on an ultrawide).
@@ -490,6 +541,83 @@ enum ChinOsd {
     None,
 }
 
+/// Um controle físico do queixo da TV (ver `Cabinet::hit_tv_controls`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TvControl {
+    Power,
+    VolUp,
+    VolDown,
+    Channel,
+}
+
+/// Os rects clicáveis do queixo da TV, registrados a cada frame (ver
+/// `Cabinet::hit_tv_controls`): VOL-/VOL+, o botão CH (3↔4) e POWER —
+/// da esquerda para a direita.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TvChinControls {
+    pub vol_down: Rect,
+    pub vol_up: Rect,
+    pub ch: Rect,
+    pub power: Rect,
+}
+
+impl TvChinControls {
+    /// Todos fora da tela — o "sem controles" (queixo curto demais).
+    pub fn offscreen() -> TvChinControls {
+        let no = Rect::new(-100, -100, 1, 1);
+        TvChinControls {
+            vol_down: no,
+            vol_up: no,
+            ch: no,
+            power: no,
+        }
+    }
+}
+
+/// O estado da animação da TV ligando/desligando (ver `Cabinet::tv_power`).
+/// `frames` conta os frames desde o início da fase; cada fase sabe quantos
+/// dura (60fps: o warm-up leva ~2s como um tubo de verdade, o colapso é
+/// rápido — ~0.4s — e o afterglow apaga sozinho).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TvPower {
+    /// Filamento acordando -> ponto -> linha -> raster abrindo. No fim,
+    /// vira `None` (ligada) e a neve normal assume.
+    Warming { frames: u32 },
+    /// Imagem -> linha -> ponto -> afterglow decaindo. No fim, vira
+    /// `Off`.
+    Collapsing { frames: u32 },
+    /// Desligada: vidro quase preto com reflexo, controles do queixo vivos.
+    Off,
+}
+
+/// O que a fase do tubo manda desenhar NO VIDRO neste frame — a leitura
+/// única que o caminho estático (neve) e o caminho de gameplay (imagem do
+/// jogo) fazem, para o tubo se comportar EXATAMENTE igual com qualquer
+/// sinal (plan revision: desligar a TV com o jogo rodando mata a imagem,
+/// não o jogo). `Raster` carrega a máscara de transição: `open` 0..1 é a
+/// abertura vertical do raster, `hot` o brilho do fósforo e `ponto` o
+/// afterglow final (o único ponto quente no centro do tubo morto).
+pub enum TvPhase {
+    /// Ligada: o sinal que o caminho já desenha.
+    On,
+    /// Desligada: o vidro morto por cima de tudo.
+    Dead,
+    /// Transição (warm-up abrindo / colapso fechando) por cima do sinal.
+    Raster { open: f32, hot: f32, ponto: bool },
+}
+
+/// O comprimento das fases do tubo em frames (60fps: o warm-up leva ~2s
+/// como um tubo de verdade, o colapso é rápido — ~0.4s — e o afterglow
+/// apaga sozinho). Compartilhadas pelo frame vivo (`tv_phase`) e pelos
+/// captures (`tv_phase_snapshot`).
+const TV_WARM_FRAMES: u32 = 120;
+const TV_COLLAPSE_FRAMES: u32 = 26;
+/// O flash do canal ao LIGAR a TV (plan revision: "quando religar a tv,
+/// mostrar o CH 3 novamente por alguns segundos (até a tv entender que
+/// esta dando sinal)") — o mesmo 3s do ligar o console (`CH3_FLASH` no
+/// runner); some sozinho, o sinal fica limpo.
+const TV_CH3_FLASH: Duration = Duration::from_secs(3);
+
 /// A clickable spot in the side panel: the idle screen's "Inserir cartucho"
 /// button, or one of the in-game console commands. `hit_panel_button` turns a
 /// click into one of these; the caller (idle screen / `run_game`) decides
@@ -498,9 +626,16 @@ enum ChinOsd {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelButton {
     Insert,
-    /// The idle screen's "MODO LOCADORA" button (docs/design-modo-locadora.md
-    /// §2) — third line of the home screen, below the shelf's FREE PLAY.
-    Locadora,
+    /// O botão "Livraria Retro" da tela inicial (plan revision: "adicionar
+    /// um novo botão para uma nova funcionalidade - Livraria Retro") — a
+    /// revistoteca em PDF (pasta `magazine`), leitura na TV. Só no idle,
+    /// como a estante.
+    Livraria,
+    /// O botão "MUSEU DO CONSOLE" (plan revision: "abaixo do botão de
+    /// magazine, outro botão para os pdf das documentações do console —
+    /// manual, poster, garantia — o app é museu local da época também") —
+    /// a acervo de documentação em PDF (pasta `museu`). Só no idle.
+    Museu,
     Settings,
     /// The idle screen's dev-mode button (plan revision: "habilitar botão em
     /// cima da configuração") — only drawn while the app's dev mode is on,
@@ -1078,8 +1213,13 @@ impl Cabinet {
             static_hiss: false,
             hiss: None,
             hiss_rng: 0x2545_f491,
+            tv_power: Some(TvPower::Off),
+            volume: 8,
+            volume_osd_until: None,
+            tv_power_buttons: None,
             foley: None,
             ch3_until: None,
+            tv_channel: 3,
             canvas_rect,
             nameplate: BRAND.to_string(),
             nameplate_updates: (false, false),
@@ -1218,6 +1358,25 @@ impl Cabinet {
     pub fn set_close_button(&mut self, _show: bool) {
         // The fechar/minimizar pair is drawn on every screen now (plan
         // revision); kept as a no-op so existing callers keep compiling.
+    }
+
+    /// O controle do queixo sob um ponto de output — `Power`, `VolUp`,
+    /// `VolDown` ou `Channel`. Disponível
+    /// enquanto a TV está mostrando estático (o idle); o jogo usa os
+    /// controles do painel.
+    pub fn hit_tv_controls(&self, ox: i32, oy: i32) -> Option<TvControl> {
+        let c = self.tv_power_buttons?;
+        if c.power.contains_point((ox, oy)) {
+            Some(TvControl::Power)
+        } else if c.vol_up.contains_point((ox, oy)) {
+            Some(TvControl::VolUp)
+        } else if c.vol_down.contains_point((ox, oy)) {
+            Some(TvControl::VolDown)
+        } else if c.ch.contains_point((ox, oy)) {
+            Some(TvControl::Channel)
+        } else {
+            None
+        }
     }
 
     /// Whether an output-space point lands on the close button drawn last
@@ -1847,12 +2006,33 @@ impl Cabinet {
         self.canvas.clear();
         self.canvas.set_viewport(Some(canvas_rect));
 
+        // A fase do tubo avança por frame aqui também (plan revision:
+        // "desligar a tv com o jogo rodando, ao ligar mostrar o jogo no
+        // tempo correto"): o Warming/Collapsing do caminho estático
+        // acontece sobre a IMAGEM que já estava na tela, e desligada o
+        // jogo desaparece — mas o jogo NÃO para: o core segue correndo
+        // no caller, sem nada pausado.
+        let phase = self.tv_phase();
         let src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
-        let _ = self
-            .canvas
-            .render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+        if !matches!(phase, TvPhase::Dead) {
+            let _ = self
+                .canvas
+                .render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+            // A interferência do canal 4 (plan revision: "no canal 4, uma
+            // interferência na imagem, igual acontecia de verdade") — o
+            // sinal do canal errado: estático picado + a barra de hum
+            // rolando por cima da imagem. No canal 3, nada.
+            if self.tv_on() && self.tv_channel == 4 {
+                let specks = self.ch4_specks(dst);
+                draw_ch4_layer(&mut self.canvas, dst, &specks);
+            }
+        }
+        // A máscara da fase por cima do que ficou no vidro (mesma do
+        // estático: faixas mortas, borda âmbar, ponto do afterglow, vidro
+        // morto inteiro).
+        self.draw_tv_phase_glass(&phase);
         let _ = self
             .canvas
             .render_geometry(&bezel.verts, None, &bezel.indices[..]);
@@ -1868,7 +2048,15 @@ impl Cabinet {
             &self.nameplate,
             self.nameplate_updates,
         );
-        self.draw_osd_front();
+        // A marca prateada centralizada no queixo (o frame vivo).
+        self.ensure_brand_logo();
+        draw_brand_logo(&mut self.canvas, &self.images, screen, out_h);
+        // A faixa do topo (badge RA + notificações) morre com a TV: vidro
+        // morto é vidro — a fila segue (os prazos expiram no religar, sem
+        // conteúdo congelado no vidro preto).
+        if self.tv_on() {
+            self.draw_osd_front();
+        }
         // The timed "CH 3" flash (plan revision): power-on shows the channel
         // banner over the picture for a few seconds, then it's gone. Expired
         // deadlines clear here so the banner truly disappears from the frame
@@ -1876,18 +2064,31 @@ impl Cabinet {
         if self.ch3_until.is_some_and(|until| Instant::now() >= until) {
             self.ch3_until = None;
         }
-        if self.ch3_until.is_some() {
-            draw_ch3_osd(&mut self.canvas, &mut self.font, self.screen);
+        if self.ch3_until.is_some() && self.tv_on() {
+            // O canal não existe numa TV desligada: com o tubo morto, nem
+            // banner (o queixo embaixo segue vivo, o vidro não).
+            let label = self.ch_osd_label();
+            draw_ch_osd(&mut self.canvas, &mut self.font, self.screen, &label);
         }
         // The picture is back, so any queued hiss goes — cut, not faded
         // (same rule the power bursts use for their own buzz).
         if let Some(h) = &self.hiss {
             h.clear();
         }
+        // O lado TV do frame de gameplay (plan revision: "tem que estar
+        // sempre na tela"): o OSD de barrinhas do volume sobre a imagem
+        // (a TV não deixa de ser TV com jogo rodando) e os controles
+        // físicos do queixo — o mesmo desenho do estático, os rects
+        // registrados a cada frame para o hit-test do caller.
+        self.draw_volume_osd(screen);
+        let tv_on = self.tv_on();
+        let chin = draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, tv_on);
+        self.tv_power_buttons = Some(chin);
         // Fechar/minimizar on every screen, gameplay included (plan
         // revision: "mostrar o fechar e minimizar em todas as telas").
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
+        let panel_tv_on = self.tv_on();
         self.panel_buttons = draw_panel(
             &mut self.canvas,
             &mut self.font,
@@ -1898,6 +2099,7 @@ impl Cabinet {
             self.idle_core_prompt.as_deref(),
             self.dev_mode,
             self.core_status.as_deref(),
+            panel_tv_on,
         );
         self.canvas.set_viewport(None);
         self.present_and_time();
@@ -1938,30 +2140,69 @@ impl Cabinet {
         let src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        // A interferência do canal 4 na captura também — o BMP bate com o
+        // que a janela real mostra. Pré-computado antes dos empréstimos
+        // imutáveis que a closure captura.
+        let ch4_specks = self.ch4_specks_for_capture(screen);
+        self.ensure_brand_logo();
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
         let dev_mode = self.dev_mode;
         let core_status = self.core_status.as_deref();
         let osd = self.osd_for_capture();
+        // A fase do tubo como FOTO (sem avançar o relógio): o BMP de
+        // gameplay bate com o que a janela real mostraria neste instante —
+        // TV desligada, vidro morto onde estaria a imagem do jogo.
+        let phase = self.tv_phase_snapshot();
+        let tv_on = self.tv_on();
+        // O flash do canal (plan revision: ligar a TV/console): o que a
+        // janela real mostraria neste instante do começo do sinal.
+        let ch3_show = tv_on && self.ch3_until.is_some_and(|until| Instant::now() < until);
+        let ch_label = self.ch_osd_label();
+        // A interferência do canal 4 na captura também — o BMP bate com o
+        // que a janela real mostra (o estático picado é pré-computado, a
+        // closure não pode tocar em `self`).
+        let ch4 = tv_on && self.tv_channel == 4;
         let font = &mut self.font;
         let images = &self.images;
         let nameplate = self.nameplate.as_str();
         let nameplate_updates = self.nameplate_updates;
+        let mut chin = TvChinControls::offscreen();
         let mut saved: Result<(), PlatformError> = Ok(());
         let outcome = self.canvas.with_texture_canvas(&mut target, |c| {
             c.set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
             c.clear();
             c.set_viewport(Some(canvas_rect));
-            let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+            // O tubo manda: desligada, a imagem do jogo NÃO entra na
+            // captura — o vidro morto é desenhado por cima (como o frame
+            // vivo faz no gameplay).
+            if !matches!(phase, TvPhase::Dead) {
+                let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+                if ch4 {
+                    draw_ch4_layer(c, screen, &ch4_specks);
+                }
+            }
+            draw_tv_glass_phase(c, screen, &phase);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
             let _ = draw_brand(c, font, screen, out_h, nameplate, nameplate_updates);
+            // A marca prateada centralizada (a captura bate com a janela).
+            draw_brand_logo(c, images, screen, out_h);
+            // O banner do canal sobre o sinal (o prazo do religar/ligar):
+            // a janela real o mostra por 3s; a captura bate.
+            if ch3_show {
+                draw_ch_osd(c, font, screen, &ch_label);
+            }
+            // Os controles do queixo também no BMP de gameplay — o que a
+            // janela real mostra (plan revision: "tem que estar sempre
+            // na tela"), a captura mostra.
+            chin = draw_tv_chin_controls(c, font, screen, out_h, tv_on);
             match &osd {
                 ChinOsd::Notify { lines, badge } => {
                     draw_chin_osd(c, font, images, screen, out_h, nameplate, lines, *badge);
                 }
                 ChinOsd::Ra { hardcore } => {
-                    draw_chin_ra(c, font, images, screen, out_h, nameplate, *hardcore);
+                    draw_chin_ra(c, font, images, screen, canvas_rect.width() as i32, nameplate, *hardcore);
                 }
                 ChinOsd::None => {}
             }
@@ -1975,6 +2216,7 @@ impl Cabinet {
                 idle_core_prompt,
                 dev_mode,
                 core_status,
+                tv_on,
             );
             c.set_viewport(None);
             saved = c
@@ -1985,6 +2227,7 @@ impl Cabinet {
         self.src = Some(src);
         self.mesh = Some(mesh);
         self.bezel = Some(bezel);
+        self.tv_power_buttons = Some(chin);
         outcome.map_err(|e| PlatformError::Sdl(e.to_string()))?;
         saved
     }
@@ -2053,8 +2296,16 @@ impl Cabinet {
         };
         tex.set_blend_mode(BlendMode::Blend);
         tex.set_scale_mode(SdlScaleMode::Linear);
-        let content = content_bbox(w, h, rgba);
         let vazado = rgba.chunks_exact(4).any(|p| p[3] < 250);
+        // O content_bbox varre pixel a pixel — só importa para arte VAZADA
+        // (a caixa 3D do painel recorta por ele). Para páginas/capas
+        // opacas (o PDF do leitor: ~23M pixels), pular a varredura era a
+        // diferença entre virar a página fluido e travar um frame.
+        let content = if vazado {
+            content_bbox(w, h, rgba)
+        } else {
+            (0, 0, w, h)
+        };
         // Arte vazada (render 3D em ângulo): a matte do render —
         // anti-aliasing CINZA em volta da caixa — vira franja cinza quando a
         // textura é reduzida com filtro linear. No upload, limpa: semi cinza
@@ -2163,11 +2414,15 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let st = self.screen_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        let tv_on = self.tv_on();
+        self.ensure_brand_logo(); // a marca do queixo na captura
+        let images = &self.images;
         let font = &mut self.font;
         let nameplate = self.nameplate.as_str();
         let nameplate_updates = self.nameplate_updates;
         let mut close_button = self.close_button;
         let mut minimize_button = self.minimize_button;
+        let mut chin = TvChinControls::offscreen();
         let mut saved: Result<(), PlatformError> = Ok(());
         let outcome = self.canvas.with_texture_canvas(&mut target, |c| {
             c.set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
@@ -2183,6 +2438,11 @@ impl Cabinet {
                 nameplate,
                 nameplate_updates,
             );
+            // A marca prateada centralizada (a captura bate com a janela).
+            draw_brand_logo(c, images, screen, canvas_rect.height());
+            // Os controles do queixo no BMP — a captura bate com a janela
+            // real, que os desenha em toda a moldura.
+            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), tv_on);
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
             c.set_viewport(None);
@@ -2193,6 +2453,7 @@ impl Cabinet {
         });
         self.close_button = close_button;
         self.minimize_button = minimize_button;
+        self.tv_power_buttons = Some(chin);
         self.screen_tex = Some(st);
         self.bezel = Some(bezel);
         outcome.map_err(|e| PlatformError::Sdl(e.to_string()))?;
@@ -2222,6 +2483,8 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let st = self.screen_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        let tv_on = self.tv_on();
+        self.ensure_brand_logo(); // a marca do queixo na captura
         let font = &mut self.font;
         let images = &self.images;
         let shelf_panel = self.shelf_panel.as_ref();
@@ -2229,6 +2492,7 @@ impl Cabinet {
         let nameplate_updates = self.nameplate_updates;
         let mut close_button = self.close_button;
         let mut minimize_button = self.minimize_button;
+        let mut chin = TvChinControls::offscreen();
         let mut saved: Result<(), PlatformError> = Ok(());
         let outcome = self.canvas.with_texture_canvas(&mut target, |c| {
             c.set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
@@ -2244,6 +2508,9 @@ impl Cabinet {
                 nameplate,
                 nameplate_updates,
             );
+            // Os controles do queixo no BMP — a captura bate com a janela
+            // real, que os desenha em toda a moldura.
+            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), tv_on);
             let _ = draw_shelf_panel(c, font, images, shelf_panel, panel);
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
@@ -2255,6 +2522,7 @@ impl Cabinet {
         });
         self.close_button = close_button;
         self.minimize_button = minimize_button;
+        self.tv_power_buttons = Some(chin);
         self.screen_tex = Some(st);
         self.bezel = Some(bezel);
         outcome.map_err(|e| PlatformError::Sdl(e.to_string()))?;
@@ -2342,10 +2610,293 @@ impl Cabinet {
         }
     }
 
+    // --- TV power/volume (plan revision: o conjunto físico do queixo) ---
+
+    /// A TV está ligada (ou virando)? `false` no `Off`/`Collapsing` — o
+    /// idle usa para saber o que desenhar (painel vivo ou vidro morto).
+    pub fn tv_on(&self) -> bool {
+        !matches!(self.tv_power, Some(TvPower::Off) | Some(TvPower::Collapsing { .. }))
+    }
+
+    /// Ligar/desligar: dispara o warm-up (ponto -> linha -> raster abrindo,
+    /// ~2s) ou o colapso (imagem -> linha -> ponto -> afterglow, ~0.4s).
+    /// Chamar de novo no meio de uma animação reinicia a fase oposta — o
+    /// knob é físico, cliques rápidos são legítimos.
+    pub fn toggle_tv_power(&mut self) {
+        // `None` é a TV LIGADA (estado de repouso) — o clique nela desliga;
+        // Off/Collapsing/Warming são os estados de desligada/em transição,
+        // o clique liga. (O bug antigo: None caía no braço do Warming e
+        // "desligar" religava o tubo.)
+        self.tv_power = Some(match self.tv_power {
+            Some(TvPower::Off) | Some(TvPower::Collapsing { .. }) => {
+                // LIGANDO: o canal na tela até a TV entender que está
+                // dando sinal (plan revision: "quando religar a tv,
+                // mostrar o CH 3 novamente por alguns segundos") — o
+                // mesmo 3s do ligar o console (`CH3_FLASH` no runner). No
+                // gameplay o banner cobre o warm-up inteiro e depois
+                // some; no estático o CH 3 é constante e o prazo não
+                // manda em nada — setar por cima é inofensivo.
+                self.ch3_until = Some(Instant::now() + TV_CH3_FLASH);
+                TvPower::Warming { frames: 0 }
+            }
+            None | Some(TvPower::Warming { .. }) => TvPower::Collapsing { frames: 0 },
+        });
+        // A neve volta do zero — sem estoque do estado anterior.
+        self.noise_stamp = None;
+    }
+
+    /// Volume da TV, 0..=16 — o jogo multiplica a amostra dele por isso.
+    pub fn volume(&self) -> u8 {
+        self.volume
+    }
+
+    /// Ajusta o volume (o queixo: VOL-/VOL+; cada clique 1 de 16) e acende
+    /// o OSD de barrinhas por 2s. `changed` diz se houve mudança (os limites
+    /// 0/16 param o OSD? não — TVs reais continuam mostrando o MAX/0).
+    pub fn nudge_volume(&mut self, delta: i32) {
+        let v = self.volume as i32 + delta;
+        self.volume = v.clamp(0, 16) as u8;
+        self.volume_osd_until = Some(Instant::now() + Duration::from_secs(2));
+    }
+
+    /// O canal da TV (o queixo: o botão CH) — só alterna entre 3 (o canal
+    /// do console) e 4, acendendo o banner verde por 3s (o mesmo prazo
+    /// do ligar).
+    pub fn toggle_channel(&mut self) {
+        self.tv_channel = if self.tv_channel == 3 { 4 } else { 3 };
+        self.ch3_until = Some(Instant::now() + TV_CH3_FLASH);
+    }
+
+    /// O texto do banner de canal — dígito duplo, como as TVs de tubo
+    /// mostravam.
+    pub fn ch_osd_label(&self) -> String {
+        format!("CH {:2}", self.tv_channel)
+    }
+
+    /// Um frame do tubo: avança as fases (Warming/Collapsing contam em
+    /// frames; chamar uma vez por frame apresentado — o estático avança
+    /// aqui, o gameplay também) e devolve o que ESTE frame desenha no
+    /// vidro. O fim do colapso desliga a TV (e mata o hiss pendente), o
+    /// fim do warm-up liga (o `None` do estado ligada).
+    fn tv_phase(&mut self) -> TvPhase {
+        match self.tv_power {
+            Some(TvPower::Warming { frames }) => {
+                if frames + 1 >= TV_WARM_FRAMES {
+                    self.tv_power = None; // ligada
+                } else {
+                    self.tv_power = Some(TvPower::Warming { frames: frames + 1 });
+                }
+            }
+            Some(TvPower::Collapsing { frames }) => {
+                if frames + 1 >= TV_COLLAPSE_FRAMES {
+                    self.tv_power = Some(TvPower::Off);
+                    // O hiss morre com a TV.
+                    if let Some(h) = &self.hiss {
+                        h.clear();
+                    }
+                } else {
+                    self.tv_power = Some(TvPower::Collapsing { frames: frames + 1 });
+                }
+            }
+            _ => {}
+        }
+        self.tv_phase_snapshot()
+    }
+
+    /// A fase do frame ATUAL, sem avançar o relógio — o frame vivo e os
+    /// captures (foto do estado, os timed advance só no presente) leem
+    /// por aqui.
+    fn tv_phase_snapshot(&self) -> TvPhase {
+        match self.tv_power {
+            Some(TvPower::Warming { frames }) => {
+                let t = frames as f32 / TV_WARM_FRAMES as f32;
+                // o raster abre: 0 até o meio do warm-up, depois abre até 1
+                let open = ((t - 0.35) / 0.5).clamp(0.0, 1.0);
+                // o brilho do fósforo: nasce no ponto, pico na abertura,
+                // assenta no fim
+                let hot = if t < 0.35 {
+                    t / 0.35
+                } else {
+                    (1.0 - (t - 0.35) / 0.65 * 0.8).max(0.2)
+                };
+                TvPhase::Raster { open, hot, ponto: false }
+            }
+            Some(TvPower::Collapsing { frames }) => {
+                let t = frames as f32 / TV_COLLAPSE_FRAMES as f32;
+                TvPhase::Raster {
+                    open: (1.0 - t * 1.15).clamp(0.0, 1.0),
+                    hot: (0.6 + t * 0.4).min(1.0),
+                    ponto: t > 0.85,
+                }
+            }
+            Some(TvPower::Off) => TvPhase::Dead,
+            None => TvPhase::On,
+        }
+    }
+
+    /// Desenha por cima do vidro o que a fase manda (`tv_phase`). Wrapper
+    /// do desenho puro — a função livre os captures (que não podem pegar
+    /// `&mut self`) também usam.
+    fn draw_tv_phase_glass(&mut self, phase: &TvPhase) {
+        draw_tv_glass_phase(&mut self.canvas, self.screen, phase);
+    }
+
+    /// Um frame do queixo: os controles físicos (Power knob, VOL-/VOL+,
+    /// LED) desenhados no plástico abaixo do vidro. Devolve os rects em
+    /// coordenadas de output/canvas para o hit-test do caller —
+    /// o conjunto `TvChinControls`.
+    fn draw_tv_chin(&mut self, screen: Rect, out_h: u32) -> TvChinControls {
+        let on = self.tv_on();
+        draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, on)
+    }
+
+    /// O OSD das barrinhas de volume (plan revision: "mostrando no CRT as
+    /// barrinhas de volume retro quando aumenta e diminui") — segmentos
+    /// Os componentes da interferência do canal 4, pré-computados — as
+    /// passadas de captura (a closure do BMP) não podem tocar em `self`.
+    fn ch4_specks(&mut self, screen: Rect) -> Vec<(i32, i32, bool)> {
+        let mut specks = Vec::new();
+        if screen.width() == 0 || screen.height() == 0 {
+            return specks;
+        }
+        let n = ((screen.width() as u64 * screen.height() as u64) / 1400).max(60);
+        for _ in 0..n {
+            self.rng ^= self.rng << 13;
+            self.rng ^= self.rng >> 7;
+            self.rng ^= self.rng << 17;
+            let x = screen.x() + ((self.rng as u64) % (screen.width() as u64)) as i32;
+            let y =
+                screen.y() + (((self.rng as u64) >> 16) % (screen.height() as u64)) as i32;
+            specks.push((x, y, self.rng & 1 == 0));
+        }
+        specks
+    }
+
+    /// A variante da captura: vazio a menos que a TV esteja ligada no
+    /// canal 4 — a decisão toda num lugar só, antes dos empréstimos.
+    fn ch4_specks_for_capture(&mut self, screen: Rect) -> Vec<(i32, i32, bool)> {
+        if self.tv_on() && self.tv_channel == 4 {
+            self.ch4_specks(screen)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// As dimensões da imagem registrada sob `id` — o input do leitor
+    /// usa para centralizar o zoom onde o usuário clicou.
+    pub fn image_size(&self, id: u64) -> Option<(u32, u32)> {
+        self.images.get(&id).map(|i| (i.w, i.h))
+    }
+
+    /// Registra a arte da marca (RGBA embutido) no mapa de imagens, uma
+    /// vez só — o queixo a desenha centralizada em todo frame.
+    fn ensure_brand_logo(&mut self) {
+        if !self.images.contains_key(&BRAND_LOGO_ID) {
+            self.set_image(BRAND_LOGO_ID, BRAND_LOGO_W, BRAND_LOGO_H, BRAND_LOGO_RGBA);
+        }
+    }
+
+    fn draw_volume_osd(&mut self, screen: Rect) {
+        let Some(until) = self.volume_osd_until else {
+            return;
+        };
+        if Instant::now() >= until {
+            self.volume_osd_until = None;
+            return;
+        }
+        // OSD morre com a TV (plan revision): barrinhas sobre o vidro
+        // morto é impossível — e o deadline apaga junto, na re-entrada o
+        // OSD recomeça do clique, sem resíduo.
+        if !self.tv_on() {
+            self.volume_osd_until = None;
+            return;
+        }
+        const TOTAL: u8 = 16;
+        let canvas = &mut self.canvas;
+        let font = &mut self.font;
+        let seg_w = 26i32;
+        let n = TOTAL as i32;
+        let bars_w = n * seg_w;
+        let bx = screen.x() + (screen.width() as i32 - bars_w) / 2;
+        let by = screen.bottom() - (screen.height() as i32 / 5);
+        // O verde do CH 3 (OSD_GREEN) — o fósforo do OSD da TV é um só,
+        // canal e volume na mesma cor E na mesma fonte: escala 3 com a
+        // sombra 2px deslocada (plan revision: "aquela fonte retro da tv").
+        let label = "VOLUME";
+        let lw = (GLYPH_W as i32 * 3) * label.chars().count() as i32;
+        draw_text_absolute(
+            canvas,
+            font,
+            bx - lw - 18 + 2,
+            by + 2 + 2,
+            TextStyle::new(3, (12, 14, 12)),
+            label,
+            usize::MAX,
+        );
+        draw_text_absolute(
+            canvas,
+            font,
+            bx - lw - 18,
+            by + 2,
+            TextStyle::new(3, OSD_GREEN),
+            label,
+            usize::MAX,
+        );
+        if self.volume >= TOTAL {
+            let mx = bx + bars_w + 18;
+            draw_text_absolute(
+                canvas,
+                font,
+                mx + 2,
+                by + 2 + 2,
+                TextStyle::new(3, (12, 14, 12)),
+                "MAX",
+                usize::MAX,
+            );
+            draw_text_absolute(
+                canvas,
+                font,
+                mx,
+                by + 2,
+                TextStyle::new(3, OSD_GREEN),
+                "MAX",
+                usize::MAX,
+            );
+        }
+        for i in 0..n {
+            let aceso = (i as u8) < self.volume;
+            let x = bx + i * seg_w;
+            let cor = if aceso { OSD_GREEN } else { (20, 34, 22) };
+            canvas.set_draw_color(Color::RGB(cor.0, cor.1, cor.2));
+            let _ = canvas.fill_rect(Rect::new(x, by, 9, 34));
+            let _ = canvas.fill_rect(Rect::new(x + 13, by, 9, 26));
+        }
+        // o filete de brilho sob as barras acesas
+        if self.volume > 0 {
+            let w = seg_w * self.volume as i32 - 6;
+            canvas.set_draw_color(Color::RGBA(OSD_GREEN.0, OSD_GREEN.1, OSD_GREEN.2, 150));
+            let _ = canvas.fill_rect(Rect::new(bx, by + 40, w.max(4) as u32, 1));
+        }
+    }
+
     /// One frame of signal-off snow through the tube, cartridge still visible
     /// in its slot if one is set. `level` 1.0 = a full blizzard, 0.0 = a dim,
     /// near-still hiss. Never a full-screen flash.
+    ///
+    /// A TV pode estar desligada ou em transição (`tv_power`, plan revision:
+    /// "ao abrir o app a tv estiver desligada e fazer um botao de power"):
+    /// desligada, o tubo desenha o vidro morto (quase preto + reflexo) no
+    /// lugar da neve; aquecendo, a neve entra comprimida e estourada (o
+    /// raster abrindo); colapsando, ela esmaga na linha -> ponto ->
+    /// afterglow. A neve em si (a textura, o CH 3, o hiss) é intocada —
+    /// estas fases são só uma máscara vertical + brilho por cima dela.
     pub fn present_static(&mut self, level: f32) {
+        // A fase do tubo avança por frame e sabe o que este frame desenha;
+        // a neve: desligada, nível zero (nada para a textura — o vidro morto
+        // é desenhado por cima); em transição, o normal (a máscara do vidro
+        // faz o resto); ligada, o nível de sempre.
+        let phase = self.tv_phase();
+        let drawn_level = if matches!(phase, TvPhase::Dead) { 0.0 } else { level };
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
         let canvas_rect = cabinet_canvas_rect(real_w, real_h);
         self.canvas_rect = canvas_rect;
@@ -2355,7 +2906,7 @@ impl Cabinet {
         self.screen = screen_area(cab_w, wh);
         self.ensure_bezel(cab_w, wh, self.screen);
         self.ensure_mesh(self.screen);
-        self.update_noise_tex(level);
+        self.update_noise_tex(drawn_level);
 
         // The mesh is cached like the gameplay path's — rebuilding 1,089
         // vertices every frame for a screen that only changes on
@@ -2370,12 +2921,20 @@ impl Cabinet {
             .canvas
             .render_geometry(&mesh.verts, Some(&nt.tex), &mesh.indices[..]);
         self.noise_tex = Some(nt);
+        // A máscara da fase (raster abrindo/colapsando/vidro morto), por
+        // cima da neve — a mesma passada do gameplay.
+        self.draw_tv_phase_glass(&phase);
         let bezel = self.bezel.take().unwrap();
         let _ = self
             .canvas
             .render_geometry(&bezel.verts, None, &bezel.indices[..]);
         self.bezel = Some(bezel);
         self.mesh = Some(mesh);
+        // O OSD de volume + o queixo com os controles físicos — por cima do
+        // bezel (o OSD é da TV; o queixo é o plástico dela).
+        self.draw_volume_osd(self.screen);
+        let chin = self.draw_tv_chin(self.screen, canvas_rect.height());
+        self.tv_power_buttons = Some(chin);
         // O retorno PRECISA ser guardado: são os rects clicáveis das setas
         // verdes de update — sem isto o idle desenha as setas mas o clique
         // nunca acerta (hit_update_arrow lia uma lista sempre vazia).
@@ -2387,21 +2946,29 @@ impl Cabinet {
             &self.nameplate,
             self.nameplate_updates,
         );
+        // A marca prateada centralizada no queixo (o estático também).
+        self.ensure_brand_logo();
+        draw_brand_logo(&mut self.canvas, &self.images, self.screen, wh);
         // Sem sinal (plan revision): the channel banner stays up the whole
         // time the TV is showing snow — game inserted but powered off, the
         // idle screen, all of it — like a real set parked on channel 3.
-        draw_ch3_osd(&mut self.canvas, &mut self.font, self.screen);
-        // A conta ativa marca presença até na estática: o badge do RA no
-        // queixo, do lado oposto ao nameplate.
-        self.draw_ra_badge();
+        // TV DESLIGADA, porém: vidro morto não mostra canal nem badge —
+        // uma TV apagada é só vidro (o queixo embaixo segue vivo).
+        if self.tv_on() {
+            let label = self.ch_osd_label();
+            draw_ch_osd(&mut self.canvas, &mut self.font, self.screen, &label);
+        }
         // The ambient hiss (opt-in via settings): follows the same level as
         // the visual snow, so a burst hisses loud and the resting hiss stays
         // a quiet background shhh.
-        if self.static_hiss {
+        // O chiado é do TUBO: com a TV desligada, silêncio — o buffer
+        // pendente é cortado na hora (nada de neve sonora no vidro morto).
+        if self.static_hiss && self.tv_on() {
             self.queue_static_hiss(level);
         } else if let Some(h) = &self.hiss {
             h.clear();
         }
+        let panel_tv_on = self.tv_on();
         self.panel_buttons = draw_panel(
             &mut self.canvas,
             &mut self.font,
@@ -2412,7 +2979,13 @@ impl Cabinet {
             self.idle_core_prompt.as_deref(),
             self.dev_mode,
             self.core_status.as_deref(),
+            panel_tv_on,
         );
+        // O badge do RA depois do painel (furniture da moldura, como o par
+        // fechar/minimizar) — antes disso o painel cobria o badge no idle.
+        if self.tv_on() {
+            self.draw_ra_badge();
+        }
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
@@ -2445,18 +3018,21 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let nt = self.noise_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        let tv_on = self.tv_on();
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
         let dev_mode = self.dev_mode;
         let core_status = self.core_status.as_deref();
         let ra_status = self.ra_status;
+        let ch_label = self.ch_osd_label();
         let font = &mut self.font;
         let images = &self.images;
         let nameplate = self.nameplate.as_str();
         let nameplate_updates = self.nameplate_updates;
         let mut close_button = self.close_button;
         let mut minimize_button = self.minimize_button;
+        let mut chin = TvChinControls::offscreen();
         let mut saved: Result<(), PlatformError> = Ok(());
         let outcome = self.canvas.with_texture_canvas(&mut target, |c| {
             c.set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
@@ -2464,10 +3040,27 @@ impl Cabinet {
             c.set_viewport(Some(canvas_rect));
             let _ = c.render_geometry(&mesh.verts, Some(&nt.tex), &mesh.indices[..]);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
+            // TV desligada (mesma regra do present_static): o vidro morto
+            // por cima da neve, sem CH 3 nem badge.
+            if !tv_on {
+                for row in 0..screen.height() as i32 {
+                    let t = row as f32 / screen.height() as f32;
+                    let v = 5.0 + 3.0 * t;
+                    c.set_draw_color(Color::RGB(v as u8, v as u8, (v + 1.0) as u8));
+                    let _ = c.fill_rect(Rect::new(screen.x(), screen.y() + row, screen.width(), 1));
+                }
+            }
+            // Os controles do queixo (POWER/VOL) — o frame vivo os desenha
+            // sempre; a captura, que existe para bater com o que a janela
+            // real mostra, não podia deixar os botões de fora.
+            chin = draw_tv_chin_controls(c, font, screen, wh, tv_on);
             draw_brand(c, font, screen, wh, nameplate, nameplate_updates);
-            draw_ch3_osd(c, font, screen);
-            if let Some(status) = ra_status {
-                draw_chin_ra(c, font, images, screen, wh, nameplate, status.hardcore);
+            draw_brand_logo(c, images, screen, wh);
+            if tv_on {
+                draw_ch_osd(c, font, screen, &ch_label);
+                if let Some(status) = ra_status {
+                    draw_chin_ra(c, font, images, screen, canvas_rect.width() as i32, nameplate, status.hardcore);
+                }
             }
             draw_panel(
                 c,
@@ -2479,6 +3072,7 @@ impl Cabinet {
                 idle_core_prompt,
                 dev_mode,
                 core_status,
+                tv_on,
             );
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
@@ -2490,6 +3084,10 @@ impl Cabinet {
         });
         self.close_button = close_button;
         self.minimize_button = minimize_button;
+        // Os rects tocam o desenho do frame da captura — na janela real o
+        // próximo present_static os refaz; na captura, eles são o que um
+        // clique veria neste frame congelado.
+        self.tv_power_buttons = Some(chin);
         self.noise_tex = Some(nt);
         self.bezel = Some(bezel);
         outcome.map_err(|e| PlatformError::Sdl(e.to_string()))?;
@@ -2693,28 +3291,18 @@ impl Cabinet {
         let img_h = (sh as i32 - pad * 2 - btn_h - 14).max(60) as u32;
         self.paint_shelf((10, 10, 11), |d| {
             d.image_fit(id, pad, pad, img_w, img_h);
-            d.outline(
-                btn.x(),
-                btn.y(),
-                btn.width(),
-                btn.height(),
-                1,
-                (PANEL_TEXT.0, PANEL_TEXT.1, PANEL_TEXT.2, 255),
-            );
-            d.fill(
-                btn.x() + 1,
-                btn.y() + 1,
-                btn.width().saturating_sub(2),
-                btn.height().saturating_sub(2),
-                (PANEL_BTN_BG.0, PANEL_BTN_BG.1, PANEL_BTN_BG.2, 255),
-            );
+            // O "voltar" na linguagem fósforo (plan revision): sem caixa,
+            // o texto na cor da chave do console com sublinhado.
             let text_w = GLYPH_W as i32 * label.chars().count() as i32;
-            d.text(
-                btn.x() + (btn.width() as i32 - text_w) / 2,
-                btn.y() + (btn.height() as i32 - GLYPH_H as i32) / 2,
-                1,
-                PANEL_TEXT,
-                label,
+            let tx = btn.x() + (btn.width() as i32 - text_w) / 2;
+            let ty = btn.y() + (btn.height() as i32 - GLYPH_H as i32) / 2;
+            d.text(tx, ty, 1, FOSFORO, label);
+            d.fill(
+                tx,
+                ty + GLYPH_H as i32 + 1,
+                text_w.max(GLYPH_W as i32) as u32,
+                2,
+                (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
             );
         });
         self.composite_shelf();
@@ -2778,7 +3366,11 @@ impl Cabinet {
 
     /// Warp the screen buffer through the tube into the live window, then frame.
     fn composite_screen(&mut self) {
-        let mesh = build_crt_mesh(self.screen, 1.0);
+        // Cached mesh (same one the gameplay path uses): rebuilding 1,089
+        // vertices + indices every frame was pure waste for a tube that
+        // only changes shape when the window is resized.
+        self.ensure_mesh(self.screen);
+        let mesh = self.mesh.take().unwrap();
         self.canvas
             .set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
         self.canvas.clear();
@@ -2787,6 +3379,7 @@ impl Cabinet {
         let _ = self
             .canvas
             .render_geometry(&mesh.verts, Some(&st.tex), &mesh.indices[..]);
+        self.mesh = Some(mesh);
         self.screen_tex = Some(st);
         let bezel = self.bezel.take().unwrap();
         let _ = self
@@ -2802,6 +3395,19 @@ impl Cabinet {
             self.nameplate_updates,
         );
         self.draw_ra_badge();
+        // Os controles do queixo em toda a tela que vive dentro da TV
+        // (plan revision: "tem que estar sempre na tela" — o queixo não
+        // é só do gameplay; shelf/settings/update deslizam pelo mesmo
+        // plástico). Mesma função livre do frame vivo.
+        let tv_on = self.tv_on();
+        let chin = draw_tv_chin_controls(
+            &mut self.canvas,
+            &mut self.font,
+            self.screen,
+            self.canvas_rect.height(),
+            tv_on,
+        );
+        self.tv_power_buttons = Some(chin);
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
@@ -2847,6 +3453,7 @@ impl Cabinet {
         self.composite_screen();
         let panel = panel_rect(self.canvas_rect.width(), self.canvas_rect.height());
         self.canvas.set_viewport(Some(self.canvas_rect));
+        let panel_tv_on = self.tv_on();
         self.panel_buttons = draw_panel(
             &mut self.canvas,
             &mut self.font,
@@ -2857,6 +3464,7 @@ impl Cabinet {
             self.idle_core_prompt.as_deref(),
             self.dev_mode,
             self.core_status.as_deref(),
+            panel_tv_on,
         );
         self.canvas.set_viewport(None);
         self.present_and_time();
@@ -2943,6 +3551,8 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let st = self.screen_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        self.ensure_brand_logo(); // a marca do queixo na captura
+        let tv_on = self.tv_on();
         let font = &mut self.font;
         let images = &self.images;
         let panel_info = self.panel.as_ref();
@@ -2969,6 +3579,7 @@ impl Cabinet {
                 nameplate,
                 nameplate_updates,
             );
+            draw_brand_logo(c, images, screen, canvas_rect.height());
             let _ = draw_panel(
                 c,
                 font,
@@ -2979,6 +3590,7 @@ impl Cabinet {
                 idle_core_prompt,
                 dev_mode,
                 core_status,
+                tv_on,
             );
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
@@ -3054,6 +3666,12 @@ impl Screen<'_> {
     /// Size of the drawing surface.
     pub fn size(&self) -> (u32, u32) {
         (self.w, self.h)
+    }
+
+    /// As dimensões da imagem registrada sob `id` — o tile da capa usa
+    /// para abraçar a proporção real da página 1 do PDF.
+    pub fn image_size(&self, id: u64) -> Option<(u32, u32)> {
+        self.images.get(&id).map(|i| (i.w, i.h))
     }
 
     pub fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, c: (u8, u8, u8, u8)) {
@@ -3206,6 +3824,57 @@ impl Screen<'_> {
             None::<sdl3::render::FRect>,
             Rect::new(dx, dy, dw.max(1) as u32, dh.max(1) as u32),
         );
+    }
+
+    /// A arte preenchendo 100% do rect (`object-fit: cover`): escala pelo
+    /// maior fator e recorta o excesso, centrado na horizontal e com a
+    /// base no fundo do rect — a capa da estante sempre cheia no tile.
+    pub fn image_fill(&mut self, id: u64, x: i32, y: i32, bw: u32, bh: u32) {
+        let Some(img) = self.images.get(&id) else {
+            return;
+        };
+        let (iw, ih) = (img.w as f32, img.h as f32);
+        let scale = (bw as f32 / iw).max(bh as f32 / ih);
+        let dw = (iw * scale).round() as i32;
+        let dh = (ih * scale).round() as i32;
+        let dx = x + ((bw as i32 - dw) / 2);
+        let dy = y + (bh as i32 - dh); // base ancorada no fundo
+        self.canvas.set_clip_rect(Some(Rect::new(x, y, bw, bh)));
+        let _ = self.canvas.copy(
+            &img.tex,
+            None::<sdl3::render::FRect>,
+            Rect::new(dx, dy, dw.max(1) as u32, dh.max(1) as u32),
+        );
+        self.canvas.set_clip_rect(None);
+    }
+
+    /// A página do leitor em MODO ZOOM: a página cabe na LARGURA do rect
+    /// (muito maior que o fit da área) e rola na VERTICAL com `pan`
+    /// (0.0 = topo, 1.0 = fim) — leitura de revista de verdade, roda da
+    /// roda do mouse para cima e para baixo.
+    pub fn image_scroll_v(&mut self, id: u64, rect: (i32, i32, u32, u32), pan: f32) {
+        let Some(img) = self.images.get(&id) else {
+            return;
+        };
+        let (rw, rh) = (rect.2 as f32, rect.3 as f32);
+        let aspect = img.w as f32 / img.h.max(1) as f32;
+        let dw = rw;
+        let dh = rw / aspect.max(0.0001);
+        let max_off = (dh - rh).max(0.0);
+        let dx = rect.0 as f32;
+        let dy = rect.1 as f32 - max_off * pan.clamp(0.0, 1.0);
+        self.canvas.set_clip_rect(Some(Rect::new(
+            rect.0,
+            rect.1,
+            rect.2,
+            rect.3,
+        )));
+        let _ = self.canvas.copy(
+            &img.tex,
+            None::<sdl3::render::FRect>,
+            Rect::new(dx.round() as i32, dy.round() as i32, dw.max(1.0) as u32, dh.max(1.0) as u32),
+        );
+        self.canvas.set_clip_rect(None);
     }
 
     /// Como [`Screen::image_fit`], com a arte ancorada na BASE do rect —
@@ -3378,11 +4047,35 @@ const OSD_GREEN: (u8, u8, u8) = (60, 230, 70);
 /// ... mostrar CH 3 na tv como era na tv antiga quando nao tinha sinal") —
 /// green, top-right of the tube. Drawn flat on the glass, deliberately NOT
 /// warped with the picture: an OSD is the TV's own overlay, not part of the
+/// A marca "SixteeN" centralizada no queixo — a arte prateada embutida
+/// (`BRAND_LOGO_*`), desenhada do mapa de imagens; sem ela registrada,
+/// nada a fazer.
+fn draw_brand_logo(
+    canvas: &mut WindowCanvas,
+    images: &HashMap<u64, ImgTex>,
+    screen: Rect,
+    out_h: u32,
+) {
+    if !images.contains_key(&BRAND_LOGO_ID) {
+        return;
+    }
+    let chin_top = screen.bottom();
+    let chin_h = out_h as i32 - chin_top;
+    if chin_h < 40 {
+        return;
+    }
+    let bh = (chin_h as f32 * 0.25).round() as u32;
+    let bw = (bh as f32 * (BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32)).round() as u32;
+    let x = screen.left() + (screen.width() as i32 - bw as i32) / 2;
+    let y = chin_top + (chin_h - bh as i32) / 2;
+    draw_image_absolute(canvas, images, BRAND_LOGO_ID, x, y, bw, bh);
+}
+
 /// signal (same reasoning as `draw_brand`'s chin text).
-fn draw_ch3_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect) {
-    const LABEL: &str = "CH  3";
+fn draw_ch_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect, label: &str) {
     const SCALE: u32 = 3;
-    let w = GLYPH_W as i32 * SCALE as i32 * LABEL.chars().count() as i32;
+    let label = if label.ends_with(' ') { label.to_string() } else { format!(" {} ", label) };
+    let w = GLYPH_W as i32 * SCALE as i32 * label.chars().count() as i32;
     let margin = 24;
     let x = screen.right() - margin - w;
     let y = screen.top() + margin;
@@ -3394,7 +4087,7 @@ fn draw_ch3_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect) {
         x + 2,
         y + 2,
         TextStyle::new(SCALE, (12, 14, 12)),
-        LABEL,
+        &label,
         usize::MAX,
     );
     draw_text_absolute(
@@ -3403,9 +4096,54 @@ fn draw_ch3_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect) {
         x,
         y,
         TextStyle::new(SCALE, OSD_GREEN),
-        LABEL,
+        &label,
         usize::MAX,
     );
+}
+
+/// A interferência do canal 4 desenhada sobre o sinal: o estático
+/// picado (`specks`, pré-computado pelo caller), as linhas de
+/// dessincronia e a barra de hum rolando devagar — o canal errado de
+/// uma TV de tubo com o dial fora do ponto.
+fn draw_ch4_layer(canvas: &mut WindowCanvas, screen: Rect, specks: &[(i32, i32, bool)]) {
+    if screen.width() == 0 || screen.height() == 0 {
+        return;
+    }
+    for (x, y, bright) in specks {
+        if *bright {
+            canvas.set_draw_color(Color::RGBA(255, 255, 255, 130));
+        } else {
+            canvas.set_draw_color(Color::RGBA(0, 0, 0, 130));
+        }
+        let _ = canvas.fill_rect(Rect::new(*x, *y, 2, 1));
+    }
+    // Linhas de dessincronia: faixas horizontais finas e claras.
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let mut seed = millis as u64 | 1;
+    for _ in 0..3 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let y = screen.y() + (seed % (screen.height() as u64)) as i32;
+        canvas.set_draw_color(Color::RGBA(255, 255, 255, 36));
+        let _ = canvas.fill_rect(Rect::new(
+            screen.x(),
+            y,
+            screen.width(),
+            1 + (seed % 2) as u32,
+        ));
+    }
+    // A barra de hum: uma faixa clara + uma escura rolando de cima a
+    // baixo, ~6s por volta.
+    let period = screen.height() as u64 + 240;
+    let by = screen.y() + ((millis * 60 / 1000) % period) as i32 - 120;
+    canvas.set_draw_color(Color::RGBA(255, 255, 255, 22));
+    let _ = canvas.fill_rect(Rect::new(screen.x(), by, screen.width(), 70));
+    canvas.set_draw_color(Color::RGBA(0, 0, 0, 40));
+    let _ = canvas.fill_rect(Rect::new(screen.x(), by + 70, screen.width(), 90));
 }
 
 /// Image id the RA mock example registers its badge under.
@@ -3416,6 +4154,14 @@ pub const DEMO_BADGE_IMG: u64 = u64::MAX;
 /// of the pixel gamepad when it's there.
 pub const RA_LOGO_IMG: u64 = u64::MAX - 7;
 
+/// A marca "SixteeN" (arte prateada pronta, RGBA vazado) — embutida na
+/// crate e registrada no mapa de imagens no primeiro frame.
+const BRAND_LOGO_ID: u64 = u64::MAX - 8;
+const BRAND_LOGO_W: u32 = 1724;
+const BRAND_LOGO_H: u32 = 281;
+const BRAND_LOGO_RGBA: &[u8] =
+    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/assets/brand_sixteen.rgba"));
+
 impl Cabinet {
     /// Drop expired fronts, then draw the front block — or, with the queue
     /// empty, the persistent RetroAchievements badge (when armed).
@@ -3425,6 +4171,7 @@ impl Cabinet {
             self.osd_queue.pop_front();
         }
         let (_, out_h) = self.canvas.output_size().unwrap_or((1280, 720));
+        let cw = self.canvas_rect.width() as i32;
         let Some(entry) = self.osd_queue.front() else {
             if let Some(status) = self.ra_status {
                 draw_chin_ra(
@@ -3432,7 +4179,7 @@ impl Cabinet {
                     &mut self.font,
                     &self.images,
                     self.screen,
-                    out_h,
+                    cw,
                     &self.nameplate,
                     status.hardcore,
                 );
@@ -3476,13 +4223,13 @@ impl Cabinet {
         let Some(status) = self.ra_status else {
             return;
         };
-        let (_, out_h) = self.canvas.output_size().unwrap_or((1280, 720));
+        let cw = self.canvas_rect.width() as i32;
         draw_chin_ra(
             &mut self.canvas,
             &mut self.font,
             &self.images,
             self.screen,
-            out_h,
+            cw,
             &self.nameplate,
             status.hardcore,
         );
@@ -3490,11 +4237,11 @@ impl Cabinet {
 }
 
 /// The badge's two rows and their colors — pure so the tests can pin the
-/// contract: "RA ATIVADO" always in the OSD green, the mode in amber when
-/// hardcore and in the nameplate grey when softcore.
+/// contract: the "RA enabled" row always in the OSD green, the mode in amber
+/// when hardcore and in the nameplate grey when softcore.
 fn ra_badge_rows(hardcore: bool) -> [(&'static str, (u8, u8, u8)); 2] {
     [
-        ("RA ATIVADO", OSD_GREEN),
+        (tr!("RA ENABLED", "RA ATIVADO"), OSD_GREEN),
         (
             if hardcore { "HARDCORE" } else { "SOFTCORE" },
             if hardcore {
@@ -3517,46 +4264,58 @@ fn draw_chin_ra(
     font: &mut Texture,
     images: &HashMap<u64, ImgTex>,
     screen: Rect,
-    out_h: u32,
+    _canvas_w: i32,
     nameplate: &str,
     hardcore: bool,
 ) {
     const MARGIN: i32 = 24;
-    const TILE: i32 = 56;
+    const TILE: i32 = 32;
     const TILE_BG: (u8, u8, u8) = (18, 22, 52);
     const TILE_EDGE: (u8, u8, u8) = (240, 180, 60);
     const GOLD: (u8, u8, u8) = (240, 190, 70);
-    let chin_top = screen.bottom();
-    let chin_h = out_h as i32 - chin_top;
-    if chin_h < 24 {
+    // A moldura superior, canto DIREITO — a mesma posição do par
+    // fechar/minimizar, espelhada (plan revision: "os dados de RA no mesmo
+    // posicionamento do botão de fechar, só que do lado direito").
+    let strip_h = screen.y();
+    if strip_h < 32 {
         return;
     }
+    const TILE_Y: i32 = 14;
     let cell = GLYPH_W as i32;
-    let row = GLYPH_H as i32;
-    let gap = 4i32;
+    /// A copy no respiro do emblema: 10px entre a cauda da tinta e o tile
+    /// (plan revision: "afastar um pouco a logo das copys") — a sombra 2px
+    /// da copy conta 8px de ar visível.
+    const COPY_GAP: i32 = 10;
     let rows = ra_badge_rows(hardcore);
-    // Same left limit as the unlock block: the nameplate's widest line.
     let nameplate_w = nameplate
         .lines()
         .map(|l| l.chars().count() as i32 * cell)
         .max()
         .unwrap_or(0);
-    let right = screen.right() - MARGIN;
-    let left_limit = screen.left() + nameplate_w + MARGIN * 2 + TILE + gap;
+    // A simetria REAL considerando o painel lateral (plan revision): o X
+    // mora a 14px do canto esquerdo do CANVAS — o começo de tudo. O
+    // espelho do lado direito é contra o fim do território da TV: a borda
+    // da moldura lateral direita, que fica a `screen.left()` (o BEZEL_SIDE,
+    // simétrico) do fim do vidro. O bloco do RA encosta a 14px dali —
+    // mesma margem, outro canto, e nunca no painel.
+    let right = screen.right() + screen.left() - 14;
+    let tile_x = right - TILE;
+    let tile_y = TILE_Y;
+    let left_limit = screen.left() + nameplate_w + MARGIN * 2 + TILE + COPY_GAP;
     let max_cols = ((right - left_limit).max(cell) / cell) as usize;
     let shown: Vec<(String, (u8, u8, u8))> = rows
         .iter()
         .map(|(l, c)| (truncate_to_cols(l, max_cols), *c))
         .collect();
-    let block_h = 2 * row + gap;
-    let text_w = shown
-        .iter()
-        .map(|(l, _)| l.chars().count() as i32 * cell)
-        .max()
-        .unwrap_or(0);
-    let mut y = chin_top + (chin_h - block_h) / 2;
-    let tile_x = right - text_w - gap - TILE;
-    let tile_y = chin_top + (chin_h - TILE) / 2;
+    // A copy como colar do emblema: as duas linhas com passo 14 — a tinta
+    // das maiúsculas (cap +4..+14 na célula de 20px, que estas linhas não
+    // têm descendente) fica 4px de vão de tinta entre as linhas e o bloco
+    // inteiro centrado NO EIXO do emblema (datum 30 do par
+    // fechar/minimizar). Antes: passo 17, vão de tinta 7px, tinta colada.
+    // Tinta: "RA ATIVADO" 18..28, modo 32..42 — copy inset 4px dos tetos
+    // do tile (14..46), a logo mais alta que a copy, sem colisão.
+    const LINE_PITCH: i32 = 14;
+    let mut y = tile_y;
 
     // The mark: the official RA favicon (registered by the app) when it's
     // there; the pixel gamepad tile is the fallback so the badge never
@@ -3590,7 +4349,7 @@ fn draw_chin_ra(
             "##############",
             "..............",
         ];
-        let s = 3;
+        let s = 2;
         let px = tile_x + (TILE - 14 * s) / 2;
         let py = tile_y + (TILE - 7 * s) / 2;
         canvas.set_draw_color(Color::RGB(GOLD.0, GOLD.1, GOLD.2));
@@ -3609,7 +4368,7 @@ fn draw_chin_ra(
         }
     }
     for (line, color) in &shown {
-        let x = right - line.chars().count() as i32 * cell;
+        let x = tile_x - COPY_GAP - line.chars().count() as i32 * cell;
         draw_text_absolute(
             canvas,
             font,
@@ -3628,42 +4387,53 @@ fn draw_chin_ra(
             line,
             usize::MAX,
         );
-        y += row + gap;
+        y += LINE_PITCH;
     }
 }
 
 /// The achievements notification (plan fase 4): a right-aligned block in
-/// the chin, mirroring `draw_brand` on the left. First line in the OSD
-/// green (the "CONQUISTA DESBLOQUEADA" header), the achievement name in
-/// near-white, the trailing line (points) in the nameplate's own grey —
-/// all flat on the glass with the same 2px dark shadow as the CH 3 banner.
-/// Lines longer than the space between the nameplate and the right margin
-/// are truncated with "..." so the two blocks never touch. `badge` is the
-/// image id registered via `set_image`, drawn left of the text.
-#[allow(clippy::too_many_arguments)] // canvas/font/images + 5 layout facts
+/// the top strip. Same grammar as the persistent RA badge: the header in
+/// the OSD green ("CONQUISTA DESBLOQUEADA"), then the remaining lines
+/// merged into ONE tight row — the name (first) in the near-white LIGHT,
+/// the trailing metas (pontos, modo) in the nameplate's own grey, joined
+/// by dim "·" separators — so everything the block carries fits the strip.
+/// Both rows use the badge's 14px pitch, ink centred on the strip datum
+/// (button pair axis, y=30), next to the 40px disc with the badge's own
+/// 10px copy gap. All flat on
+/// the glass with the same 2px dark shadow as the CH 3 banner. Lines
+/// longer than the space between the nameplate and the disc truncate with
+/// "..." in the name so the two blocks never touch. `badge` is the image
+/// id registered via `set_image`, drawn as the corner disc.
+#[allow(clippy::too_many_arguments)] // canvas/font/images + 4 layout facts
 fn draw_chin_osd(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
     images: &HashMap<u64, ImgTex>,
     screen: Rect,
-    out_h: u32,
+    _out_h: u32,
     nameplate: &str,
     lines: &[String],
     badge: Option<u64>,
 ) {
+    const DISC: u32 = 40;
     const MARGIN: i32 = 24;
+    /// Mesmo ritmo do badge do RA: primeira linha desenhada no teto do
+    /// emblema (tinta 18..28) e passo 14 — vão de tinta 4px entre as
+    /// linhas, bloco centrado no eixo 30 junto ao disco.
+    const FIRST_Y: i32 = 14;
+    const PITCH: i32 = 14;
+    /// A copy no respiro do emblema (plan revision: mêmes 10px de folga do
+    /// badge fixo entre a cauda da tinta e o disco).
+    const COPY_GAP: i32 = 10;
     const LIGHT: (u8, u8, u8) = (235, 235, 225);
-    const BADGE: u32 = 56;
-    let chin_top = screen.bottom();
-    let chin_h = out_h as i32 - chin_top;
+    const SHADOW: (u8, u8, u8) = (12, 14, 12);
+    // A moldura superior, como o badge do RA — o queixo é dos controles.
+    let chin_h = screen.y();
     if chin_h < 24 || lines.is_empty() {
         return;
     }
     let cell = GLYPH_W as i32;
-    let row = GLYPH_H as i32;
-    let gap = 4i32;
     let has_badge = badge.is_some_and(|id| images.contains_key(&id));
-    let badge_room = if has_badge { BADGE as i32 + 12 } else { 0 };
     // The nameplate's widest line sets this block's left limit, so a long
     // achievement name truncates instead of colliding with it.
     let nameplate_w = nameplate
@@ -3671,61 +4441,69 @@ fn draw_chin_osd(
         .map(|l| l.chars().count() as i32 * cell)
         .max()
         .unwrap_or(0);
-    let right = screen.right() - MARGIN;
-    let left_limit = screen.left() + nameplate_w + MARGIN * 2 + badge_room;
-    let max_cols = ((right - left_limit).max(cell) / cell) as usize;
-    let shown: Vec<String> = lines
-        .iter()
-        .map(|l| truncate_to_cols(l, max_cols))
-        .collect();
-    let block_h = shown.len() as i32 * row + (shown.len() as i32 - 1) * gap;
-    let mut y = chin_top + (chin_h - block_h) / 2;
-    let text_w = shown
-        .iter()
-        .map(|l| l.chars().count() as i32 * cell)
-        .max()
-        .unwrap_or(0);
-    if has_badge {
-        // Vertically centred in the chin, the same line as the text block's.
-        draw_image_absolute(
-            canvas,
-            images,
-            badge.unwrap_or(0),
-            right - text_w - badge_room,
-            chin_top + (chin_h - BADGE as i32) / 2,
-            BADGE,
-            BADGE,
-        );
-    }
-    for (i, line) in shown.iter().enumerate() {
-        let color = if i == 0 {
-            OSD_GREEN
-        } else if i + 1 == shown.len() {
-            BRAND_TEXT
+    // A mesma âncora de canto do badge do RA (a moldura lateral direita,
+    // 14px no espelho): o disco ocupa a coluna do emblema e a copy troca de
+    // estado sem saltar de lugar na tela.
+    let right = screen.right() + screen.left() - 14;
+    let disc_x = right - DISC as i32;
+    let disc_y = 30 - DISC as i32 / 2;
+    // Mesma folga copy<->emblema do badge fixo: 10px (plan revision:
+    // "afastar um pouco a logo das copys"). Sem disco, a copy encosta no
+    // canto com a margem 14 do par fechar/minimizar.
+    let row_right = right - if has_badge { DISC as i32 + COPY_GAP } else { 14 };
+    let left_limit = screen.left() + nameplate_w + MARGIN * 2 + DISC as i32 + COPY_GAP;
+    let max_cols = ((row_right - left_limit).max(cell) / cell) as usize;
+    let header = truncate_to_cols(&lines[0], max_cols);
+    // O corpo numa linha só: o primeiro segmento (o nome) em LIGHT, os
+    // seguintes (pontos, modo) no cinza do nameplate, unidos por " · " na
+    // mesma cor da cauda.
+    let mut body: Vec<(String, (u8, u8, u8))> = Vec::new();
+    for (i, line) in lines[1..].iter().enumerate() {
+        if i > 0 {
+            body.push((" · ".to_string(), BRAND_TEXT));
+        }
+        if i == 0 {
+            // A cauda (separadores + pontos + modo) é fixa; a truncagem
+            // "..." mora só no nome, que é o que dá leitura ao bloco.
+            let tail_cols: usize = (lines.len() - 2) * 3
+                + lines[2..].iter().map(|l| l.chars().count()).sum::<usize>();
+            let room = max_cols.saturating_sub(tail_cols);
+            body.push((truncate_to_cols(line, room), LIGHT));
         } else {
-            LIGHT
-        };
-        let x = right - line.chars().count() as i32 * cell;
-        draw_text_absolute(
-            canvas,
-            font,
-            x + 2,
-            y + 2,
-            TextStyle::new(1, (12, 14, 12)),
-            line,
-            usize::MAX,
-        );
-        draw_text_absolute(
-            canvas,
-            font,
-            x,
-            y,
-            TextStyle::new(1, color),
-            line,
-            usize::MAX,
-        );
-        y += row + gap;
+            body.push((line.clone(), BRAND_TEXT));
+        }
     }
+    if has_badge {
+        // Centrado no eixo 30 — o mesmo datum do badge fixo e do par
+        // fechar/minimizar; a troca badge<->notificação não salta.
+        draw_image_absolute(canvas, images, badge.unwrap_or(0), disc_x, disc_y, DISC, DISC);
+    }
+    let draw_row = |canvas: &mut WindowCanvas,
+                    font: &mut Texture,
+                    y: i32,
+                    row_right: i32,
+                    segments: &[(String, (u8, u8, u8))]| {
+        let total: i32 = segments
+            .iter()
+            .map(|(s, _)| s.chars().count() as i32 * cell)
+            .sum();
+        let mut pen = row_right - total;
+        for (seg, color) in segments {
+            draw_text_absolute(
+                canvas,
+                font,
+                pen + 2,
+                y + 2,
+                TextStyle::new(1, SHADOW),
+                seg,
+                usize::MAX,
+            );
+            draw_text_absolute(canvas, font, pen, y, TextStyle::new(1, *color), seg, usize::MAX);
+            pen += seg.chars().count() as i32 * cell;
+        }
+    };
+    draw_row(canvas, font, FIRST_Y, row_right, &[(header, OSD_GREEN)]);
+    draw_row(canvas, font, FIRST_Y + PITCH, row_right, &body);
 }
 
 fn truncate_to_cols(s: &str, max_cols: usize) -> String {
@@ -3741,6 +4519,8 @@ fn truncate_to_cols(s: &str, max_cols: usize) -> String {
 /// não tem seta neste frame. Saída de [`draw_brand`] para o hit-test do
 /// idle (plan revision: "ao clicar no icone verde de atualizar").
 type UpdateArrowRects = (Option<Rect>, Option<Rect>);
+
+
 
 fn draw_brand(
     canvas: &mut WindowCanvas,
@@ -3765,16 +4545,21 @@ fn draw_brand(
     let gap = 4i32;
     let fits = chin_h >= (lines.len() as i32 * row + (lines.len() as i32 - 1) * gap).max(row);
     let shown = if fits { &lines[..] } else { &lines[..1] };
+    // Revision: a MARCA (a arte prateada embutida) mora centralizada no
+    // queixo — as linhas pequenas da esquerda viram só a informação de
+    // versão (o nome sai delas). O desenho em si é feito pelo caller,
+    // que tem o mapa de imagens (ver draw_brand_logo).
     let block_h = shown.len() as i32 * row + (shown.len() as i32 - 1) * gap;
     let mut y = chin_top + (chin_h - block_h) / 2;
     for (i, line) in shown.iter().enumerate() {
+        let cleaned: String = line.replace("SixteeN", "").trim_start().to_string();
         draw_text_absolute(
             canvas,
             font,
             screen.left(),
             y,
             TextStyle::new(1, BRAND_TEXT),
-            line,
+            &cleaned,
             usize::MAX,
         );
         // The "tem update" arrow (plan revision: "um icone verde no
@@ -3783,7 +4568,7 @@ fn draw_brand(
         // app's version, line 1 the core's.
         let wants_arrow = i == 0 && updates.0 || i == 1 && updates.1;
         if wants_arrow {
-            let ax = screen.left() + line.chars().count() as i32 * GLYPH_W as i32 + 10;
+            let ax = screen.left() + cleaned.chars().count() as i32 * GLYPH_W as i32 + 10;
             draw_update_arrow(canvas, ax, y + row / 2);
             // Área de clique generosa (o ícone tem 11×12 px) — uma faixa
             // da altura da linha, um pouco mais larga que a seta.
@@ -4207,6 +4992,7 @@ fn draw_panel(
     idle_core_prompt: Option<&str>,
     dev_mode: bool,
     core_status: Option<&str>,
+    tv_on: bool,
 ) -> Vec<(PanelButton, Rect)> {
     if rect.width() == 0 {
         return Vec::new();
@@ -4242,7 +5028,7 @@ fn draw_panel(
                 BRAND,
             )
         };
-        cy += 4;
+        cy += 26;
         // O botão da estante flutuante no topo — o slot, as chaves e o
         // Eject saíram junto (plan revision: "remover o console da tela
         // inicial"). O resto da coluna fica limpo até o rodapé.
@@ -4254,30 +5040,46 @@ fn draw_panel(
             btn_w,
             btn_h,
         );
-        let insert_drawn = draw_button(canvas, font, btn, "ESTANTE DE GAMES · FREE PLAY", true);
-        cy = insert_drawn.bottom();
-
-        // O MODO LOCADORA (docs/design-modo-locadora.md §2) — a porta ao
-        // lado do free play: carteira, tickets e a fantasia inteira. Opt-in
-        // por boot; quem só quer jogar ignora pra sempre.
-        let loc_h = GLYPH_H + 12;
-        let loc_btn = Rect::new(
-            x + (inner_w as i32 - btn_w as i32) / 2,
-            cy + 8,
-            btn_w,
-            loc_h as u32,
-        );
-        let loc_drawn = draw_button(canvas, font, loc_btn, "MODO LOCADORA", true);
-        cy = loc_drawn.bottom();
+        let insert_drawn = draw_button(canvas, font, btn, tr!("GAME SHELF", "ESTANTE DE GAMES"), true);
+        // A estante mora no tubo: com a TV desligada, o aviso fica logo
+        // abaixo do botão (a Livraria e as Configurações não dependem da
+        // TV — só a estante de games).
+        let mut hint_bottom = insert_drawn.bottom();
+        if !tv_on {
+            let hint = tr!("turn the TV on to open the shelf", "ligue a TV para abrir a estante");
+            let hint_w = GLYPH_W as i32 * hint.chars().count() as i32;
+            draw_text_absolute(
+                canvas,
+                font,
+                btn.x() + (btn_w as i32 - hint_w) / 2,
+                insert_drawn.bottom() + 4,
+                TextStyle::new(1, (150, 150, 158)),
+                hint,
+                usize::MAX,
+            );
+            hint_bottom = insert_drawn.bottom() + 4 + GLYPH_H as i32;
+        }
+        // A Livraria Retro logo abaixo (plan revision: "adicionar um novo
+        // botão para uma nova funcionalidade - Livraria Retro") — a
+        // revistoteca em PDF (pasta `magazine`), leitura na TV. Mesma
+        // flutuação, mesma largura do vizinho da estante.
+        let liv_btn = Rect::new(btn.x(), hint_bottom + 18, btn_w, btn_h);
+        let livraria_drawn = draw_button(canvas, font, liv_btn, tr!("RETRO LIBRARY", "LIVRARIA RETRO"), true);
+        // O MUSEU DO CONSOLE logo abaixo (manual, poster, garantia etc. —
+        // os PDFs da documentação da época, pasta `museu`). Mesma largura.
+        let mus_btn = Rect::new(btn.x(), livraria_drawn.bottom() + 18, btn_w, btn_h);
+        let museu_drawn = draw_button(canvas, font, mus_btn, tr!("CONSOLE MUSEUM", "MUSEU DO CONSOLE"), true);
+        cy = museu_drawn.bottom();
 
         let btn_h = (GLYPH_H + 12) as i32;
         let settings = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
         let mut buttons = vec![
             (PanelButton::Insert, insert_drawn),
-            (PanelButton::Locadora, loc_drawn),
+            (PanelButton::Livraria, livraria_drawn),
+            (PanelButton::Museu, museu_drawn),
             (
                 PanelButton::Settings,
-                draw_button(canvas, font, settings, "Configurações", true),
+                draw_button(canvas, font, settings, tr!("Settings", "Configurações"), true),
             ),
         ];
         // O botão do modo dev (plan revision: "habilitar botão em cima da
@@ -4298,9 +5100,12 @@ fn draw_panel(
         // botão de download"): warning line directly above the button, both
         // just above the Configurações footer (ou do Dev, quando ele existe).
         if let Some(label) = idle_core_prompt {
-            const WARN: &str = "Para jogar é necessário baixar o núcleo snes9x.";
+            let warn = tr!(
+                "To play you need to download the snes9x core.",
+                "Para jogar é necessário baixar o núcleo snes9x."
+            );
             let btn = Rect::new(x, btn_top - 8 - btn_h, inner_w, btn_h as u32);
-            let warn_h = wrapped_height(inner_w, 1, WARN);
+            let warn_h = wrapped_height(inner_w, 1, warn);
             let warn_y = btn.y() - 6 - warn_h;
             if warn_y > cy {
                 draw_text_wrapped_absolute(
@@ -4310,7 +5115,7 @@ fn draw_panel(
                     warn_y,
                     inner_w,
                     TextStyle::new(1, PANEL_WARN),
-                    WARN,
+                    warn,
                 );
                 buttons.push((
                     PanelButton::CoreDownload,
@@ -4394,11 +5199,12 @@ fn draw_panel(
     if cy + SWITCH_GROUP_H <= limit {
         cy += 14;
         let gap = 10i32;
-        // Eject gets first claim on width (its "EJETAR" label doesn't
+        // Eject gets first claim on width (its "EJETAR"/"EJECT" label doesn't
         // shrink), the two switches split whatever's left evenly — on a
         // narrow panel that leaves them tighter, not the label overflowing
         // its box.
-        let eject_w = (GLYPH_W as i32) * "EJETAR".len() as i32 + 16;
+        let eject_label = tr!("EJECT", "EJETAR");
+        let eject_w = (GLYPH_W as i32) * eject_label.len() as i32 + 16;
         let switch_w = ((inner_w as i32 - gap * 2 - eject_w) / 2).max(1);
         let eject_w = (inner_w as i32 - gap * 2 - switch_w * 2).max(eject_w);
         let power_track = Rect::new(x, cy, switch_w as u32, SWITCH_TRACK_H as u32);
@@ -4420,7 +5226,7 @@ fn draw_panel(
         ));
         buttons.push((
             PanelButton::Eject,
-            draw_eject_button(canvas, font, eject_rect, "EJETAR", !panel.powered),
+            draw_eject_button(canvas, font, eject_rect, eject_label, !panel.powered),
         ));
         buttons.push((
             PanelButton::Reset,
@@ -4472,7 +5278,7 @@ fn draw_panel(
             x,
             cy,
             TextStyle::new(1, PANEL_DIM),
-            "comandos",
+            tr!("commands", "comandos"),
             usize::MAX,
         );
         cy += GLYPH_H as i32 + 6;
@@ -4505,9 +5311,12 @@ fn draw_panel(
     if cheats_on_count > 0 && cheats_fit {
         cy += 16;
         let label = if cheats_on_count == 1 {
-            "1 cheat ativado".to_string()
+            tr!("1 cheat enabled", "1 cheat ativado").to_string()
         } else {
-            format!("{cheats_on_count} cheats ativados")
+            tr!(
+                format!("{cheats_on_count} cheats enabled"),
+                format!("{cheats_on_count} cheats ativados")
+            )
         };
         cy = draw_text_wrapped_absolute(
             canvas,
@@ -4550,7 +5359,7 @@ fn draw_panel(
             x,
             cy,
             TextStyle::new(1, PANEL_DIM),
-            "notas",
+            tr!("notes", "notas"),
             usize::MAX,
         );
         cy += GLYPH_H as i32 + 6;
@@ -4560,9 +5369,12 @@ fn draw_panel(
         }
         if panel.note_count > 0 {
             let label = if panel.note_count == 1 {
-                "1 slot fixado".to_string()
+                tr!("1 slot pinned", "1 slot fixado").to_string()
             } else {
-                format!("{} slots fixados", panel.note_count)
+                tr!(
+                    format!("{} slots pinned", panel.note_count),
+                    format!("{} slots fixados", panel.note_count)
+                )
             };
             draw_text_absolute(
                 canvas,
@@ -4596,16 +5408,19 @@ fn draw_panel(
         format!("{:02}:{:02}", secs / 60, secs % 60)
     };
     let ty = rect.bottom() - pad - GLYPH_H as i32;
+    let session_label = tr!("session", "sessão");
     draw_text_absolute(
         canvas,
         font,
         x,
         ty,
         TextStyle::new(1, PANEL_DIM),
-        "sessão",
+        session_label,
         usize::MAX,
     );
-    let label_w = (GLYPH_W as i32) * "sessão ".chars().count() as i32;
+    // label + um espaço de respiro antes do relógio (a fonte é monoespaçada,
+    // então a conta é direta).
+    let label_w = (GLYPH_W as i32) * (session_label.chars().count() as i32 + 1);
     draw_text_absolute(
         canvas,
         font,
@@ -4667,7 +5482,7 @@ fn draw_settings_panel(
     let back_rect = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
     let mut buttons = vec![(
         SettingsButton::Back,
-        draw_button(canvas, font, back_rect, "Voltar", true),
+        draw_button(canvas, font, back_rect, tr!("Back", "Voltar"), true),
     )];
 
     // Section buttons, top to bottom under the title — the currently shown
@@ -4738,11 +5553,11 @@ fn draw_shelf_panel(
     let mut buttons = vec![
         (
             ShelfButton::Back,
-            draw_button(canvas, font, back_rect, "Voltar", true),
+            draw_button(canvas, font, back_rect, tr!("Back", "Voltar"), true),
         ),
         (
             ShelfButton::Settings,
-            draw_button(canvas, font, settings_rect, "Configurações", true),
+            draw_button(canvas, font, settings_rect, tr!("Settings", "Configurações"), true),
         ),
     ];
     if let Some(ach_r) = ach_rect {
@@ -4755,13 +5570,13 @@ fn draw_shelf_panel(
                     canvas,
                     font,
                     ach_r,
-                    &format!("Conquistas ({reason})"),
+                    &format!("{} ({reason})", tr!("Achievements", "Conquistas")),
                     false,
                 );
             }
             None => buttons.push((
                 ShelfButton::ShelfAchievements,
-                draw_button(canvas, font, ach_r, "Conquistas", true),
+                draw_button(canvas, font, ach_r, tr!("Achievements", "Conquistas"), true),
             )),
         }
     }
@@ -4774,7 +5589,11 @@ fn draw_shelf_panel(
                 canvas,
                 font,
                 fav_r,
-                if fav { "Remover favorito" } else { "Favoritar" },
+                if fav {
+                    tr!("Remove favorite", "Remover favorito")
+                } else {
+                    tr!("Add favorite", "Favoritar")
+                },
                 true,
             ),
         ));
@@ -4823,15 +5642,23 @@ fn draw_shelf_panel(
         .unwrap_or_default();
     let mut info_blocks: Vec<PanelBlock> = Vec::new();
     if panel.release.is_some() || !panel.info.is_empty() {
-        info_blocks.push(PanelBlock::Title("Informações Gerais"));
+        info_blocks.push(PanelBlock::Title(tr!(
+            "General Information",
+            "Informações Gerais"
+        )));
     }
     if let Some(release) = &panel.release {
-        info_blocks.push(PanelBlock::Field("lançamento", release));
+        info_blocks.push(PanelBlock::Field(tr!("released", "lançamento"), release));
     }
     for (label, value) in &panel.info {
         // A linha de conquistas ganha a medalha de prêmio do RA quando o
-        // servidor concedeu um.
-        match panel.award_img.filter(|_| label == "conquistas") {
+        // servidor concedeu um. A comparação cobre os dois idiomas: quem
+        // produz o rótulo (`ShelfPanelInfo.info`) já fala `tr!` — o lado EN
+        // chega como "achievements", o PT como "conquistas".
+        match panel
+            .award_img
+            .filter(|_| label == "conquistas" || label == "achievements")
+        {
             Some(medal) => info_blocks.push(PanelBlock::RaField(label, value, medal)),
             None => info_blocks.push(PanelBlock::Field(label, value)),
         }
@@ -4842,7 +5669,7 @@ fn draw_shelf_panel(
     // A seção de nota da IGDB, entre as infos gerais e o HowLongToBeat.
     if let Some(igdb) = &panel.igdb {
         info_blocks.push(PanelBlock::SectionHead(igdb.icon, "IGDB"));
-        info_blocks.push(PanelBlock::Field("nota", &igdb.nota));
+        info_blocks.push(PanelBlock::Field(tr!("rating", "nota"), &igdb.nota));
     }
     if let Some(hltb) = &panel.hltb {
         if !hltb.rows.is_empty() {
@@ -4857,10 +5684,10 @@ fn draw_shelf_panel(
         .map(|id| vec![PanelBlock::Image(id, 280)])
         .unwrap_or_default();
     let (blocks, empty_label): (Vec<PanelBlock>, &str) = match panel.section {
-        PanelSection::CapaTraseira => (capa_blocks, "sem capa traseira"),
-        PanelSection::Cartucho => (cart_blocks, "sem cartucho"),
-        PanelSection::Informacoes => (info_blocks, "sem informações"),
-        PanelSection::Manual => (manual_blocks, "sem manual"),
+        PanelSection::CapaTraseira => (capa_blocks, tr!("no back cover", "sem capa traseira")),
+        PanelSection::Cartucho => (cart_blocks, tr!("no cartridge", "sem cartucho")),
+        PanelSection::Informacoes => (info_blocks, tr!("no information", "sem informações")),
+        PanelSection::Manual => (manual_blocks, tr!("no manual", "sem manual")),
     };
 
     let has = |s: PanelSection| match s {
@@ -4900,22 +5727,22 @@ fn draw_shelf_panel(
     let tabs = [
         (
             ShelfButton::PanelJump(PanelSection::Informacoes),
-            "informações",
+            tr!("information", "informações"),
             active == PanelSection::Informacoes || has(PanelSection::Informacoes),
         ),
         (
             ShelfButton::PanelJump(PanelSection::CapaTraseira),
-            "capa traseira",
+            tr!("back cover", "capa traseira"),
             active == PanelSection::CapaTraseira || has(PanelSection::CapaTraseira),
         ),
         (
             ShelfButton::PanelJump(PanelSection::Manual),
-            "manual",
+            tr!("manual", "manual"),
             active == PanelSection::Manual || has(PanelSection::Manual),
         ),
         (
             ShelfButton::PanelJump(PanelSection::Cartucho),
-            "cartucho",
+            tr!("cartridge", "cartucho"),
             active == PanelSection::Cartucho || has(PanelSection::Cartucho),
         ),
     ];
@@ -5186,6 +6013,371 @@ fn draw_panel_block(
     }
 }
 
+/// Um disco com alpha em coordenadas absolutas — o halo do afterglow do
+/// tubo (usado pelo vidro da fase, estático e gameplay).
+fn disco_alpha(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, c: (u8, u8, u8, u8)) {
+    canvas.set_draw_color(Color::RGBA(c.0, c.1, c.2, c.3));
+    for dy in -r..=r {
+        let dx = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        let _ = canvas.fill_rect(Rect::new(cx - dx, cy + dy, (dx * 2) as u32, 1));
+    }
+}
+
+/// O reflexo diagonal do vidro (a faixa clara dos mocks) — alpha baixo,
+/// desenhado sobre o vidro morto para ele não ser preto chapado.
+fn glass_reflection(canvas: &mut WindowCanvas, sx: i32, sy: i32, sw: i32, sh: i32, base: u8) {
+    let len = (sw / 3).min(sh / 2);
+    let esp = 26i32;
+    canvas.set_blend_mode(BlendMode::Blend);
+    for i in 0..len {
+        for e in 0..esp {
+            let x = sx + i;
+            let y = sy + sh / 4 + esp - i - e;
+            if x >= sx && x < sx + sw && y >= sy && y < sy + sh {
+                let a = match e {
+                    0..=3 => base,
+                    4..=18 => base / 2,
+                    _ => base / 4,
+                };
+                if a > 0 {
+                    canvas.set_draw_color(Color::RGBA(255, 255, 255, a));
+                    let _ = canvas.fill_rect(Rect::new(x, y, 1, 1));
+                }
+            }
+        }
+    }
+}
+
+/// O que a fase do tubo manda desenhar NO VIDRO (`tv_phase`), como função
+/// pura — o frame vivo (`draw_tv_phase_glass`) e os captures (que não
+/// podem pegar `&mut self`) desenham o MESMO vidro, sobre a NEVE no
+/// estático ou sobre a IMAGEM DO JOGO no gameplay. A área é sempre
+/// `screen` (o glass; o bezel desenha por cima depois).
+fn draw_tv_glass_phase(canvas: &mut WindowCanvas, screen: Rect, phase: &TvPhase) {
+    let (sw, sh) = (screen.width() as i32, screen.height() as i32);
+    let sx = screen.x();
+    let sy = screen.y();
+    match phase {
+        TvPhase::On => {}
+        TvPhase::Dead => {
+            // TV desligada: o vidro morto por cima de tudo — quase preto
+            // com um resíduo mínimo e o reflexo diagonal fraco.
+            for row in 0..sh {
+                let t = row as f32 / sh as f32;
+                let v = 5.0 + 3.0 * t;
+                canvas.set_draw_color(Color::RGB(v as u8, v as u8, (v + 1.0) as u8));
+                let _ = canvas.fill_rect(Rect::new(sx, sy + row, sw as u32, 1));
+            }
+            glass_reflection(canvas, sx, sy, sw, sh, 5);
+        }
+        TvPhase::Raster { open, hot, ponto } => {
+            if *ponto {
+                // afterglow: o ponto quente no centro, o resto do tubo morto
+                let (cx, cy) = (sx + sw / 2, sy + sh / 2);
+                let glow = (hot * 255.0) as u8;
+                for r in (2..=16).rev() {
+                    let a = (hot * (16 - r) as f32 / 16.0 * 80.0) as u8;
+                    disco_alpha(canvas, cx, cy, (r as f32 * 1.8) as i32, (255, 240, 200, a));
+                }
+                disco_alpha(canvas, cx, cy, 4, (255, 255, 245, glow));
+                let dead = (5.0 + 3.0) as u8;
+                canvas.set_draw_color(Color::RGBA(dead, dead, dead + 1, 255));
+            } else if *open < 1.0 {
+                let virt_h = ((sh as f32 * open.clamp(0.02, 1.0)).round() as i32).max(2);
+                let top = sy + sh / 2 - virt_h / 2;
+                let bottom = top + virt_h;
+                // o tubo fora do raster: morto
+                canvas.set_draw_color(Color::RGB(5, 5, 6));
+                if top > sy {
+                    let _ = canvas.fill_rect(Rect::new(sx, sy, sw as u32, (top - sy) as u32));
+                }
+                if bottom < sy + sh {
+                    let _ = canvas.fill_rect(Rect::new(sx, bottom, sw as u32, (sy + sh - bottom) as u32));
+                }
+                // a borda do raster: gradiente âmbar quente
+                for i in 0..8 {
+                    let k = 1.0 - i as f32 / 8.0;
+                    let a = (200.0 * hot * k) as u8;
+                    canvas.set_draw_color(Color::RGBA(255, 214, 150, a));
+                    let _ = canvas.fill_rect(Rect::new(sx, (top + i).min(bottom - 1), sw as u32, 1));
+                    let _ = canvas.fill_rect(Rect::new(sx, (bottom - 1 - i).max(top), sw as u32, 1));
+                }
+                // a lavagem do brilho dentro do raster (o fósforo estourado)
+                if *hot > 0.0 {
+                    canvas.set_draw_color(Color::RGBA(255, 250, 235, (hot * 60.0) as u8));
+                    let _ = canvas.fill_rect(Rect::new(sx, top, sw as u32, virt_h as u32));
+                }
+            } else if *hot > 0.0 {
+                // raster aberto ainda assentando: um véu quente que decai
+                canvas.set_draw_color(Color::RGBA(255, 250, 235, (hot * 26.0) as u8));
+                let _ = canvas.fill_rect(Rect::new(sx, sy, sw as u32, sh as u32));
+            }
+        }
+    }
+}
+
+/// Um disco preenchido em coordenadas absolutas do canvas — o assento do
+/// knob de POWER (círculos concêntricos, cada um um passe de scanlines).
+fn disco_rect(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, c: (u8, u8, u8)) {
+    canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
+    for dy in -r..=r {
+        let dx = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        let _ = canvas.fill_rect(Rect::new(cx - dx, cy + dy, (dx * 2) as u32, 1));
+    }
+}
+
+/// Os controles físicos do queixo da TV (plan revision: knob de POWER +
+/// par VOL-/VOL+ no `tom prateado como tv antiga`): numa função livre a
+/// função da captura estática (`capture_static_bmp`, cuja passada não pode
+/// usar `&mut self`) e o frame vivo (`draw_tv_chin`) desenham EXATAMENTE
+/// o mesmo conjunto. Devolve os rects para hit-test —
+/// `(power, vol_down, vol_up)`, noops quando o queixo é curto demais.
+/// NADA de pintura própria da faixa: o bezel mesh já desenha o plástico do
+/// queixo (mesma interpolação linear dos outros lados); daqui saem só os
+/// controles — e o nameplate (`draw_brand`) segue por cima no caller.
+///
+/// Revision (a foto do painel real da TV): a fileira completa — TV/VIDEO
+/// (tecla redonda pequena), par VOL com rótulo gravado embaixo, par CH
+/// com rótulo embaixo, o dial POWER e o LED verde à direita dele.
+fn draw_tv_chin_controls(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    screen: Rect,
+    out_h: u32,
+    on: bool,
+) -> TvChinControls {
+    // O queixo é a faixa entre o fim do vidro e o fim do canvas.
+    let chin_top = screen.bottom();
+    let chin_h = out_h as i32 - chin_top;
+    if chin_h < 40 {
+        return TvChinControls::offscreen(); // queixo curto demais: sem controles
+    }
+
+    // ---- Controles, da direita: POWER (retângulo vertical) + LED, CH (3-4), VOL+/VOL-
+    let key_h = (chin_h as f32 * 0.34).round() as i32;
+    if key_h < 14 {
+        return TvChinControls::offscreen();
+    }
+    let key_w = (GLYPH_W as i32 * 3).max(38);
+    let pair_gap = 6; // dentro do par
+    let group_gap = 18; // entre grupos
+    let cy = chin_top + chin_h / 2;
+    // Revision: as copys precisam continuar legíveis COM a TV ligada —
+    // quase-branco no ligado, o médio no desligado. Os -/+ das teclas são
+    // pretos (tinta de tecla de verdade sobre o alumínio).
+    let ink = if on { PRATA_HI } else { PRATA_INK_DIM };
+    let key_ink = PRATA_INK;
+
+    // POWER: retângulo vertical MENOR com o símbolo ⏻ caprichado (aro
+    // grosso de 3 lados + traço com ponta redonda), LED verde do ladinho.
+    let ph = key_h + 12;
+    let pw = (ph as f32 * 0.58).round() as i32;
+    let pcx = screen.right() - pw / 2 - 26;
+    let pcy = cy;
+    let prect = Rect::new(pcx - pw / 2, pcy - ph / 2, pw as u32, ph as u32);
+    draw_silver_key(canvas, prect, on);
+    // o símbolo: aro grosso (2px) com um vão de ~80° no topo, e o traço
+    // descendo até o centro do aro — pontinhas arredondadas (um pixel a
+    // mais de cada lado na base do traço).
+    let r_out = pw as f32 * 0.30;
+    let r_in = r_out - 2.5;
+    let pc_y = pcy + 2;
+    let sym = if on { (24, 26, 32) } else { (56, 58, 66) };
+    canvas.set_draw_color(Color::RGB(sym.0, sym.1, sym.2));
+    let gap = std::f32::consts::PI / 5.0; // meio-vão em radianos
+    let steps = 40;
+    for i in 0..=steps {
+        let a = gap + (std::f32::consts::TAU - 2.0 * gap) * (i as f32 / steps as f32);
+        for rr in [r_in, (r_in + r_out) / 2.0, r_out] {
+            let x = pcx as f32 + a.sin() * rr;
+            let y = pc_y as f32 - a.cos() * rr;
+            let _ = canvas.fill_rect(Rect::new(x.round() as i32 - 1, y.round() as i32, 2, 2));
+        }
+    }
+    let stem_top = (pc_y as f32 - r_out - 3.0) as i32;
+    let stem_h = (r_out + 4.0) as i32;
+    let _ = canvas.fill_rect(Rect::new(pcx - 1, stem_top, 2, stem_h as u32));
+    // a base arredondada do traço
+    let _ = canvas.fill_rect(Rect::new(pcx - 2, stem_top + stem_h as i32 - 1, 3, 1));
+
+    // LED verde do ladinho, aceso só com a TV ligada.
+    let led_cx = screen.right() - 12;
+    if on {
+        draw_led_color(canvas, led_cx, cy - 6, 12, true, LED_TV_ON, LED_TV_ON_HI);
+    }
+
+    // O botão único do canal: rótulo "CH" + a tecla "3-4" — um clique
+    // alterna entre os dois canais que a TV tem.
+    let ch_label = "CH";
+    let ch_lw = GLYPH_W as i32 * ch_label.chars().count() as i32;
+    let ch_key_w = GLYPH_W as i32 * 3 + 12;
+    let ch_left = pcx - pw / 2 - group_gap - ch_lw - 8 - ch_key_w;
+    draw_text_absolute(
+        canvas,
+        font,
+        ch_left,
+        cy - GLYPH_H as i32 / 2,
+        TextStyle::new(1, ink),
+        ch_label,
+        usize::MAX,
+    );
+    let ch = Rect::new(ch_left + ch_lw + 8, cy - key_h / 2, ch_key_w as u32, key_h as u32);
+    draw_silver_key(canvas, ch, on);
+    let tw = GLYPH_W as i32 * 3;
+    draw_text_absolute(
+        canvas,
+        font,
+        ch.x() + (ch.width() as i32 - tw) / 2,
+        ch.y() + (ch.height() as i32 - GLYPH_H as i32) / 2,
+        TextStyle::new(1, key_ink),
+        "3-4",
+        usize::MAX,
+    );
+
+    // O par do volume, com o rótulo inline — - e + em preto.
+    let draw_pair = |canvas: &mut WindowCanvas,
+                     font: &mut Texture,
+                     left_x: i32,
+                     label: &str|
+     -> (Rect, Rect) {
+        let lw = GLYPH_W as i32 * label.chars().count() as i32;
+        draw_text_absolute(
+            canvas,
+            font,
+            left_x,
+            cy - GLYPH_H as i32 / 2,
+            TextStyle::new(1, ink),
+            label,
+            usize::MAX,
+        );
+        let down = Rect::new(left_x + lw + 8, cy - key_h / 2, key_w as u32, key_h as u32);
+        let up = Rect::new(
+            down.x() + pair_gap + key_w as i32,
+            down.y(),
+            key_w as u32,
+            key_h as u32,
+        );
+        for (r, glyph) in [(down, "-"), (up, "+")] {
+            draw_silver_key(canvas, r, on);
+            let tw = GLYPH_W as i32 * glyph.chars().count() as i32;
+            draw_text_absolute(
+                canvas,
+                font,
+                r.x() + (r.width() as i32 - tw) / 2,
+                r.y() + (r.height() as i32 - GLYPH_H as i32) / 2,
+                TextStyle::new(1, key_ink),
+                glyph,
+                usize::MAX,
+            );
+        }
+        (down, up)
+    };
+    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w as i32 * 2;
+    let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
+
+    TvChinControls {
+        vol_down,
+        vol_up,
+        ch,
+        power: prect,
+    }
+}
+
+/// A tecla redonda pequena (TV/VIDEO da foto): o mesmo alumínio das teclas
+/// retangulares, num disco — assento escuro, face e o lábio de luz em cima.
+fn draw_silver_disc(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, on: bool) {
+    let face = if on { PRATA } else { PRATA_DIM };
+    disco_rect(canvas, cx, cy, r + 1, (22, 22, 26));
+    disco_rect(canvas, cx, cy, r, face);
+    // o lábio de luz: arco fino no topo
+    let hi = if on { PRATA_HI } else { (86, 88, 96) };
+    canvas.set_draw_color(Color::RGB(hi.0, hi.1, hi.2));
+    for dx in -(r - 2)..=(r - 2) {
+        let dy = (((r - 2) * (r - 2) - dx * dx) as f32).sqrt().round() as i32;
+        let _ = canvas.fill_rect(Rect::new(cx + dx, cy - dy, 1, 1));
+    }
+}
+
+/// O dial de POWER do queixo (plan revision: "botão de power ... mais
+/// retro") — o knob de tubo: assento afundado no plástico, carcaça
+/// serrilhada (a pegada de dedos), torus gravado com dômo (a luz quebra
+/// no topo, a sombra assenta embaixo) e o ponteiro gravado — em pé quando
+/// ligado, deitado quando desligado.
+fn draw_dial_knob(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, on: bool) {
+    let face = if on { PRATA } else { PRATA_DIM };
+    // assento afundado + a quina usinada do rebordo
+    disco_rect(canvas, cx, cy, r + 3, PLASTICO_ESC);
+    disco_rect(canvas, cx, cy, r + 1, (14, 13, 12));
+    // a carcaça inteira; a serrilha morde a borda dela
+    disco_rect(canvas, cx, cy, r, face);
+    // serrilha (a pegada): dentes escuros cravados na borda, 3px de fundo
+    // cada — contados por raio do knob para não virar ruído pequeno demais
+    let teeth = (r * 3 / 2).max(12);
+    let slot = if on { (96, 98, 106) } else { (66, 68, 76) };
+    canvas.set_draw_color(Color::RGB(slot.0, slot.1, slot.2));
+    for i in 0..teeth {
+        let a = i as f32 * std::f32::consts::TAU / teeth as f32;
+        let (dx, dy) = (a.sin(), -a.cos()); // dente 0 em cima
+        for k in 0..3 {
+            let rr = (r - k) as f32;
+            let _ = canvas.fill_rect(Rect::new(
+                cx + (dx * rr).round() as i32,
+                cy + (dy * rr).round() as i32,
+                1,
+                1,
+            ));
+        }
+    }
+    // o torus gravado: anel usinado separando a carcaça do dômo
+    disco_rect(canvas, cx, cy, r - 4, (55, 57, 63));
+    disco_rect(canvas, cx, cy, r - 5, face);
+    // o dômo: brilho fosco quebrando no topo, sombra na boca de baixo
+    let shade = if on { (122, 124, 134) } else { (76, 78, 86) };
+    for dx in -(r - 6)..=(r - 6) {
+        let dyt = (((r - 6) * (r - 6) - dx * dx) as f32).sqrt().round() as i32;
+        canvas.set_draw_color(Color::RGB(PRATA_HI.0, PRATA_HI.1, PRATA_HI.2));
+        let _ = canvas.fill_rect(Rect::new(cx + dx, cy - dyt - 1, 1, 1));
+        canvas.set_draw_color(Color::RGB(shade.0, shade.1, shade.2));
+        let _ = canvas.fill_rect(Rect::new(cx + dx, cy + dyt, 1, 1));
+    }
+    // o ponteiro gravado (a tinta escura): em pé ligado, deitado desligado
+    canvas.set_draw_color(Color::RGB(PRATA_INK.0, PRATA_INK.1, PRATA_INK.2));
+    if on {
+        let _ = canvas.fill_rect(Rect::new(cx, cy - r / 2, 2, r as u32));
+    } else {
+        let _ = canvas.fill_rect(Rect::new(cx - r / 2, cy - 1, r as u32, 2));
+    }
+}
+
+/// Uma tecla de alumínio moldada do queixo (plan revision: os botões de
+/// volume "mais retro") — o bisel é o que faz a tecla: 1px de assento
+/// escuro em volta, a luz quebrando nos dois primeiros degraus da face e
+/// a sombra mordendo os dois de baixo. O rótulo gravado é do caller.
+fn draw_silver_key(canvas: &mut WindowCanvas, rect: Rect, on: bool) {
+    let w = rect.width() as i32;
+    let h = rect.height() as i32;
+    let (x, y) = (rect.x(), rect.y());
+    // o assento: 1px escuro em volta da face inteira
+    canvas.set_draw_color(Color::RGB(22, 22, 26));
+    let _ = canvas.fill_rect(rect);
+    // a face em scanlines, com o bisel nos lábios de cima e de baixo
+    let body = if on { PRATA } else { PRATA_DIM };
+    let lip_dark = if on { (86, 88, 96) } else { (56, 58, 66) };
+    for row in 1..h - 1 {
+        let inset = 1 + corner_inset(row - 1, h - 2, 2);
+        let t = row - 1; // 0..h-2 dentro da face
+        let c = if t < 2 {
+            PRATA_HI
+        } else if t >= h - 4 {
+            lip_dark
+        } else {
+            body
+        };
+        canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
+        let _ = canvas.fill_rect(Rect::new(x + inset, y + row, (w - 2 * inset) as u32, 1));
+    }
+}
+
 /// Horizontal inset of scanline `row` in a bar `h` rows tall with corner
 /// radius `radius` — quarter-circle steps, the same fake-a-circle trick
 /// `draw_led` uses, stacked into whole rows here. Clamped so a bar can never
@@ -5353,7 +6545,21 @@ fn clip_label(text: &str, max_chars: usize) -> Cow<'_, str> {
 /// resting look almost every console's power LED has when off), with a tiny
 /// glossy highlight dot when lit.
 fn draw_led(canvas: &mut WindowCanvas, center_x: i32, top: i32, size: i32, lit: bool) {
-    let (r, g, b) = if lit { LED_ON } else { LED_OFF };
+    draw_led_color(canvas, center_x, top, size, lit, LED_ON, LED_ON_HI);
+}
+
+/// O mesmo LED com cor própria — o queixo da TV usa o verde da foto do
+/// painel real, o console continua no vermelho.
+fn draw_led_color(
+    canvas: &mut WindowCanvas,
+    center_x: i32,
+    top: i32,
+    size: i32,
+    lit: bool,
+    on: (u8, u8, u8),
+    on_hi: (u8, u8, u8),
+) {
+    let (r, g, b) = if lit { on } else { LED_OFF };
     canvas.set_draw_color(Color::RGB(r, g, b));
     // Four rows, widening then narrowing (roughly 60/90/90/60% of `size`) —
     // a softer step than a plain narrow/wide/narrow, so it reads as a round
@@ -5375,7 +6581,7 @@ fn draw_led(canvas: &mut WindowCanvas, center_x: i32, top: i32, size: i32, lit: 
         ));
     }
     if lit {
-        canvas.set_draw_color(Color::RGB(LED_ON_HI.0, LED_ON_HI.1, LED_ON_HI.2));
+        canvas.set_draw_color(Color::RGB(on_hi.0, on_hi.1, on_hi.2));
         let hi = (size / 4).max(1) as u32;
         let hi_x = center_x - (size * 3 / 10);
         let _ = canvas.fill_rect(Rect::new(hi_x, top + step, hi, hi));
@@ -5624,11 +6830,11 @@ fn draw_pause_book(
         let cancel_btn = Rect::new(lx, cancel_y, lw, btn_h as u32);
         buttons.push((
             PanelButton::PauseDraftSave,
-            draw_button(canvas, font, save_btn, "Salvar", true),
+            draw_button(canvas, font, save_btn, tr!("Save", "Salvar"), true),
         ));
         buttons.push((
             PanelButton::PauseDraftCancel,
-            draw_button(canvas, font, cancel_btn, "Cancelar", true),
+            draw_button(canvas, font, cancel_btn, tr!("Cancel", "Cancelar"), true),
         ));
     } else {
         // Left page: a text-note slot viewer (plan revision — mirrors the
@@ -5641,7 +6847,7 @@ fn draw_pause_book(
             lx,
             cy,
             TextStyle::new(1, PANEL_DIM),
-            "anotações",
+            tr!("notes", "anotações"),
             usize::MAX,
         );
         cy += GLYPH_H as i32 + 8;
@@ -5670,7 +6876,7 @@ fn draw_pause_book(
                     lx,
                     cy,
                     TextStyle::new(1, PANEL_DIM),
-                    "slot vazio",
+                    tr!("empty slot", "slot vazio"),
                     usize::MAX,
                 );
             }
@@ -5680,7 +6886,11 @@ fn draw_pause_book(
             "{}/{}{}",
             pause.text_page + 1,
             pause.captures,
-            if pause.text_pinned { " (fixado)" } else { "" }
+            if pause.text_pinned {
+                tr!(" (pinned)", " (fixado)")
+            } else {
+                ""
+            }
         );
         draw_text_absolute(
             canvas,
@@ -5697,7 +6907,7 @@ fn draw_pause_book(
         let next_btn = Rect::new(lx + half as i32 + 8, nav_y, half, btn_h as u32);
         buttons.push((
             PanelButton::PauseTextPrev,
-            draw_button(canvas, font, prev_btn, "< anterior", pause.text_page > 0),
+            draw_button(canvas, font, prev_btn, tr!("< previous", "< anterior"), pause.text_page > 0),
         ));
         buttons.push((
             PanelButton::PauseTextNext,
@@ -5705,7 +6915,7 @@ fn draw_pause_book(
                 canvas,
                 font,
                 next_btn,
-                "próxima >",
+                tr!("next >", "próxima >"),
                 pause.text_page + 1 < pause.captures,
             ),
         ));
@@ -5718,9 +6928,9 @@ fn draw_pause_book(
                 font,
                 write_btn,
                 if pause.text_content.is_some() {
-                    "Editar"
+                    tr!("Edit", "Editar")
                 } else {
-                    "Escrever"
+                    tr!("Write", "Escrever")
                 },
                 !pause.text_pinned,
             ),
@@ -5734,7 +6944,11 @@ fn draw_pause_book(
                 canvas,
                 font,
                 pin_btn,
-                if pause.text_pinned { "Fixado" } else { "Fixar" },
+                if pause.text_pinned {
+                    tr!("Pinned", "Fixado")
+                } else {
+                    tr!("Pin", "Fixar")
+                },
                 true,
             ),
         ));
@@ -5744,7 +6958,7 @@ fn draw_pause_book(
                 canvas,
                 font,
                 del_btn,
-                "Apagar",
+                tr!("Delete", "Apagar"),
                 pause.text_content.is_some() && !pause.text_pinned,
             ),
         ));
@@ -5774,7 +6988,7 @@ fn draw_pause_book(
             rx,
             ry,
             TextStyle::new(1, PANEL_DIM),
-            "slot vazio",
+            tr!("empty slot", "slot vazio"),
             usize::MAX,
         );
     }
@@ -5783,7 +6997,11 @@ fn draw_pause_book(
         "{}/{}{}",
         pause.page + 1,
         pause.captures,
-        if pause.pinned { " (fixado)" } else { "" }
+        if pause.pinned {
+            tr!(" (pinned)", " (fixado)")
+        } else {
+            ""
+        }
     );
     draw_text_absolute(
         canvas,
@@ -5811,7 +7029,7 @@ fn draw_pause_book(
     let next_btn = Rect::new(rx + half as i32 + 8, nav_y, half, btn_h as u32);
     buttons.push((
         PanelButton::PauseNotePrev,
-        draw_button(canvas, font, prev_btn, "< anterior", pause.page > 0),
+        draw_button(canvas, font, prev_btn, tr!("< previous", "< anterior"), pause.page > 0),
     ));
     buttons.push((
         PanelButton::PauseNoteNext,
@@ -5819,7 +7037,7 @@ fn draw_pause_book(
             canvas,
             font,
             next_btn,
-            "próxima >",
+            tr!("next >", "próxima >"),
             pause.page + 1 < pause.captures,
         ),
     ));
@@ -5832,7 +7050,11 @@ fn draw_pause_book(
             canvas,
             font,
             pin_btn,
-            if pause.pinned { "Fixado" } else { "Fixar" },
+            if pause.pinned {
+                tr!("Pinned", "Fixado")
+            } else {
+                tr!("Pin", "Fixar")
+            },
             true,
         ),
     ));
@@ -5843,9 +7065,9 @@ fn draw_pause_book(
             font,
             name_btn,
             if pause.slot_label.is_empty() {
-                "Nomear print"
+                tr!("Name screenshot", "Nomear print")
             } else {
-                "Renomear"
+                tr!("Rename", "Renomear")
             },
             true,
         ),
@@ -5869,7 +7091,7 @@ fn draw_pause_book(
         );
         buttons.push((
             PanelButton::PauseContinue,
-            draw_button(canvas, font, continue_btn, "Continuar", true),
+            draw_button(canvas, font, continue_btn, tr!("Back to the game", "Voltar ao jogo"), true),
         ));
     }
 
@@ -5953,11 +7175,11 @@ fn draw_modal(
         let cancel = Rect::new(x + half_w as i32 + gap, cy, half_w, btn_h as u32);
         buttons.push((
             PanelButton::ModalConfirm,
-            draw_button(canvas, font, confirm, "Salvar", true),
+            draw_button(canvas, font, confirm, tr!("Save", "Salvar"), true),
         ));
         buttons.push((
             PanelButton::ModalCancel,
-            draw_button(canvas, font, cancel, "Cancelar", true),
+            draw_button(canvas, font, cancel, tr!("Cancel", "Cancelar"), true),
         ));
         return buttons;
     }
@@ -6093,9 +7315,12 @@ fn draw_modal(
 
     if modal.searchable {
         let label = if modal.search_query.is_empty() {
-            "Buscar...".to_string()
+            tr!("Search...", "Buscar...").to_string()
         } else {
-            format!("Buscar: \"{}\"", modal.search_query)
+            tr!(
+                format!("Search: \"{}\"", modal.search_query),
+                format!("Buscar: \"{}\"", modal.search_query)
+            )
         };
         let search_box = Rect::new(x, cy, inner_w, btn_h as u32);
         buttons.push((
@@ -6117,7 +7342,7 @@ fn draw_modal(
         let off_btn = Rect::new(x + (seg_w as i32 + seg_gap) * 2, cy, seg_w, btn_h as u32);
         buttons.push((
             PanelButton::ModalFilterAll,
-            draw_button(canvas, font, all_btn, "Todos", modal.cheat_filter.is_none()),
+            draw_button(canvas, font, all_btn, tr!("All", "Todos"), modal.cheat_filter.is_none()),
         ));
         buttons.push((
             PanelButton::ModalFilterOn,
@@ -6125,7 +7350,7 @@ fn draw_modal(
                 canvas,
                 font,
                 on_btn,
-                "Ligados",
+                tr!("On", "Ligados"),
                 modal.cheat_filter == Some(true),
             ),
         ));
@@ -6135,7 +7360,7 @@ fn draw_modal(
                 canvas,
                 font,
                 off_btn,
-                "Desligados",
+                tr!("Off", "Desligados"),
                 modal.cheat_filter == Some(false),
             ),
         ));
@@ -6152,7 +7377,7 @@ fn draw_modal(
             x,
             cy,
             TextStyle::new(1, PANEL_DIM),
-            "nenhum cheat encontrado",
+            tr!("no cheats found", "nenhum cheat encontrado"),
             usize::MAX,
         );
         cy += GLYPH_H as i32 + 12;
@@ -6161,7 +7386,7 @@ fn draw_modal(
             let up = Rect::new(x, cy, inner_w, btn_h as u32);
             buttons.push((
                 PanelButton::ModalScrollUp,
-                draw_button(canvas, font, up, "^ Cima", scroll > 0),
+                draw_button(canvas, font, up, tr!("^ Up", "^ Cima"), scroll > 0),
             ));
             cy += btn_h + 8;
         }
@@ -6192,7 +7417,7 @@ fn draw_modal(
                     canvas,
                     font,
                     down,
-                    "v Baixo",
+                    tr!("v Down", "v Baixo"),
                     scroll + visible_rows < rows_per_col,
                 ),
             ));
@@ -6204,7 +7429,7 @@ fn draw_modal(
     let cancel = Rect::new(x, cy, inner_w, btn_h as u32);
     buttons.push((
         PanelButton::ModalCancel,
-        draw_button(canvas, font, cancel, "Cancelar", true),
+        draw_button(canvas, font, cancel, tr!("Cancel", "Cancelar"), true),
     ));
 
     buttons
@@ -6376,8 +7601,10 @@ mod tests {
         let softcore = ra_badge_rows(false);
         // A primeira linha é sempre o "ativado" verde do OSD; o modo muda
         // de texto e de cor (âmbar no hardcore, cinza claro no softcore).
-        assert_eq!(hardcore[0], ("RA ATIVADO", OSD_GREEN));
-        assert_eq!(softcore[0], ("RA ATIVADO", OSD_GREEN));
+        // O texto fala `tr!`, então o pin cobre os dois idiomas.
+        let ativado = crate::tr!("RA ENABLED", "RA ATIVADO");
+        assert_eq!(hardcore[0], (ativado, OSD_GREEN));
+        assert_eq!(softcore[0], (ativado, OSD_GREEN));
         assert_eq!(hardcore[1].0, "HARDCORE");
         assert_eq!(softcore[1].0, "SOFTCORE");
         assert_ne!(hardcore[1].1, softcore[1].1);
@@ -6482,9 +7709,9 @@ mod tests {
     fn screen_area_insets_with_a_wider_chin() {
         let s = screen_area(1000, 1000);
         assert_eq!(s.x(), 70); // 7% side
-        assert_eq!(s.y(), 70); // 7% top
+        assert_eq!(s.y(), 50); // 5% top (plan revision: moldura superior fina)
         assert_eq!(s.width(), 860); // 1000 - 2*70
-        assert_eq!(s.height(), 820); // 1000 - 70 top - 110 chin
+        assert_eq!(s.height(), 855); // 1000 - 50 top - 95 chin (9.5%)
                                      // Never collapses to nothing on a tiny window.
         assert!(screen_area(4, 4).width() >= 16);
     }

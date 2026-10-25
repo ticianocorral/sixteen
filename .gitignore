@@ -42,3 +42,4 @@ screenscraper.toml
 # build local do flatpak (packaging/flatpak/build-flatpak.sh)
 packaging/flatpak/.flatpak-build/
 packaging/flatpak/.flatpak-repo/
+packaging/core-asset/

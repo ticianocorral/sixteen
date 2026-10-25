@@ -92,12 +92,12 @@ fn main() -> anyhow::Result<()> {
 
     let mut anim = base.clone_shallow();
     anim.debug_cart_anim = Some(out.join("cartanim"));
-    runner::run_game(&mut plat, &mut cab, &anim, &cfg, None)?;
+    runner::run_game(&mut plat, &mut cab, &anim, &cfg)?;
     println!("wrote cartanim frames");
 
     let mut hero = base.clone_shallow();
     hero.shot = Some((out.join("hero.bmp"), 600));
-    runner::run_game(&mut plat, &mut cab, &hero, &cfg, None)?;
+    runner::run_game(&mut plat, &mut cab, &hero, &cfg)?;
     println!("wrote hero.bmp");
 
     // --- Conquistas: o OSD e o badge reais do RA sobre o frame REAL do

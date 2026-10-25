@@ -2,8 +2,8 @@
 # do flatpak-builder. O app não é "sandbox-first": ele mantém a raiz de
 # dados portátil (roms/, saves/, core/...), que dentro do sandbox cai em
 # ~/.var/app/dev.ticianocorral.sixteen/data/SixteeN (XDG_DATA_HOME remapeado
-# pelo flatpak) — sem permissão extra de filesystem. O --filesystem=home
-# existe para o app ler ROMs que o jogador deixou em qualquer pasta de casa.
+# pelo flatpak) — sem permissão extra de filesystem: o app só acessa a
+# própria raiz de dados (ROMs de fora entram copiadas para roms/).
 #
 # O build usa a rede (cargo baixa as dependências e o SDL3 vendido compila
 # via cmake — ambos presentes no org.freedesktop.Sdk), então não é o formato
@@ -12,7 +12,7 @@
 id: dev.ticianocorral.sixteen
 branch: stable
 runtime: org.freedesktop.Platform
-runtime-version: "24.08"
+runtime-version: "26.08"
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -22,8 +22,8 @@ finish-args:
   - --socket=x11
   - --socket=wayland
   - --socket=pulseaudio
-  - --device=all
-  - --filesystem=home
+  - --device=dri
+  - --device=udev
 cleanup:
   - /include
   - /lib/cmake

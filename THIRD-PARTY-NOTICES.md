@@ -147,3 +147,31 @@ Parser de PDF usado pelo leitor de manuais (`crates/app/src/manual.rs`):
 [lopdf](https://github.com/J-F-Liu/lopdf), licenciado sob **MIT** — o app
 apenas extrai as imagens de páginas embutidas dos PDFs que o próprio
 usuário coloca em `assets/manual/`; nada de PDF é distribuído com o app.
+
+## pdfium (biblioteca C)
+
+A renderização completa de páginas do leitor de manuais/revistas usa o
+[pdfium](https://pdfium.googlesource.com/pdfium/) via `pdfium-render`
+(crate Rust, Apache-2.0/MIT); o binário `libpdfium` não é distribuído com o
+app — ele é instalado pelo jogador junto ao executável (macOS) ou já
+presente no sistema, e o app cai no extrator de imagens (lopdf) sem ele.
+
+## flate2 + miniz_oxide (crates Rust)
+
+Descompressão dos streams `FlateDecode` dos PDFs (com teto de expansão —
+ver `crates/app/src/manual.rs`): [flate2](https://github.com/rust-lang/flate2_rust)
+(MIT/Apache-2.0) sobre o backend Rust
+[miniz_oxide](https://github.com/Frommi/miniz_oxide) (MIT/Zlib).
+
+## sha2, sha1, md-5, crc32fast (crates Rust)
+
+Hashes de ROMs para identificação (No-Intro/RetroAchievements) e a
+verificação de integridade SHA-256 do core snes9x baixado (ver
+`crates/app/src/core_update.rs`): [RustCrypto hashes](https://github.com/RustCrypto/hashes)
+(MIT/Apache-2.0) e [crc32fast](https://github.com/srijs/rust-crc32fast)
+(MIT/Apache-2.0).
+
+## zip (crate Rust)
+
+Abertura de ROMs `.zip` e do pacote do core snes9x: [zip](https://github.com/zip-rs/zip2)
+(MIT) — o app nunca extrai zips para o disco; o conteúdo é lido em memória.

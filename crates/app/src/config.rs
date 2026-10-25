@@ -18,6 +18,12 @@ use sixteen_platform::{KeyMap, PadButton, PadMap};
 
 pub struct Config {
     pub fullscreen: bool,
+    /// UI language (plan revision: "traduzir o app 100% para inglês, pt-BR
+    /// como opção na configuração") — English is the default, no matter the
+    /// system locale; `pt` opts the UI into Brazilian Portuguese. Chosen on
+    /// the settings screen's system section ("Language"), saved here, and
+    /// applied at startup plus live on every toggle.
+    pub lang: LangOpt,
     /// Check GitHub for a newer app release, and the buildbot for a fresher
     /// snes9x core, once at startup (plan revision) — a settings-screen
     /// toggle, on by default. Either check that finds something newer shows
@@ -51,24 +57,65 @@ pub struct Config {
     /// keyboard — clones and native-driver paths can land a press in the
     /// wrong slot, so the layout is the user's to fix.
     pub padmap: PadMap,
-    /// Modo Locadora (docs/design-modo-locadora.md §4/§17): preços em
     /// centavos, moeda, mínimo de jogos e o dobradouro de fim de semana.
-    pub locadora_needed: u32,
-    pub locadora_currency: String,
-    pub locadora_salary_cents: i64,
-    pub locadora_hourly_cents: i64,
-    pub locadora_ticket_cents: i64,
-    pub locadora_purchase_cents: i64,
-    pub locadora_weekend_double: bool,
     /// Where it was read from (or freshly written), for logging and for
     /// `save()`.
     pub source: Option<PathBuf>,
+}
+
+/// The settings-screen language choice — English is the default (the app
+/// reads as English-first); `pt` opts the UI into Brazilian Portuguese.
+/// Serialized as the plain word in `sixteen.cfg`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LangOpt {
+    #[default]
+    En,
+    Pt,
+}
+
+impl LangOpt {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LangOpt::En => "en",
+            LangOpt::Pt => "pt",
+        }
+    }
+
+    /// Click / left-right on the settings row: english ↔ português.
+    pub fn cycle(self) -> Self {
+        match self {
+            LangOpt::En => LangOpt::Pt,
+            LangOpt::Pt => LangOpt::En,
+        }
+    }
+
+    /// The string picker equivalent, for `tr::set_lang` at startup and on
+    /// every settings toggle.
+    pub fn tr_lang(self) -> sixteen_platform::tr::Lang {
+        match self {
+            LangOpt::En => sixteen_platform::tr::Lang::En,
+            LangOpt::Pt => sixteen_platform::tr::Lang::Pt,
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "en" | "en-us" | "en_us" => Some(LangOpt::En),
+            // "auto" was the locale-driven default of the brief middle
+            // revision — English is the default now, so it folds into `en`.
+            "auto" | "" => Some(LangOpt::En),
+            "pt" | "pt-br" | "pt_br" => Some(LangOpt::Pt),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Deserialize, Default)]
 struct Raw {
     #[serde(default)]
     fullscreen: Option<bool>,
+    #[serde(default)]
+    lang: Option<String>,
     #[serde(default)]
     check_updates_on_start: Option<bool>,
     #[serde(default)]
@@ -85,22 +132,6 @@ struct Raw {
     keyboard: BTreeMap<String, String>,
     #[serde(default)]
     gamepad: BTreeMap<String, String>,
-    #[serde(default)]
-    locadora: LocadoraRaw,
-}
-
-/// Seção `[locadora]` do cfg — tudo opcional, defaults do design (§4: salário
-/// 5,00/h; avulsa 8,00/h; ticket 12; compra 60; §17: dobradouro de fim de
-/// semana ligado; §2: mínimo de 3 jogos).
-#[derive(Deserialize, Default)]
-struct LocadoraRaw {
-    needed: Option<u32>,
-    currency: Option<String>,
-    salary_cents: Option<i64>,
-    hourly_cents: Option<i64>,
-    ticket_cents: Option<i64>,
-    purchase_cents: Option<i64>,
-    weekend_double: Option<bool>,
 }
 
 impl Config {
@@ -118,6 +149,7 @@ impl Config {
             // fresh install (no `sixteen.cfg` yet) starts fullscreen; the
             // settings screen's own toggle still turns it off from there.
             fullscreen: true,
+            lang: LangOpt::En,
             check_updates_on_start: true,
             hiss_on_static: false,
             ra_user: String::new(),
@@ -126,13 +158,6 @@ impl Config {
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
-            locadora_needed: 3,
-            locadora_currency: "R$".into(),
-            locadora_salary_cents: 500,
-            locadora_hourly_cents: 800,
-            locadora_ticket_cents: 1200,
-            locadora_purchase_cents: 6000,
-            locadora_weekend_double: true,
             source: path.clone(),
         };
 
@@ -150,7 +175,7 @@ impl Config {
                 if let Some(dir) = path.parent() {
                     let _ = std::fs::create_dir_all(dir);
                 }
-                let _ = std::fs::write(&path, cfg.to_toml());
+                let _ = write_config_private(&path, &cfg.to_toml());
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 bail!("config not found: {}", path.display());
@@ -165,6 +190,15 @@ impl Config {
     fn apply(&mut self, raw: Raw) -> Result<()> {
         if let Some(f) = raw.fullscreen {
             self.fullscreen = f;
+        }
+        if let Some(l) = raw.lang {
+            match LangOpt::parse(&l) {
+                Some(v) => self.lang = v,
+                None => log::warn!(
+                    "[config] lang = {l:?}: not a language (want auto|en|pt), keeping {}",
+                    self.lang.as_str()
+                ),
+            }
         }
         if let Some(c) = raw.check_updates_on_start {
             self.check_updates_on_start = c;
@@ -185,30 +219,6 @@ impl Config {
         // respeita um que tenha sido colado à mão no arquivo.
         if let Some(c) = raw.ra_connect {
             self.ra_connect = (!c.is_empty()).then_some(c);
-        }
-        let l = &raw.locadora;
-        if let Some(v) = l.needed {
-            self.locadora_needed = v;
-        }
-        if let Some(v) = &l.currency {
-            if !v.trim().is_empty() {
-                self.locadora_currency = v.clone();
-            }
-        }
-        if let Some(v) = l.salary_cents {
-            self.locadora_salary_cents = v;
-        }
-        if let Some(v) = l.hourly_cents {
-            self.locadora_hourly_cents = v;
-        }
-        if let Some(v) = l.ticket_cents {
-            self.locadora_ticket_cents = v;
-        }
-        if let Some(v) = l.purchase_cents {
-            self.locadora_purchase_cents = v;
-        }
-        if let Some(v) = l.weekend_double {
-            self.locadora_weekend_double = v;
         }
         for (action, key) in &raw.keyboard {
             let Ok(b) = action.parse::<PadButton>() else {
@@ -252,6 +262,7 @@ impl Config {
              # Edited by the in-app settings screen (O on the shelf) — hand edits\n\
              # survive a save, but comments outside a value don't.\n\
              # fullscreen: start in fullscreen.\n\
+             # lang: UI language — en (default) or pt (Brazilian Portuguese).\n\
              # check_updates_on_start: look for a newer release/snes9x core at launch.\n\
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
@@ -262,6 +273,7 @@ impl Config {
              # \"dpup\", \"leftshoulder\") — which pad button drives each action.\n\n",
         );
         s.push_str(&format!("fullscreen = {}\n", self.fullscreen));
+        s.push_str(&format!("lang = {:?}\n", self.lang.as_str()));
         s.push_str(&format!(
             "check_updates_on_start = {}\n",
             self.check_updates_on_start
@@ -274,11 +286,6 @@ impl Config {
         if let Some(connect) = &self.ra_connect {
             s.push_str(&format!("ra_connect = {connect:?}\n\n"));
         }
-        s.push_str("# Modo Locadora (docs/design-modo-locadora.md) — dinheiro fictício.\n");
-        s.push_str(&format!("[locadora]\nneeded = {}\ncurrency = {:?}\nsalary_cents = {}\nhourly_cents = {}\nticket_cents = {}\npurchase_cents = {}\nweekend_double = {}\n\n",
-            self.locadora_needed, self.locadora_currency, self.locadora_salary_cents,
-            self.locadora_hourly_cents, self.locadora_ticket_cents,
-            self.locadora_purchase_cents, self.locadora_weekend_double));
         s.push_str("[keyboard]\n");
         for (action, key) in self.keymap.describe() {
             s.push_str(&format!("{action} = {key:?}\n"));
@@ -300,7 +307,30 @@ impl Config {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
         }
-        std::fs::write(path, self.to_toml()).with_context(|| format!("writing {}", path.display()))
+        write_config_private(path, &self.to_toml())
+            .with_context(|| format!("writing {}", path.display()))
+    }
+}
+
+/// Grava o config com permissão 0600 no Unix — ele carrega os tokens do
+/// RetroAchievements, e o `fs::write` padrão deixaria o arquivo legível
+/// por outros usuários locais (0644 no umask comum).
+pub(crate) fn write_config_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(contents.as_bytes())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, contents)
     }
 }
 
@@ -311,6 +341,7 @@ mod tests {
     fn defaults() -> Config {
         Config {
             fullscreen: false,
+            lang: LangOpt::En,
             check_updates_on_start: true,
             hiss_on_static: false,
             ra_user: String::new(),
@@ -319,13 +350,6 @@ mod tests {
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
-            locadora_needed: 3,
-            locadora_currency: "R$".into(),
-            locadora_salary_cents: 500,
-            locadora_hourly_cents: 800,
-            locadora_ticket_cents: 1200,
-            locadora_purchase_cents: 6000,
-            locadora_weekend_double: true,
             source: None,
         }
     }
@@ -344,6 +368,30 @@ mod tests {
         cfg.apply(toml::from_str("check_updates_on_start = false").unwrap())
             .unwrap();
         assert!(!cfg.check_updates_on_start);
+    }
+
+    #[test]
+    fn lang_round_trips_and_rejects_junk() {
+        let mut cfg = defaults();
+        assert_eq!(cfg.lang, LangOpt::En);
+        cfg.apply(toml::from_str("lang = \"pt\"").unwrap()).unwrap();
+        assert_eq!(cfg.lang, LangOpt::Pt);
+        cfg.apply(toml::from_str("lang = \"EN\"").unwrap()).unwrap();
+        assert_eq!(cfg.lang, LangOpt::En);
+        // "auto" (the locale-driven default of the brief middle revision)
+        // folds into the new default instead of erroring.
+        cfg.apply(toml::from_str("lang = \"auto\"").unwrap()).unwrap();
+        assert_eq!(cfg.lang, LangOpt::En);
+        // Unknown value keeps the current one (warn, not an error — same rule
+        // as the stale keyboard binds).
+        cfg.apply(toml::from_str("lang = \"es\"").unwrap()).unwrap();
+        assert_eq!(cfg.lang, LangOpt::En);
+        // And the text form survives a save/load round trip.
+        cfg.lang = LangOpt::Pt;
+        let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
+        let mut round = defaults();
+        round.apply(raw).unwrap();
+        assert_eq!(round.lang, LangOpt::Pt);
     }
 
     #[test]

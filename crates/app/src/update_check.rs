@@ -10,6 +10,7 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use serde::Deserialize;
+use sixteen_platform::tr;
 
 const RELEASES_API: &str = "https://api.github.com/repos/ticianocorral/sixteen/releases/latest";
 
@@ -51,6 +52,15 @@ fn agent() -> ureq::Agent {
         .timeout_connect(Duration::from_secs(5))
         .timeout(Duration::from_secs(8))
         .build()
+}
+
+/// Rodando dentro do sandbox do Flatpak? Nessas builds o app é atualizado
+/// pelo próprio Flathub (`/app` é read-only — o self-update não teria onde
+/// escrever, e baixar/substituir binários por conta própria duplicaria o
+/// canal de atualização), então a checagem e o apply do update do **app**
+/// ficam desligados. O check do core snes9x (`core_stale`) continua.
+pub fn running_under_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some() || std::path::Path::new("/.flatpak-info").exists()
 }
 
 /// `true` if the installed core was built from a commit older than
@@ -153,7 +163,11 @@ fn parse_version(v: &str) -> Vec<u32> {
 /// the receiver just sees the channel go quiet rather than an explicit
 /// "you're fine" message.
 pub fn check(core_dir: PathBuf, app_version: String, tx: Sender<UpdateNotice>) {
-    let app_update = newer_release(&app_version);
+    let app_update = if running_under_flatpak() {
+        None
+    } else {
+        newer_release(&app_version)
+    };
     let core_stale = core_is_stale(&core_dir);
     if app_update.is_some() || core_stale {
         let _ = tx.send(UpdateNotice {
@@ -182,6 +196,9 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
     let mut reader = resp.into_reader();
     let mut buf = [0u8; 64 * 1024];
     let mut got: u64 = 0;
+    // AppImages/DMGs ficam entre 20–150 MB; 512 MB é teto anti-disco-cheio,
+    // não um tamanho esperado.
+    const MAX_ASSET_DOWNLOAD: u64 = 512 * 1024 * 1024;
     loop {
         use std::io::Read;
         let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
@@ -190,6 +207,14 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
         }
         std::io::Write::write_all(&mut file, &buf[..n]).map_err(|e| e.to_string())?;
         got += n as u64;
+        if got > MAX_ASSET_DOWNLOAD {
+            let _ = std::fs::remove_file(&dest);
+            return Err(tr!(
+                "download larger than expected — aborted",
+                "download maior que o esperado — abortado"
+            )
+            .to_string());
+        }
         if let Some(pct) = (got * 100).checked_div(total) {
             let _ = tx.send(pct.min(100) as u32);
         }
@@ -225,6 +250,9 @@ pub fn apply_update_file(path: &Path) -> Result<(), String> {
 /// falha loga e mantém o arquivo para tentar de novo. Antes do SDL, na
 /// main do `sixteen`.
 pub fn apply_pending_update() {
+    if running_under_flatpak() {
+        return;
+    }
     let Some(dir) = crate::dirs::update_dir_opt() else {
         return;
     };
@@ -281,13 +309,19 @@ fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
                     .find(|a| a.extension().is_some_and(|e| e == "app"))
                     .map(|a| a.to_path_buf())
             })
-            .ok_or_else(|| "não achei o .app em execução".to_string())?;
+            .ok_or_else(|| {
+                tr!(
+                    "couldn't find the running .app",
+                    "não achei o .app em execução"
+                )
+                .to_string()
+            })?;
         let new_app = std::fs::read_dir(&mnt)
             .map_err(|e| e.to_string())?
             .flatten()
             .map(|e| e.path())
             .find(|p| p.extension().is_some_and(|e| e == "app"))
-            .ok_or_else(|| "dmg sem .app dentro".to_string())?;
+            .ok_or_else(|| tr!("no .app inside the dmg", "dmg sem .app dentro").to_string())?;
         let status = Command::new("ditto")
             .arg(new_app)
             .arg(&app_bundle)
@@ -296,7 +330,7 @@ fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
         if status.success() {
             Ok(())
         } else {
-            Err("ditto falhou".to_string())
+            Err(tr!("ditto failed", "ditto falhou").to_string())
         }
     })();
     let _ = Command::new("hdiutil")
@@ -332,7 +366,11 @@ fn apply_for_platform(path: &Path, name: &str) -> Result<(), String> {
     if name.ends_with(".dmg") {
         apply_macos_dmg(path)
     } else {
-        Err("não é um update desta plataforma".to_string())
+        Err(tr!(
+            "not an update for this platform",
+            "não é um update desta plataforma"
+        )
+        .to_string())
     }
 }
 
@@ -341,13 +379,21 @@ fn apply_for_platform(path: &Path, name: &str) -> Result<(), String> {
     if name.ends_with(".AppImage") {
         apply_linux_appimage(path)
     } else {
-        Err("não é um update desta plataforma".to_string())
+        Err(tr!(
+            "not an update for this platform",
+            "não é um update desta plataforma"
+        )
+        .to_string())
     }
 }
 
 #[cfg(target_os = "windows")]
 fn apply_for_platform(_path: &Path, _name: &str) -> Result<(), String> {
-    Err("atualização automática não suportada nesta plataforma — instale do release".to_string())
+    Err(tr!(
+        "automatic update not supported on this platform — install from the release",
+        "atualização automática não suportada nesta plataforma — instale do release"
+    )
+    .to_string())
 }
 
 /// Relança o app pelo que está no disco — já substituído pelo apply — e
@@ -364,7 +410,13 @@ pub fn relaunch() -> Result<(), String> {
         let app = exe
             .ancestors()
             .find(|a| a.extension().is_some_and(|e| e == "app"))
-            .ok_or_else(|| "não achei o .app em execução".to_string())?;
+            .ok_or_else(|| {
+                tr!(
+                    "couldn't find the running .app",
+                    "não achei o .app em execução"
+                )
+                .to_string()
+            })?;
         Command::new("open")
             .arg("-n")
             .arg(app)

@@ -13,6 +13,8 @@
 use std::io::Read;
 use std::time::Duration;
 
+use sixteen_platform::tr;
+
 pub const API_BASE: &str = "https://retroachievements.org";
 
 /// Identifies the app to the RA server in every call (third-party clients
@@ -48,7 +50,9 @@ fn encode(s: &str) -> String {
 /// settings screen wraps it in the standard worker + `mpsc` shape.
 pub fn test_login(user: &str, token: &str) -> Result<String, String> {
     if user.is_empty() || token.is_empty() {
-        return Err("preencha usuário e token".to_string());
+        return Err(
+            tr!("fill in the username and token", "preencha usuário e token").to_string()
+        );
     }
     let resp = agent()
         .get(&format!(
@@ -58,19 +62,21 @@ pub fn test_login(user: &str, token: &str) -> Result<String, String> {
         ))
         .set("User-Agent", USER_AGENT)
         .call()
-        .map_err(|e| format!("rede: {e}"))?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+        .map_err(|e| tr!(format!("network: {e}"), format!("rede: {e}")))?;
+    let body: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
     // Failure shapes: {"Success": false} or an error code object; success
     // carries the profile with at least "User".
     if body.get("Success").is_some_and(|s| s == false) {
-        return Err("usuário ou token inválidos".to_string());
+        return Err(tr!("invalid username or token", "usuário ou token inválidos").to_string());
     }
     let Some(name) = body.get("User").and_then(|v| v.as_str()) else {
-        return Err("resposta inesperada".to_string());
+        return Err(tr!("unexpected response", "resposta inesperada").to_string());
     };
     let points = body.get("TotalPoints").and_then(|v| v.as_i64());
     Ok(match points {
-        Some(p) => format!("{name} — {p} pontos"),
+        Some(p) => tr!(format!("{name} — {p} points"), format!("{name} — {p} pontos")),
         None => name.to_string(),
     })
 }
@@ -222,7 +228,11 @@ pub fn fetch_game(
     hash: &str,
 ) -> Result<Option<RaGame>, String> {
     if connect.is_empty() {
-        return Err("conecte a conta (senha) em configurações > conquistas".to_string());
+        return Err(tr!(
+            "link the account (password) in settings > achievements",
+            "conecte a conta (senha) em configurações > conquistas"
+        )
+        .to_string());
     }
     let resp = agent()
         .post(&format!(
@@ -411,19 +421,21 @@ pub fn connect_login(user: &str, password: &str) -> Result<String, String> {
         ))
         .set("User-Agent", USER_AGENT)
         .call()
-        .map_err(|e| format!("rede: {e}"))?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+        .map_err(|e| tr!(format!("network: {e}"), format!("rede: {e}")))?;
+    let body: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
             .get("Error")
             .and_then(|v| v.as_str())
-            .unwrap_or("login recusado");
+            .unwrap_or(tr!("login refused", "login recusado"));
         return Err(err.to_string());
     }
     body.get("Token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| "resposta sem token".to_string())
+        .ok_or_else(|| tr!("no token in response", "resposta sem token").to_string())
 }
 
 /// Where a game's "already earned" ids live — `retroachievements/ra-earned/<hash>.json`.
@@ -825,10 +837,14 @@ impl Award {
     /// "mostre se foi zerado e/ou mastered junto com as infos do game").
     pub fn label(&self) -> &'static str {
         match self {
-            Award::Beaten { hardcore: true } => "zerado (hardcore)",
-            Award::Beaten { hardcore: false } => "zerado (softcore)",
-            Award::Completed { hardcore: true } => "completado (hardcore)",
-            Award::Completed { hardcore: false } => "completado (softcore)",
+            Award::Beaten { hardcore: true } => tr!("beaten (hardcore)", "zerado (hardcore)"),
+            Award::Beaten { hardcore: false } => tr!("beaten (softcore)", "zerado (softcore)"),
+            Award::Completed { hardcore: true } => {
+                tr!("completed (hardcore)", "completado (hardcore)")
+            }
+            Award::Completed { hardcore: false } => {
+                tr!("completed (softcore)", "completado (softcore)")
+            }
             Award::Mastered => "mastered",
         }
     }
@@ -1007,7 +1023,7 @@ pub fn release_and_extras(hash: &str) -> (Option<String>, Vec<(String, String)>)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
     {
-        extras.push(("editora".to_string(), publisher.to_string()));
+        extras.push((tr!("publisher", "editora").to_string(), publisher.to_string()));
     }
     if let Some(developer) = body
         .get("Developer")
@@ -1015,14 +1031,17 @@ pub fn release_and_extras(hash: &str) -> (Option<String>, Vec<(String, String)>)
         .filter(|s| !s.is_empty())
         .filter(|d| Some(*d) != body.get("Publisher").and_then(|v| v.as_str()))
     {
-        extras.push(("desenvolvedor".to_string(), developer.to_string()));
+        extras.push((
+            tr!("developer", "desenvolvedor").to_string(),
+            developer.to_string(),
+        ));
     }
     if let Some(genre) = body
         .get("Genre")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
     {
-        extras.push(("gênero".to_string(), genre.to_string()));
+        extras.push((tr!("genre", "gênero").to_string(), genre.to_string()));
     }
     (release, extras)
 }
@@ -1154,8 +1173,28 @@ pub fn fetch_game_earned_worker(
 
 // ---- badges ----------------------------------------------------------
 
+/// Nome de badge como veio do servidor, reduzido ao conjunto inofensivo
+/// `[A-Za-z0-9_.-]` — o `BadgeName` do RetroAchievements alimenta tanto a
+/// URL quanto o nome de arquivo do cache, e um valor hostil (`../..`)
+/// não pode escapar do diretório de badges.
+fn sanitize_badge_name(name: &str) -> Option<String> {
+    let clean: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let clean = clean.replace("..", "_");
+    (!clean.is_empty()).then_some(clean)
+}
+
 /// Where a downloaded badge lives — `retroachievements/ra-cache/badges/<name>.png`.
 pub fn badge_path(name: &str) -> Option<std::path::PathBuf> {
+    let name = sanitize_badge_name(name)?;
     let p = crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join("badges")
@@ -1176,8 +1215,13 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         .set("User-Agent", USER_AGENT)
         .call()
         .ok()?;
+    // Badges são PNGs de poucos KB — um corpo gigante é coisa errada.
     let mut bytes = Vec::new();
-    resp.into_reader().read_to_end(&mut bytes).ok()?;
+    resp.into_reader()
+        .take(2 * 1024 * 1024)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    let name = sanitize_badge_name(name)?;
     let dir = crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join("badges");

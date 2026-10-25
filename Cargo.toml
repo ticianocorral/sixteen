@@ -7,7 +7,6 @@ members = [
     "crates/ra",
     "crates/ntsc",
     "crates/app",
-    "crates/locadora",
 ]
 
 [workspace.package]
@@ -30,6 +29,7 @@ crc32fast = "1.4"
 md-5 = "0.10"
 sixteen-ra = { path = "crates/ra" }
 sha1 = "0.10"
+sha2 = "0.10"
 hex = "0.4"
 
 # Build the whole workspace with optimisation even in dev: the emulator loop

@@ -48,13 +48,14 @@ pub enum IdleExit {
     Quit,
     /// "Inserir cartucho" confirmed (Enter/gamepad) or clicked.
     OpenShelf,
-    /// "MODO LOCADORA" clicked (docs/design-modo-locadora.md §2) — only
-    /// reachable with enough ROMs on the shelf (the button itself answers
-    /// with an OSD when the acervo is short).
-    OpenLocadora,
     /// "Configurações" clicked — the only way into settings from here (no
     /// keyboard shortcut, mouse/gamepad only).
     OpenSettings,
+    /// "Livraria Retro" clicked (plan revision) — a revistoteca em PDF na
+    /// pasta `magazine`, leitura na TV. Funciona até sem core: ler revista
+    /// não depende do snes9x.
+    OpenLivraria,
+    OpenMuseu,
     /// "Dev" clicked — the dev-mode button that only exists once the Konami
     /// code has been entered on this screen (plan revision: "ultra secreto").
     OpenDev,
@@ -180,8 +181,7 @@ pub fn run(
     notice_rx: &mut Option<Receiver<UpdateNotice>>,
     core_installed: bool,
     dat_installed: bool,
-    catalog_counts: usize,
-    locadora_needed: usize,
+    _catalog_counts: usize,
 ) -> Result<IdleExit> {
     // Whatever game was loaded before (if any) is gone now — without this the
     // panel keeps showing its stale logo/commands instead of the "Inserir
@@ -322,16 +322,16 @@ pub fn run(
                         .map(|u| u.tag.clone())
                         .unwrap_or_default();
                     update_status = tr!(
-                        format!("updated to {tag}! restart to apply"),
-                        format!("atualizado para {tag}! reinicie para valer")
+                        format!("updated to {tag} — restart to apply"),
+                        format!("atualizado para {tag} — reinicie para aplicar")
                     );
                     update_applied = true;
                     apply_rx = None;
                 }
                 Ok(Err(e)) => {
                     update_status = tr!(
-                        format!("downloaded, but couldn't apply ({e}) — tries again on restart"),
-                        format!("baixado, mas não aplicou ({e}) — tenta ao reiniciar")
+                        format!("downloaded, but couldn't apply it ({e}) — will try again on restart"),
+                        format!("baixado, mas não aplicou ({e}) — tenta de novo ao reiniciar")
                     );
                     apply_rx = None;
                 }
@@ -376,14 +376,14 @@ pub fn run(
                             let (tx, rx) = mpsc::channel();
                             let dest = crate::dirs::core_dir();
                             std::thread::spawn(move || {
-                                core_update::download_and_install(url, &dest, &tx)
+                                core_update::download_and_install(&url, &dest, &tx)
                             });
                             core.rx = Some(rx);
                             core.failed = false;
                         } else {
                             core.label = tr!(
-                                "no automatic build - use settings".to_string(),
-                                "sem build automática - use configurações".to_string()
+                                "not available for this system — check settings".to_string(),
+                                "indisponível neste sistema — veja as configurações".to_string()
                             );
                         }
                     }
@@ -536,6 +536,16 @@ pub fn run(
                 cab.minimize();
                 continue;
             }
+            // Os controles físicos da TV (plan revision): o knob POWER
+            // liga/desliga (com o warm-up/colapso do tubo), VOL-/VOL+ mudam
+            // o volume e acendem o OSD de barrinhas.
+            match cab.hit_tv_controls(ox, oy) {
+                            Some(sixteen_platform::TvControl::Power) => cab.toggle_tv_power(),
+                            Some(sixteen_platform::TvControl::VolUp) => cab.nudge_volume(1),
+                            Some(sixteen_platform::TvControl::VolDown) => cab.nudge_volume(-1),
+                            Some(sixteen_platform::TvControl::Channel) => cab.toggle_channel(),
+                            None => {}
+            }
             // Setas verdes do nameplate (plan revision): app abre a tela
             // de changelog; core baixa e instala na hora.
             match cab.hit_update_arrow(ox, oy) {
@@ -549,7 +559,7 @@ pub fn run(
                             let (tx, rx) = mpsc::channel();
                             let dest = crate::dirs::core_dir();
                             std::thread::spawn(move || {
-                                core_update::download_and_install(url, &dest, &tx)
+                                core_update::download_and_install(&url, &dest, &tx)
                             });
                             core.rx = Some(rx);
                             core.done = false;
@@ -558,13 +568,41 @@ pub fn run(
                         }
                         None => {
                             core.label = tr!(
-                                "no automatic build - use settings".into(),
-                                "sem build automática - use configurações".into()
+                                "not available for this system — check settings".into(),
+                                "indisponível neste sistema — veja as configurações".into()
                             );
                         }
                     }
                 }
                 _ => {}
+            }
+            // TV desligada: a estante precisa do tubo aceso, mas a
+            // Livraria e as Configurações não dependem dela — esses dois
+            // respondem normalmente; clicar na estante acende o aviso no
+            // OSD do queixo.
+            if !cab.tv_on() {
+                match cab.hit_panel_button(ox, oy) {
+                    Some(PanelButton::Livraria) => return Ok(IdleExit::OpenLivraria),
+                    Some(PanelButton::Museu) => return Ok(IdleExit::OpenMuseu),
+                    Some(PanelButton::Settings) if !core_missing => {
+                        return Ok(IdleExit::OpenSettings)
+                    }
+                    Some(PanelButton::Dev) if cab.dev_mode() => return Ok(IdleExit::OpenDev),
+                    Some(_) => {
+                        cab.push_osd(
+                            &[tr!(
+                                "turn the TV on to open the shelf",
+                                "ligue a TV para abrir a estante"
+                            )],
+                            None,
+                            Duration::from_secs(3),
+                        );
+                    }
+                    None => {}
+                }
+                cab.present_static(static_level);
+                crate::runner::pace_frame(&mut next, frame);
+                continue;
             }
             match cab.hit_panel_button(ox, oy) {
                 // Sem o snes9x instalado (plan revision: "só desative o
@@ -572,22 +610,11 @@ pub fn run(
                 // baixou o snes9x") — os dois ficam inertes; o painel
                 // oferece o download do core no lugar.
                 Some(PanelButton::Insert) if !core_missing => return Ok(IdleExit::OpenShelf),
-                // A locadora (docs/design-modo-locadora.md §2): o botão
-                // existe sempre, mas responde com um aviso no tubo quando o
-                // acervo é curto demais pro sorteio (mínimo configurável).
-                Some(PanelButton::Locadora) => {
-                    if catalog_counts >= locadora_needed {
-                        return Ok(IdleExit::OpenLocadora);
-                    }
-                    cab.push_osd(
-                        &[&format!(
-                            "{catalog_counts}/{locadora_needed} jogos — acervo insuficiente para a locadora"
-                        )],
-                        None,
-                        std::time::Duration::from_secs(4),
-                    );
-                }
                 Some(PanelButton::Settings) if !core_missing => return Ok(IdleExit::OpenSettings),
+                // A Livraria independe do core (ler revista não baixa
+                // snes9x) — abre mesmo sem o console pronto.
+                Some(PanelButton::Livraria) => return Ok(IdleExit::OpenLivraria),
+                Some(PanelButton::Museu) => return Ok(IdleExit::OpenMuseu),
                 // O botão só existe com o devmode ligado (só o painel o
                 // desenha), mas o gate fica explícito: sem devmode, cliques
                 // fantasmas não abrem nada.
@@ -598,7 +625,7 @@ pub fn run(
                             let (tx, rx) = mpsc::channel();
                             let dest = crate::dirs::core_dir();
                             std::thread::spawn(move || {
-                                core_update::download_and_install(url, &dest, &tx)
+                                core_update::download_and_install(&url, &dest, &tx)
                             });
                             core.rx = Some(rx);
                             core.done = false;
@@ -607,8 +634,8 @@ pub fn run(
                         }
                         None => {
                             core.label = tr!(
-                                "no automatic build - use settings".to_string(),
-                                "sem build automática - use configurações".to_string()
+                                "not available for this system — check settings".to_string(),
+                                "indisponível neste sistema — veja as configurações".to_string()
                             );
                         }
                     }
@@ -624,7 +651,9 @@ pub fn run(
                 // Same gate as the panel buttons above: without the core
                 // there's nowhere to go but out — Confirm is inert, Back
                 // still quits.
-                MenuNav::Confirm if !core_missing => return Ok(IdleExit::OpenShelf),
+                MenuNav::Confirm if !core_missing && cab.tv_on() => {
+                    return Ok(IdleExit::OpenShelf)
+                }
                 MenuNav::Back => return Ok(IdleExit::Quit),
                 _ => {}
             }
@@ -793,13 +822,13 @@ fn draw_setup(
     );
     d.text(
         center_x(
-            tr!("two downloads missing before you can play", "para jogar, faltam dois downloads"),
+            tr!("two downloads and you're ready to play", "dois downloads e você já pode jogar"),
             1,
         ),
         h * 12 / 100 + 74,
         1,
         SETUP_DIM,
-        tr!("two downloads missing before you can play", "para jogar, faltam dois downloads"),
+        tr!("two downloads and you're ready to play", "dois downloads e você já pode jogar"),
     );
 
     fn draw_button(d: &mut Screen, r: &RectT, label: &str, color: (u8, u8, u8)) {
@@ -832,7 +861,7 @@ fn draw_setup(
         core_r.1 + core_r.3 as i32 + 8,
         1,
         SETUP_DIM,
-        tr!("required to run the games", "necessário para rodar os jogos"),
+        tr!("the engine that runs the games", "o motor que roda os jogos"),
     );
     d.text(
         dat_r.0 + 4,
@@ -840,18 +869,18 @@ fn draw_setup(
         1,
         SETUP_DIM,
         tr!(
-            "optional: games' canonical names, year and publisher",
-            "opcional: nomes canônicos, ano e editora dos jogos"
+            "optional: proper game names, year and publisher",
+            "opcional: nomes certinhos dos jogos, ano e editora"
         ),
     );
 
-    draw_button(d, &cont_r, tr!("continue", "continuar"), SETUP_TEXT);
+    draw_button(d, &cont_r, tr!("let's play", "bora jogar"), SETUP_TEXT);
     d.text(
-        center_x(tr!("enter also continues", "enter também continua"), 1),
+        center_x(tr!("or press enter", "ou aperte enter"), 1),
         cont_r.1 + cont_r.3 as i32 + 10,
         1,
         SETUP_DIM,
-        tr!("enter also continues", "enter também continua"),
+        tr!("or press enter", "ou aperte enter"),
     );
 }
 

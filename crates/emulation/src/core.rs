@@ -124,6 +124,12 @@ struct CallbackState {
     input: [[bool; 16]; MAX_PORTS],
     /// Latest frame, taken out by the frontend after `run()`.
     frame: Option<Frame>,
+    /// Frame pixel buffers no longer in use, waiting to be reused by the
+    /// video callback — the callback would otherwise allocate (and copy
+    /// into) a fresh ~114–458 KB `Vec` every frame at 60 Hz. The consumer
+    /// hands buffers back via [`Core::recycle_frame`]; capped so a
+    /// misbehaving caller can't grow it forever.
+    frame_pool: Vec<Vec<u8>>,
     /// `true` when the core signalled a duped frame (no new video this run).
     frame_duped: bool,
     /// Interleaved S16 stereo, accumulated across the run, drained by frontend.
@@ -240,6 +246,7 @@ impl Core {
             save_directory: CString::new(".").unwrap(),
             input: [[false; 16]; MAX_PORTS],
             frame: None,
+            frame_pool: Vec::new(),
             frame_duped: false,
             audio: Vec::with_capacity(4096),
             variables: Vec::new(),
@@ -407,6 +414,18 @@ impl Core {
     /// The most recent frame, if the last `run()` produced a fresh one.
     pub fn take_frame(&mut self) -> Option<Frame> {
         self.state.frame.take()
+    }
+
+    /// Hand a consumed frame's pixel buffer back so the video callback can
+    /// reuse it instead of allocating per frame. Call once the frame (and
+    /// anything cloned from it) is fully drawn; a dropped frame is simply
+    /// reallocated, so forgetting to recycle is correct, just slower.
+    pub fn recycle_frame(&mut self, frame: Frame) {
+        if self.state.frame_pool.len() < 3 {
+            let mut pixels = frame.pixels;
+            pixels.clear();
+            self.state.frame_pool.push(pixels);
+        }
     }
 
     pub fn frame_duped(&self) -> bool {
@@ -708,7 +727,19 @@ unsafe extern "C" fn video_refresh_cb(
     with_cb(|s| {
         let bpp = s.pixel_format.bytes_per_pixel();
         let row_bytes = width as usize * bpp;
-        let mut pixels = Vec::with_capacity(row_bytes * height as usize);
+        // Take a buffer from the pool (or the frame the consumer never
+        // picked up) instead of allocating a fresh Vec per frame — 60 Hz of
+        // 114–458 KB allocations was measurable allocator churn. `reserve`
+        // grows a smaller buffer once if the resolution changed.
+        let mut pixels = s
+            .frame
+            .take()
+            .map(|f| f.pixels)
+            .or_else(|| s.frame_pool.pop())
+            .unwrap_or_default();
+        let needed = row_bytes * height as usize;
+        pixels.clear();
+        pixels.reserve(needed);
         let src = data as *const u8;
         for row in 0..height as usize {
             let start = row * pitch;

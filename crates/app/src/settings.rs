@@ -68,7 +68,8 @@ fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
         SEC_JOGO => 1,
         SEC_VIDEO => 2,
-        SEC_SISTEMA => 3,
+        // núcleo / checar updates / idioma / renomear ROMs
+        SEC_SISTEMA => 4,
         // usuário / token / senha / testar login / hardcore
         SEC_CONQUISTAS => 5,
         SEC_CONTROLES => cfg.keymap.describe().len(),
@@ -497,6 +498,14 @@ fn activate_row(
                 cfg.check_updates_on_start = !cfg.check_updates_on_start;
                 let _ = cfg.save();
             }
+            // The language row: english ↔ português, applied live — the
+            // very next frame's `tr!` calls read the new one, so this
+            // screen re-renders in the chosen language at once.
+            2 => {
+                cfg.lang = cfg.lang.cycle();
+                apply_lang(cfg);
+                let _ = cfg.save();
+            }
             _ => *rename_status = Some(run_rom_rename()),
         },
         SEC_CONQUISTAS => match i {
@@ -539,8 +548,8 @@ fn start_login_test(
     *status = LoginStatus::Checking;
 }
 
-/// The left/right adjustments — run-ahead steps, fullscreen/check-updates
-/// toggle. Rows without a horizontal feel ignore them.
+/// The left/right adjustments — fullscreen/check-updates toggles, language
+/// flip. Rows without a horizontal feel ignore them.
 fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _right: bool) {
     match (sec, sel) {
         (SEC_VIDEO, 0) => {
@@ -557,11 +566,31 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _righ
             cfg.check_updates_on_start = !cfg.check_updates_on_start;
             let _ = cfg.save();
         }
+        (SEC_SISTEMA, 2) => {
+            cfg.lang = cfg.lang.cycle();
+            apply_lang(cfg);
+            let _ = cfg.save();
+        }
         (SEC_CONQUISTAS, 4) => {
             cfg.ra_hardcore = !cfg.ra_hardcore;
             let _ = cfg.save();
         }
         _ => {}
+    }
+}
+
+/// Push the config's language into the string picker — at startup the bins
+/// apply the same value through `tr::set_lang`.
+fn apply_lang(cfg: &Config) {
+    sixteen_platform::tr::set_lang(Some(cfg.lang.tr_lang()));
+}
+
+/// The language row's value. "English"/"Português" are proper names — each
+/// shown in its own language on both sides; only the row word translates.
+fn lang_value_name(lang: crate::config::LangOpt) -> &'static str {
+    match lang {
+        crate::config::LangOpt::En => tr!("English", "Inglês"),
+        crate::config::LangOpt::Pt => "Português (Brasil)",
     }
 }
 
@@ -576,14 +605,14 @@ fn start_core_download(status: &mut CoreStatus, worker: &mut Option<Receiver<Cor
     }
     let Some(url) = core_update::core_download_url() else {
         *status = tr!(
-            CoreStatus::Failed("no automatic build for this platform".to_string()),
-            CoreStatus::Failed("sem build automática pra esta plataforma".to_string())
+            CoreStatus::Failed("no automatic download for this system".to_string()),
+            CoreStatus::Failed("sem download automático para este sistema".to_string())
         );
         return;
     };
     let (tx, rx) = mpsc::channel();
     let dest = crate::dirs::core_dir();
-    std::thread::spawn(move || core_update::download_and_install(url, &dest, &tx));
+    std::thread::spawn(move || core_update::download_and_install(&url, &dest, &tx));
     *worker = Some(rx);
     *status = CoreStatus::Downloading {
         downloaded: 0,
@@ -622,18 +651,18 @@ fn run_rom_rename() -> String {
                 log::info!("rom rename: {} -> {}", r.old, r.new);
             }
             match list.len() {
-                1 => tr!("Rename ROMs: 1 rom renamed", "Renomear ROMs: 1 rom renomeada").to_string(),
-                n => tr!(format!("Rename ROMs: {n} roms renamed"), format!("Renomear ROMs: {n} roms renomeadas")),
+                1 => tr!("1 ROM renamed", "1 ROM renomeada").to_string(),
+                n => tr!(format!("{n} ROMs renamed"), format!("{n} ROMs renomeadas")),
             }
         }
         RenameOutcome::NothingToDo => tr!(
-            "Rename ROMs: nothing needed a new name",
-            "Renomear ROMs: nenhuma precisava de nome novo"
+            "every ROM already has its proper name",
+            "todas já têm o nome certinho"
         )
         .to_string(),
         RenameOutcome::NoDat => tr!(
-            "Rename ROMs: nointro.dat not found",
-            "Renomear ROMs: nointro.dat não encontrado"
+            "nointro.dat not found",
+            "nointro.dat não encontrado"
         )
         .to_string(),
     }
@@ -654,8 +683,8 @@ fn core_row_label(status: &CoreStatus) -> String {
                 ),
             }
         }
-        CoreStatus::Done => tr!("Core: updated successfully", "Núcleo: atualizado com sucesso").to_string(),
-        CoreStatus::Failed(e) => tr!(format!("Core: failed - {e}"), format!("Núcleo: falha - {e}")),
+        CoreStatus::Done => tr!("Core: updated!", "Núcleo: atualizado!").to_string(),
+        CoreStatus::Failed(e) => tr!(format!("Core: update failed — {e}"), format!("Núcleo: falha na atualização — {e}")),
         CoreStatus::Idle => match core_installed_label() {
             Some(installed) => tr!(format!("Core: update ({installed})"), format!("Núcleo: atualizar ({installed})")),
             None => tr!("Core: download", "Núcleo: baixar").to_string(),
@@ -798,8 +827,12 @@ fn draw_sistema(
                 }
             )
         ),
+        tr!(
+            format!("Language: {}", lang_value_name(cfg.lang)),
+            format!("Idioma: {}", lang_value_name(cfg.lang)),
+        ),
         rename_status
-            .unwrap_or(tr!("Rename ROMs to the No-Intro naming", "Renomear ROMs para o padrão No-Intro"))
+            .unwrap_or(tr!("Rename ROMs to No-Intro names", "Renomear ROMs para nomes No-Intro"))
             .to_string(),
     ];
     for (i, row) in rows.iter().enumerate() {
@@ -844,8 +877,8 @@ fn draw_conquistas(
         tr!("Password: (connected)", "Senha: (conectado)").to_string()
     } else {
         tr!(
-            "Password: (empty — unlocks the achievement logic)",
-            "Senha: (vazio — conecta a lógica das conquistas)"
+            "Password: (empty — achievements stay off)",
+            "Senha: (vazio — conquistas ficam desligadas)"
         )
         .to_string()
     };
@@ -863,7 +896,7 @@ fn draw_conquistas(
     };
     let rows = [
         field(RA_ROW_USER, tr!("Username", "Usuário"), &cfg.ra_user),
-        field(RA_ROW_TOKEN, tr!("Web API token", "Token da web API"), &cfg.ra_token),
+        field(RA_ROW_TOKEN, tr!("Web API key", "Chave da web API"), &cfg.ra_token),
         if editing == Some(RA_ROW_SENHA) {
             format!("{}: {draft}_", tr!("Password", "Senha"))
         } else {
@@ -899,7 +932,7 @@ fn draw_conquistas(
         y + 8,
         1,
         DIM,
-        "token: retroachievements.org -> settings -> web api",
+        "key: retroachievements.org -> settings -> keys",
     );
     d.text(
         x,
@@ -907,8 +940,8 @@ fn draw_conquistas(
         1,
         DIM,
         tr!(
-            "password: the same as on the site — unlocks the logic and submission of achievements",
-            "senha: a mesma do site — libera a lógica e o envio das conquistas"
+            "password: the same one from the site — links your account so achievements unlock and sync",
+            "senha: a mesma do site — conecta a conta para desbloquear e sincronizar conquistas"
         ),
     );
     draw_hint(
@@ -938,7 +971,10 @@ fn draw_controls(d: &mut Screen, cfg: &Config, sel: usize, top: usize, awaiting:
                 format!("{action}: aperte uma tecla ou botão do controle... (esc cancela)")
             )
         } else {
-            format!("{action}: {key} | controle: {pad}")
+            tr!(
+                format!("{action}: {key} | pad: {pad}"),
+                format!("{action}: {key} | controle: {pad}")
+            )
         };
         draw_row(d, x, y, &label, i == sel);
         y += ROW_H;

@@ -73,6 +73,39 @@ pub fn roms_dir() -> PathBuf {
     app_root().join("roms")
 }
 
+/// Migra uma pasta legada para o novo endereço (uma vez só): se a antiga
+/// existe e a nova não, renomeia — o acervo do usuário acompanha a
+/// reorganização sem cópia.
+fn migrate_dir(legacy: &str, new: &str) -> PathBuf {
+    let root = app_root();
+    let novo = root.join(new);
+    if !novo.exists() {
+        let antigo = root.join(legacy);
+        if antigo.exists() {
+            if let Some(parent) = novo.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::rename(&antigo, &novo);
+        }
+    }
+    let _ = std::fs::create_dir_all(&novo);
+    novo
+}
+
+/// Os PDFs da revistoteca (plan revision: "coloca o pdf em uma pasta
+/// (magazine) e mostra um livreiro na tv") — agora em `docs/magazines`
+/// (reorganização das pastas de leitura); criada sob demanda, com migração
+/// da `magazine/` antiga.
+pub fn magazine_dir() -> PathBuf {
+    migrate_dir("magazine", "docs/magazines")
+}
+
+/// Os PDFs do museu do console (manual, poster, garantia etc.) — a
+/// documentação da época, em `docs/console-docs` (irmã das revistas).
+pub fn museu_dir() -> PathBuf {
+    migrate_dir("museu", "docs/console-docs")
+}
+
 /// Onde o download do update do app fica até ser aplicado no arranque
 /// seguinte — na raiz do app (plan revision: "colocar o update na raiz das
 /// pastas do app nao dentro dos saves"; saves guardam progresso de jogo).
@@ -131,11 +164,6 @@ pub fn library_path() -> PathBuf {
     config_dir().join("library.json")
 }
 
-/// O estado inteiro do Modo Locadora (docs/design-modo-locadora.md §10) —
-/// carteira, coleção, tickets, troféus — ao lado do library.json.
-pub fn locadora_path() -> PathBuf {
-    config_dir().join("locadora.json")
-}
 
 /// A No-Intro DAT (XML) for canonical ROM titles — optional, supplied by
 /// whoever runs the app (no direct download link exists on No-Intro's own

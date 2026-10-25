@@ -1,13 +1,73 @@
-//! Download/update the snes9x libretro core from the official libretro
-//! buildbot (`buildbot.libretro.com`) — a settings-screen action. The core is
-//! still never bundled with the app itself (non-commercial snes9x license,
-//! see `THIRD-PARTY-NOTICES.md`); this just automates what used to be "drop
-//! the file into `core/` by hand".
+//! Download/update do core snes9x — uma ação da tela de configurações. O
+//! core continua fora do pacote do app (licença non-commercial do snes9x,
+//! ver `THIRD-PARTY-NOTICES.md`); o download vem do **asset da release do
+//! próprio app no GitHub** e é aceito somente se o SHA-256 do binário
+//! extraído bater com o hash embutido nesta release (`CORE_ASSETS`,
+//! gerado por `packaging/prepare-core-asset.sh`) — a raiz de confiança é o
+//! binário do app que o usuário instalou, não o canal de download. O
+//! buildbot do libretro continua sendo a *origem* dos builds (o script de
+//! release puxa de lá uma vez por release), só não é mais o canal direto:
+//! é um nightly sem versão e sem checksum, e um `dlopen` de bytes não
+//! verificados vindos dele seria execução de código arbitrário caso o
+//! CDN fosse comprometido.
 
 use std::io::Read;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+
+use sixteen_platform::tr;
+
+/// Target triple desta build — vazio quando não há core homologado para a
+/// combinação (e.g. Linux/arm64), o que desliga o download com o fallback
+/// manual da tela de configurações.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const TARGET_TRIPLE: &str = "aarch64-apple-darwin";
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const TARGET_TRIPLE: &str = "x86_64-apple-darwin";
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
+#[cfg(not(any(
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(target_os = "macos", target_arch = "x86_64"),
+    all(target_os = "windows", target_arch = "x86_64")
+)))]
+const TARGET_TRIPLE: &str = "";
+
+/// Cores snes9x homologados para ESTA release: target triple → SHA-256 do
+/// binário do core (não do zip — o que é `dlopen`ado é o binário).
+/// Regenerar com `packaging/prepare-core-asset.sh` a cada release e subir
+/// os zips gerados como assets da release no GitHub.
+const CORE_ASSETS: &[(&str, &str)] = &[
+    (
+        "x86_64-unknown-linux-gnu",
+        "9b2b6ea9d88f96c156590443ddd05ee56aaf4e495329a889c979921942717a31",
+    ),
+    (
+        "aarch64-apple-darwin",
+        "8ed333ac04544cc6ab67ceb445d095f7600bb17586d4887d99117fbd1ef776f6",
+    ),
+    (
+        "x86_64-apple-darwin",
+        "120e5f4c32e00c686a40bdd37e107682b0dd3c1eadf19dcd4ec91d39de1ffa8d",
+    ),
+    (
+        "x86_64-pc-windows-msvc",
+        "04828df677dec0e839583edda861bdc80656b06a32eef7e639bbdd0cd1ba0f05",
+    ),
+];
+
+/// O SHA-256 esperado do core desta plataforma — `None` onde não há build
+/// homologada.
+fn core_expected_sha256() -> Option<&'static str> {
+    CORE_ASSETS
+        .iter()
+        .find(|(t, _)| *t == TARGET_TRIPLE)
+        .map(|(_, sha)| *sha)
+}
 
 /// The core file's name on this platform — what `sixteen` looks for in
 /// `core/` at launch, and what a download is saved as.
@@ -21,29 +81,15 @@ pub fn core_file_name() -> &'static str {
     }
 }
 
-/// The buildbot URL for this platform/architecture's latest nightly build —
-/// `None` for a combination with no known build (e.g. Linux on arm64), where
-/// the settings screen falls back to "baixe manualmente".
-pub fn core_download_url() -> Option<&'static str> {
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        other => other,
-    };
-    match (std::env::consts::OS, arch) {
-        ("macos", "arm64") => Some(
-            "https://buildbot.libretro.com/nightly/apple/osx/arm64/latest/snes9x_libretro.dylib.zip",
-        ),
-        ("macos", "x86_64") => Some(
-            "https://buildbot.libretro.com/nightly/apple/osx/x86_64/latest/snes9x_libretro.dylib.zip",
-        ),
-        ("windows", "x86_64") => Some(
-            "https://buildbot.libretro.com/nightly/windows/x86_64/latest/snes9x_libretro.dll.zip",
-        ),
-        ("linux", "x86_64") => Some(
-            "https://buildbot.libretro.com/nightly/linux/x86_64/latest/snes9x_libretro.so.zip",
-        ),
-        _ => None,
-    }
+/// A URL do core homologado para esta plataforma na release do GitHub do
+/// app — `None` para uma combinação sem build (e.g. Linux/arm64), onde a
+/// tela de configurações cai no "baixe manualmente".
+pub fn core_download_url() -> Option<String> {
+    core_expected_sha256()?;
+    Some(format!(
+        "https://github.com/ticianocorral/sixteen/releases/download/v{}/snes9x_libretro-{TARGET_TRIPLE}.zip",
+        env!("CARGO_PKG_VERSION")
+    ))
 }
 
 /// Progress/result reported back from the download thread.
@@ -115,7 +161,18 @@ pub fn download_and_install(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMs
     let _ = tx.send(msg);
 }
 
+/// Teto para o download (zip do core: ~1–5 MB na prática; 32 MB sobra) —
+/// sem ele, um servidor/CDN comprometido poderia encher a RAM ou o disco.
+const MAX_CORE_DOWNLOAD: usize = 32 * 1024 * 1024;
+
 fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Result<(), String> {
+    let Some(expected_sha) = core_expected_sha256() else {
+        return Err(tr!(
+            "no verified core build for this platform",
+            "sem build verificada do core para esta plataforma"
+        )
+        .to_string());
+    };
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
@@ -134,6 +191,13 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
             break;
         }
         bytes.extend_from_slice(&buf[..n]);
+        if bytes.len() > MAX_CORE_DOWNLOAD {
+            return Err(tr!(
+                "download larger than expected — aborted",
+                "download maior que o esperado — abortado"
+            )
+            .to_string());
+        }
         let _ = tx.send(CoreUpdateMsg::Progress {
             downloaded: bytes.len() as u64,
             total,
@@ -149,8 +213,10 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
     let mut index = None;
     for i in 0..archive.len() {
         let entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let matches = entry
-            .name()
+        let Ok(entry_name) = entry.name() else {
+            continue;
+        };
+        let matches = entry_name
             .rsplit('.')
             .next()
             .is_some_and(|ext| ext.eq_ignore_ascii_case(core_ext));
@@ -159,10 +225,27 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
             break;
         }
     }
-    let index = index.ok_or_else(|| format!("nenhum arquivo .{core_ext} dentro do zip"))?;
+    let index = index.ok_or_else(|| {
+        tr!(
+            format!("no .{core_ext} file inside the zip"),
+            format!("nenhum arquivo .{core_ext} dentro do zip")
+        )
+    })?;
     let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     entry.read_to_end(&mut out).map_err(|e| e.to_string())?;
+
+    // Nada é gravado (muito menos `dlopen`ado) sem o SHA-256 bater com o
+    // hash homologado desta release.
+    use sha2::{Digest, Sha256};
+    let digest = hex::encode(Sha256::digest(&out));
+    if digest != expected_sha {
+        return Err(tr!(
+            "core integrity check failed — download again",
+            "verificação de integridade do core falhou — baixe de novo"
+        )
+        .to_string());
+    }
 
     std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
     install_core_bytes(dest_dir, &out)?;

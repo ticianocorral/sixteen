@@ -35,7 +35,7 @@ use anyhow::{anyhow, Context, Result};
 use sixteen_app::config::Config;
 use sixteen_app::core_update;
 use sixteen_app::idle::{self, IdleExit};
-use sixteen_locadora;
+use sixteen_app::livraria::{self, LivKind, LivPick};
 use sixteen_app::runner::{run_game, GameExit, GameSpec};
 use sixteen_app::settings;
 use sixteen_app::shelf::{self, Pick, ShelfOpts};
@@ -59,11 +59,6 @@ struct Args {
     /// Headless: render the idle screen to `--shot` and exit (dev/testing) —
     /// shows the first-run setup screen when the core or the DAT is missing.
     debug_idle: bool,
-    /// Headless: abre a locadora, resolve o sorteio e captura o balcão em
-    /// `--shot` no frame 30, depois sai (dev/testing).
-    debug_locadora: bool,
-    /// Com `--debug-locadora-shot`: captura a loja em vez do balcão.
-    debug_locadora_loja: bool,
     shot: Option<PathBuf>,
 }
 
@@ -81,8 +76,6 @@ fn parse_args() -> Result<Args> {
     let mut order = Order::Shelf;
     let mut debug_settings = None;
     let mut debug_idle = false;
-    let mut debug_locadora = false;
-    let mut debug_locadora_loja = false;
     let mut shot = None;
 
     let mut it = std::env::args().skip(1);
@@ -96,8 +89,6 @@ fn parse_args() -> Result<Args> {
             "--notes-dir" => notes_dir = Some(val()?.into()),
             "--debug-settings" => debug_settings = Some(val()?),
             "--debug-idle-shot" => debug_idle = true,
-            "--debug-locadora-shot" => debug_locadora = true,
-            "--debug-locadora-loja" => debug_locadora_loja = true,
             "--shot" => shot = Some(val()?.into()),
             "--order" => {
                 order = match val()?.as_str() {
@@ -126,8 +117,6 @@ fn parse_args() -> Result<Args> {
         order,
         debug_settings,
         debug_idle,
-        debug_locadora,
-        debug_locadora_loja,
         shot,
     })
 }
@@ -205,6 +194,10 @@ fn main() -> Result<()> {
     if let Some(p) = &cfg.source {
         log::info!("config: {}", p.display());
     }
+    // The settings screen's language choice (config `lang = en|pt`, English
+    // by default) — applied before any draw, and again live on every
+    // settings change.
+    sixteen_platform::tr::set_lang(Some(cfg.lang.tr_lang()));
 
     // Re-run whenever the player hits "Atualizar" on the shelf (plan
     // revision) — a fresh scan of roms/ merged with the same persisted
@@ -297,30 +290,6 @@ fn main() -> Result<()> {
         update_rx = Some(rx);
     }
 
-    // Verificação headless do balcão (dev/testing): entra direto na
-    // locadora, resolve o sorteio, captura `--shot` no frame 30 e sai.
-    if args.debug_locadora {
-        let Some(path) = &args.shot else {
-            anyhow::bail!("--debug-locadora-shot needs --shot out.bmp");
-        };
-        let prices = locadora_prices(&cfg);
-        let mut loc = sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
-        sixteen_app::locadora_screen::run(
-            &mut plat,
-            &mut cab,
-            &catalog,
-            &mut loc,
-            &prices,
-            &cfg.locadora_currency,
-            Some(sixteen_app::locadora_screen::LocaDebug {
-                shot: path.clone(),
-                frame: 30,
-                loja: args.debug_locadora_loja,
-            }),
-        )?;
-        return Ok(());
-    }
-
     'app: loop {
         // O código Konami (↑↑↓↓←→←→BA) só é escutado na tela inicial — o
         // watcher liga aqui e desliga ao sair dela, para que navegar com
@@ -336,7 +305,6 @@ fn main() -> Result<()> {
             core_path.is_some(),
             sixteen_app::dat_update::dat_installed(),
             catalog.counts().unwrap_or(0),
-            cfg.locadora_needed as usize,
         )?;
         plat.set_konami_watch(false);
         // The idle screen's own "Baixar núcleo" button may have just
@@ -347,103 +315,6 @@ fn main() -> Result<()> {
         match exit {
             IdleExit::Quit => break 'app,
             IdleExit::OpenShelf => shelf_opts.fade_in = Some(idle_static),
-            IdleExit::OpenLocadora => {
-                // Verificação headless: um frame do balcão no disco e sai.
-                if args.debug_locadora {
-                    if let Some(path) = &args.shot {
-                        let prices = locadora_prices(&cfg);
-                        let mut loc =
-                            sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
-                        sixteen_app::locadora_screen::run(
-                            &mut plat,
-                            &mut cab,
-                            &catalog,
-                            &mut loc,
-                            &prices,
-                            &cfg.locadora_currency,
-                            Some(sixteen_app::locadora_screen::LocaDebug {
-                                shot: path.clone(),
-                                frame: 30,
-                                loja: args.debug_locadora_loja,
-                            }),
-                        )?;
-                    }
-                    break 'app;
-                }
-                // O Modo Locadora (docs/design-modo-locadora.md): o loop do
-                // balcão. Cada `Play` vira uma sessão de runner com a
-                // economia embutida; cada volta de tela persiste o estado.
-                let prices = locadora_prices(&cfg);
-                let mut loc = sixteen_locadora::Persisted::load(&sixteen_app::dirs::locadora_path());
-                let mut loca_static = idle::RESTING_STATIC;
-                'loca: loop {
-                    let pick = sixteen_app::locadora_screen::run(
-                        &mut plat,
-                        &mut cab,
-                        &catalog,
-                        &mut loc,
-                        &prices,
-                        &cfg.locadora_currency,
-                        None,
-                    )?;
-                    let (rom, sha, mode) = match pick {
-                        sixteen_app::locadora_screen::Pick::Quit => break 'app,
-                        sixteen_app::locadora_screen::Pick::Back => {
-                            idle_static = loca_static;
-                            continue 'app;
-                        }
-                        sixteen_app::locadora_screen::Pick::Play { rom, sha, mode } => (rom, sha, mode),
-                    };
-                    let Some(core) = &core_path else {
-                        if no_core_screen(&mut plat, &mut cab)? {
-                            break 'app;
-                        }
-                        continue 'loca;
-                    };
-                    // Arte de painel (logo/cartucho) resolvida como a estante
-                    // resolve — a animação do cartucho entra quando existir.
-                    let rom_str = rom.to_string_lossy().into_owned();
-                    let logo = sixteen_app::shelf::find_local_art(
-                        &sixteen_app::dirs::assets_dir().join("logo"),
-                        &rom_str,
-                    );
-                    let cartridge = sixteen_app::shelf::find_local_art(
-                        &sixteen_app::dirs::assets_dir().join("cartridge"),
-                        &rom_str,
-                    );
-                    let spec = GameSpec {
-                        core: core.clone(),
-                        rom,
-                        system_dir: args.system_dir.clone(),
-                        save_dir: args.save_dir.clone(),
-                        notes_dir: args.notes_dir.clone(),
-                        shot: None,
-                        logo,
-                        cartridge,
-                        shot_off: false,
-                        debug_note_capture: false,
-                        debug_shot_pause: false,
-                        debug_shot_modal: None,
-                        debug_cart_anim: None,
-                    };
-                    let is_service = loc.service_game.as_deref() == Some(sha.as_str());
-                    let mut session = sixteen_app::runner::LocaSession {
-                        loc: &mut loc,
-                        prices: &prices,
-                        currency: &cfg.locadora_currency,
-                        mode,
-                        is_service_cart: is_service,
-                    };
-                    match run_game(&mut plat, &mut cab, &spec, &cfg, Some(&mut session))? {
-                        GameExit::Ejected { static_level } => {
-                            loca_static = static_level;
-                        }
-                        GameExit::Quit => break 'app,
-                    }
-                    let _ = &session;
-                    loc.save(&sixteen_app::dirs::locadora_path())?;
-                }
-            }
             IdleExit::OpenDev => {
                 // O menu do devmode (plan revision: "por enquanto criar menu
                 // em branco apenas com o botão voltar") — `true` aqui é o
@@ -461,6 +332,26 @@ fn main() -> Result<()> {
                 // A core download may have just finished.
                 core_path = args.core.clone().or_else(default_core_path);
                 cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
+                continue 'app;
+            }
+            IdleExit::OpenLivraria => {
+                // A Livraria Retro (plan revision: "adicionar um novo botão
+                // para uma nova funcionalidade") — volta ao idle no `Back`;
+                // fechou a janela lá dentro, encerra o app.
+                match livraria::run(&mut plat, &mut cab, LivKind::Revistas)? {
+                    LivPick::Quit => break 'app,
+                    LivPick::Back => {}
+                }
+                continue 'app;
+            }
+            IdleExit::OpenMuseu => {
+                // O MUSEU DO CONSOLE — a mesma tela da Livraria, apontada
+                // para a pasta `docs/console-docs` (manual, poster,
+                // garantia etc.).
+                match livraria::run(&mut plat, &mut cab, LivKind::Museu)? {
+                    LivPick::Quit => break 'app,
+                    LivPick::Back => {}
+                }
                 continue 'app;
             }
         }
@@ -543,7 +434,7 @@ fn main() -> Result<()> {
                 debug_shot_modal: None,
                 debug_cart_anim: None,
             };
-            match run_game(&mut plat, &mut cab, &spec, &cfg, None)? {
+            match run_game(&mut plat, &mut cab, &spec, &cfg)? {
                 // The power-off ritual (desligar, snow, wait for eject)
                 // already ran inside run_game — the idle screen just eases
                 // in over what it left (plan §3.3, "a estante entra por
@@ -559,16 +450,6 @@ fn main() -> Result<()> {
 
     log::info!("bye");
     Ok(())
-}
-
-fn locadora_prices(cfg: &Config) -> sixteen_locadora::Prices {
-    sixteen_locadora::Prices {
-        salary_per_hour: cfg.locadora_salary_cents,
-        hourly_per_hour: cfg.locadora_hourly_cents,
-        ticket_48h: cfg.locadora_ticket_cents,
-        purchase: cfg.locadora_purchase_cents,
-        weekend_double: cfg.locadora_weekend_double,
-    }
 }
 
 /// A game was picked but no core is available yet — points at the settings
@@ -606,23 +487,34 @@ fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
             return Ok(false);
         }
         let render = |d: &mut Screen| {
-            d.text(40, 40, 2, (232, 232, 232), "núcleo não encontrado");
+            d.text(
+                40,
+                40,
+                2,
+                (232, 232, 232),
+                sixteen_platform::tr!("core not found", "núcleo não encontrado"),
+            );
             d.text_wrapped(
                 40,
                 90,
                 700,
                 1,
                 (150, 150, 158),
-                "para jogar é necessário o núcleo snes9x: volte à tela inicial e \
-                 clique em \"Baixar núcleo snes9x\", baixe pelo menu de configurações \
-                 ou coloque o arquivo em core/ à mão.",
+                sixteen_platform::tr!(
+                    "to play, the console needs the snes9x core: back out and click \
+                     \"download the snes9x core\" — or get it from settings, or \
+                     drop the file into core/ yourself.",
+                    "para jogar, o console precisa do núcleo snes9x: volte à tela \
+                     inicial e clique em \"Baixar núcleo snes9x\" — ou baixe nas \
+                     configurações, ou coloque o arquivo em core/ à mão."
+                ),
             );
             d.text(
                 40,
                 d.size().1 as i32 - 40,
                 1,
                 (150, 150, 158),
-                "enter ou esc: voltar pra estante",
+                sixteen_platform::tr!("enter or esc: back to the shelf", "enter ou esc: voltar pra estante"),
             );
         };
         cab.frame_2d((18, 18, 20), render);

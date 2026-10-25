@@ -15,6 +15,7 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use crate::core_update::CoreUpdateMsg;
+use sixteen_platform::tr;
 
 /// Where the setup screen / this module fetch `nointro.dat` from — the
 /// libretro-database mirror's SNES file, on the repo's default branch.
@@ -65,12 +66,22 @@ fn try_download(dest: &Path, tx: &Sender<CoreUpdateMsg>) -> Result<(), String> {
     let mut reader = resp.into_reader();
     let mut bytes = Vec::new();
     let mut buf = [0u8; 64 * 1024];
+    // O DAT do SNES tem ~3 MB; 64 MB de teto é folga para o arquivo crescer
+    // sem virar um balde de RAM/disco na mão de um servidor ruim.
+    const MAX_DAT_DOWNLOAD: usize = 64 * 1024 * 1024;
     loop {
         let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
         bytes.extend_from_slice(&buf[..n]);
+        if bytes.len() > MAX_DAT_DOWNLOAD {
+            return Err(tr!(
+                "download larger than expected — aborted",
+                "download maior que o esperado — abortado"
+            )
+            .to_string());
+        }
         let _ = tx.send(CoreUpdateMsg::Progress {
             downloaded: bytes.len() as u64,
             total,
@@ -86,7 +97,11 @@ fn try_download(dest: &Path, tx: &Sender<CoreUpdateMsg>) -> Result<(), String> {
     let looks_like_dat =
         head.contains("clrmamepro") || head.contains("<?xml") || head.contains("<datafile");
     if !looks_like_dat {
-        return Err("resposta não parece um DAT (clrmamepro/XML)".to_string());
+        return Err(tr!(
+            "response doesn't look like a DAT (clrmamepro/XML)",
+            "resposta não parece um DAT (clrmamepro/XML)"
+        )
+        .to_string());
     }
 
     let part = dest.with_extension("dat.part");

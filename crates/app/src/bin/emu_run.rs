@@ -225,6 +225,7 @@ fn main() -> Result<()> {
     if let Some(p) = &cfg.source {
         log::info!("config: {}", p.display());
     }
+    sixteen_platform::tr::set_lang(Some(cfg.lang.tr_lang()));
 
     let mut platform = sixteen_platform::Platform::new().map_err(|e| anyhow!(e.to_string()))?;
     platform.set_pad_map(cfg.padmap.clone());
@@ -250,7 +251,7 @@ fn main() -> Result<()> {
         debug_cart_anim: args.debug_cart_anim,
     };
     // Standalone: "back" and "close" both just end the process.
-    run_game(&mut platform, &mut cabinet, &spec, &cfg, None)?;
+    run_game(&mut platform, &mut cabinet, &spec, &cfg)?;
     log::info!("bye");
     Ok(())
 }

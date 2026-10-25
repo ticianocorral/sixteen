@@ -2,7 +2,7 @@
 # Builds the SixteeN Flatpak and a single-file .flatpak bundle from it —
 # the "make a Linux flatpak" one-liner, same spirit as the AppImage script.
 # Needs flatpak, flatpak-builder and elfutils (eu-strip, que o
-# flatpak-builder usa ao final) and sudo: the Freedesktop 24.08 runtime/sdk
+# flatpak-builder usa ao final) and sudo: the Freedesktop 26.08 runtime/sdk
 # and the rust extension are pulled from Flathub into the system
 # installation, which is also where flatpak-builder's --install-deps-from
 # resolves them.
@@ -18,8 +18,8 @@ BUILD="$HERE/.flatpak-build"
 
 sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 sudo flatpak install --system -y --noninteractive \
-  org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 \
-  org.freedesktop.Sdk.Extension.rust-stable//24.08
+  org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08 \
+  org.freedesktop.Sdk.Extension.rust-stable//26.08
 
 flatpak-builder --force-clean --repo="$REPO" --install-deps-from=flathub \
   "$BUILD" "$HERE/$APPID.yml"

@@ -47,7 +47,7 @@ fn extract_rom_from_zip(bytes: &[u8], path: &Path) -> Result<Vec<u8>, String> {
         let Ok(file) = archive.by_index(i) else {
             continue;
         };
-        let name = file.name().to_string();
+        let name = file.name().map_err(|e| format!("{e}"))?.to_string();
         if file.is_dir() || name.starts_with('.') || name.contains("__MACOSX") {
             continue;
         }
@@ -77,7 +77,10 @@ fn extract_rom_from_zip(bytes: &[u8], path: &Path) -> Result<Vec<u8>, String> {
             name
         );
     }
-    let mut out = Vec::with_capacity(file.size() as usize);
+    // The declared size comes from the zip header and cannot be trusted for
+    // a big allocation — cap the head start and let the Vec grow as data is
+    // actually read.
+    let mut out = Vec::with_capacity((file.size() as usize).min(16 * 1024 * 1024));
     file.read_to_end(&mut out)
         .map_err(|e| format!("lendo {name} dentro do zip: {e}"))?;
     Ok(out)
