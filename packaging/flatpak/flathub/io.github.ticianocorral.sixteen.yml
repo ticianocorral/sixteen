@@ -67,8 +67,8 @@ modules:
         url: https://github.com/ticianocorral/sixteen.git
         # Preencher com `git rev-parse v1.3.2` depois de taggear a release
         # (e regenerar o cargo-sources.json se o Cargo.lock mudou).
-        tag: v1.3.2
-        commit: REPLACE_WITH_V1.3.2_COMMIT
+        tag: v1.3.3
+        commit: ff8800af1b10b64dcc04d5603db81e659938b146
         x-checker-data:
           type: git
           tag-pattern: ^v([\d.]+)$
