@@ -244,7 +244,7 @@ fn scan_books(kind: LivKind) -> Vec<Book> {
             });
         }
     }
-    books.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    books.sort_by_key(|a| a.title.to_lowercase());
     books
 }
 
@@ -431,7 +431,7 @@ fn download_pdf(url: String, dest: PathBuf, ev_tx: Sender<DlEv>) {
 
     // O arquivo de mentirinha não fica para trás — nem o `.part` parcial.
     if result.is_err() {
-        let _ = std::fs::remove_file(&part_path(&dest));
+        let _ = std::fs::remove_file(part_path(&dest));
     }
     let _ = ev_tx.send(DlEv::Done(result));
 }
@@ -698,7 +698,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
         }
         let visible = per_row(cab.shelf_screen_size().0) * ROWS;
         if top > 0 && top + visible > books.len() {
-            top = books.len().saturating_sub(visible.max(1) as usize);
+            top = books.len().saturating_sub(visible.max(1));
         }
 
         // ---------- input ----------
@@ -774,10 +774,10 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                         MenuNav::Up | MenuNav::Down if r.zoom => {
                             // A área da página é a mesma do desenho.
                             let (sw, sh) = cab.shelf_screen_size();
-                            let iw2 = inner_w(sw as u32);
+                            let iw2 = inner_w(sw);
                             let ay2 = MARGIN + 46;
                             let aw = iw2 as i32;
-                            let ah = (sh as i32 - 110 - ay2) as i32;
+                            let ah = sh as i32 - 110 - ay2;
                             let aspect = cab
                                 .image_size(page_id(&r.path, r.page))
                                 .map(|(iw, ih)| iw as f32 / ih.max(1) as f32)
@@ -849,9 +849,9 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                         // O clique na página liga/desliga o MODO ZOOM (a
                         // leitura estica para a altura da área toda).
                         let (sw, sh) = cab.shelf_screen_size();
-                        let iw = inner_w(sw as u32);
+                        let iw = inner_w(sw);
                         let (ax, ay) = (MARGIN, MARGIN + 46);
-                        let (aw, ah) = (iw as i32, (sh as i32 - 110 - ay) as i32);
+                        let (aw, ah) = (iw as i32, sh as i32 - 110 - ay);
                         if in_rect(sx, sy, (ax, ay, aw as u32, ah as u32)) {
                             r.zoom = !r.zoom;
                             r.pan = 0.0; // o zoom sempre abre no topo
@@ -954,11 +954,11 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                     // focado abre o leitor (o mesmo comportamento da
                     // estante: o primeiro Play é o clique).
                     let scr = cab.shelf_screen_size();
-                    for i in 0..books.len() {
+                    for (i, book) in books.iter().enumerate() {
                         if let Some(r) = tile_rect(scr, top, i) {
                             if in_rect(sx, sy, r) {
                                 if sel == i {
-                                    read = Some(open_reader(&books[i]));
+                                    read = Some(open_reader(book));
                                 } else {
                                     sel = i;
                                     on_url = false;
@@ -1281,6 +1281,7 @@ fn draw_shelf(
 /// O rodapé do download/dicas — desenhado por cima de todo o resto quando
 /// há algo acontecendo (status em verde/vermelho/cinza) ou o campo de URL
 /// aberto.
+#[allow(clippy::too_many_arguments)] // desenho de rodapé: cada estado é um flag
 fn draw_foot(
     d: &mut Screen,
     kind: LivKind,
@@ -1302,7 +1303,7 @@ fn draw_foot(
         d.fill(MARGIN, by, iw, 56, TILE_BG);
         d.outline(MARGIN, by, iw, 56, 2, (232, 232, 232, 255));
         // Mostra o rabo da URL — URLs grandes estouram a linha.
-        let capacity = ((iw as u32 - 40) / 9) as usize;
+        let capacity = ((iw - 40) / 9) as usize;
         let shown: String = url_draft
             .chars()
             .rev()
@@ -1372,7 +1373,7 @@ fn draw_reader(
 
     // A área da página: abaixo do cabeçalho, até pouco acima dos botões.
     let (ax, ay) = (MARGIN, MARGIN + 46);
-    let (aw, ah) = (iw as u32, (h - 110 - ay) as u32);
+    let (aw, ah) = (iw, (h - 110 - ay) as u32);
     let pid = page_id(&read.path, read.page);
     if read.zoom && d.has_image(pid) {
         // MODO ZOOM: a página estica para a altura da área toda (cabe

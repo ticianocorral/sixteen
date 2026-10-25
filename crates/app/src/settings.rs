@@ -465,13 +465,12 @@ fn activate_row(
     login_worker: &mut Option<Receiver<Result<String, String>>>,
 ) {
     match *sec {
-        SEC_JOGO => match i {
-            0 => {
+        SEC_JOGO => {
+            if i == 0 {
                 *sec = SEC_CONTROLES;
                 *sel = 0;
             }
-            _ => {}
-        },
+        }
         SEC_VIDEO => match i {
             0 => {
                 cfg.fullscreen = !cfg.fullscreen;

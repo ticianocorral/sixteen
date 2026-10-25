@@ -2188,7 +2188,7 @@ pub fn run_game(
                         audio.queue(core.audio());
                     } else if vol > 0 {
                         vol_buf.clear();
-                        vol_buf.extend(core.audio().chunks_exact(2).flat_map(|p| {
+                        vol_buf.extend(core.audio().as_chunks::<2>().0.iter().flat_map(|p| {
                             let l = (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)
                                 as i16;
                             let r = (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)

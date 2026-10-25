@@ -182,10 +182,6 @@ const LED_TV_ON: (u8, u8, u8) = (64, 220, 96);
 const LED_TV_ON_HI: (u8, u8, u8) = (170, 255, 190);
 const LED_OFF: (u8, u8, u8) = (56, 26, 26);
 
-/// O plástico do queixo sombreado (o assento do knob de POWER, o sulco
-/// das barras apagadas do OSD) — um passo abaixo do `CABINET`.
-const PLASTICO_ESC: (u8, u8, u8) = (24, 22, 20);
-
 /// O prateado das TVs antigas (plan revision: "botoes de volume e power
 /// da tv ... tom prateado como tv antiga") — alumínio pintado, cinza
 /// claro e frio, a família oposta do cinza quente do cartucho
@@ -2304,7 +2300,7 @@ impl Cabinet {
         };
         tex.set_blend_mode(BlendMode::Blend);
         tex.set_scale_mode(SdlScaleMode::Linear);
-        let vazado = rgba.chunks_exact(4).any(|p| p[3] < 250);
+        let vazado = rgba.as_chunks::<4>().0.iter().any(|p| p[3] < 250);
         // O content_bbox varre pixel a pixel — só importa para arte VAZADA
         // (a caixa 3D do painel recorta por ele). Para páginas/capas
         // opacas (o PDF do leitor: ~23M pixels), pular a varredura era a
@@ -2325,7 +2321,7 @@ impl Cabinet {
         let rgba_limpa;
         let rgba = if vazado {
             let mut limpa = rgba.to_vec();
-            for p in limpa.chunks_exact_mut(4) {
+            for p in limpa.as_chunks_mut::<4>().0 {
                 let (r, g, b, a) = (p[0], p[1], p[2], p[3]);
                 if a > 0 && a < 250 && r.abs_diff(g) < 24 && g.abs_diff(b) < 24 {
                     p[3] = 0;
@@ -4153,7 +4149,7 @@ fn draw_ch4_layer(canvas: &mut WindowCanvas, screen: Rect, specks: &[(i32, i32, 
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    let mut seed = millis as u64 | 1;
+    let mut seed = millis | 1;
     for _ in 0..3 {
         seed ^= seed << 13;
         seed ^= seed >> 7;
@@ -6073,7 +6069,7 @@ fn draw_panel_block(
             // como uma unidade.
             let cy = cy + 8;
             let legenda = *titulo;
-            let total = HLTB_ICON as i32 + 6 + legenda.len() as i32 * (GLYPH_W as i32 + 1) - 1;
+            let total = HLTB_ICON + 6 + legenda.len() as i32 * (GLYPH_W as i32 + 1) - 1;
             let hx = x + (inner_w as i32 - total) / 2;
             draw_image_absolute(
                 canvas,
@@ -6209,15 +6205,6 @@ fn draw_tv_glass_phase(canvas: &mut WindowCanvas, screen: Rect, phase: &TvPhase)
 }
 
 /// Um disco preenchido em coordenadas absolutas do canvas — o assento do
-/// knob de POWER (círculos concêntricos, cada um um passe de scanlines).
-fn disco_rect(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, c: (u8, u8, u8)) {
-    canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
-    for dy in -r..=r {
-        let dx = ((r * r - dy * dy) as f32).sqrt().round() as i32;
-        let _ = canvas.fill_rect(Rect::new(cx - dx, cy + dy, (dx * 2) as u32, 1));
-    }
-}
-
 /// Os controles físicos do queixo da TV (plan revision: knob de POWER +
 /// par VOL-/VOL+ no `tom prateado como tv antiga`): numa função livre a
 /// função da captura estática (`capture_static_bmp`, cuja passada não pode
@@ -6290,7 +6277,7 @@ fn draw_tv_chin_controls(
     let stem_h = (r_out + 4.0) as i32;
     let _ = canvas.fill_rect(Rect::new(pcx - 1, stem_top, 2, stem_h as u32));
     // a base arredondada do traço
-    let _ = canvas.fill_rect(Rect::new(pcx - 2, stem_top + stem_h as i32 - 1, 3, 1));
+    let _ = canvas.fill_rect(Rect::new(pcx - 2, stem_top + stem_h - 1, 3, 1));
 
     // LED verde do ladinho, aceso só com a TV ligada.
     let led_cx = screen.right() - 12;
@@ -6346,7 +6333,7 @@ fn draw_tv_chin_controls(
             );
             let down = Rect::new(left_x + lw + 8, cy - key_h / 2, key_w as u32, key_h as u32);
             let up = Rect::new(
-                down.x() + pair_gap + key_w as i32,
+                down.x() + pair_gap + key_w,
                 down.y(),
                 key_w as u32,
                 key_h as u32,
@@ -6366,7 +6353,7 @@ fn draw_tv_chin_controls(
             }
             (down, up)
         };
-    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w as i32 * 2;
+    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w * 2;
     let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
 
     TvChinControls {
@@ -6378,71 +6365,10 @@ fn draw_tv_chin_controls(
 }
 
 /// A tecla redonda pequena (TV/VIDEO da foto): o mesmo alumínio das teclas
-/// retangulares, num disco — assento escuro, face e o lábio de luz em cima.
-fn draw_silver_disc(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, on: bool) {
-    let face = if on { PRATA } else { PRATA_DIM };
-    disco_rect(canvas, cx, cy, r + 1, (22, 22, 26));
-    disco_rect(canvas, cx, cy, r, face);
-    // o lábio de luz: arco fino no topo
-    let hi = if on { PRATA_HI } else { (86, 88, 96) };
-    canvas.set_draw_color(Color::RGB(hi.0, hi.1, hi.2));
-    for dx in -(r - 2)..=(r - 2) {
-        let dy = (((r - 2) * (r - 2) - dx * dx) as f32).sqrt().round() as i32;
-        let _ = canvas.fill_rect(Rect::new(cx + dx, cy - dy, 1, 1));
-    }
-}
-
 /// O dial de POWER do queixo (plan revision: "botão de power ... mais
 /// retro") — o knob de tubo: assento afundado no plástico, carcaça
 /// serrilhada (a pegada de dedos), torus gravado com dômo (a luz quebra
 /// no topo, a sombra assenta embaixo) e o ponteiro gravado — em pé quando
-/// ligado, deitado quando desligado.
-fn draw_dial_knob(canvas: &mut WindowCanvas, cx: i32, cy: i32, r: i32, on: bool) {
-    let face = if on { PRATA } else { PRATA_DIM };
-    // assento afundado + a quina usinada do rebordo
-    disco_rect(canvas, cx, cy, r + 3, PLASTICO_ESC);
-    disco_rect(canvas, cx, cy, r + 1, (14, 13, 12));
-    // a carcaça inteira; a serrilha morde a borda dela
-    disco_rect(canvas, cx, cy, r, face);
-    // serrilha (a pegada): dentes escuros cravados na borda, 3px de fundo
-    // cada — contados por raio do knob para não virar ruído pequeno demais
-    let teeth = (r * 3 / 2).max(12);
-    let slot = if on { (96, 98, 106) } else { (66, 68, 76) };
-    canvas.set_draw_color(Color::RGB(slot.0, slot.1, slot.2));
-    for i in 0..teeth {
-        let a = i as f32 * std::f32::consts::TAU / teeth as f32;
-        let (dx, dy) = (a.sin(), -a.cos()); // dente 0 em cima
-        for k in 0..3 {
-            let rr = (r - k) as f32;
-            let _ = canvas.fill_rect(Rect::new(
-                cx + (dx * rr).round() as i32,
-                cy + (dy * rr).round() as i32,
-                1,
-                1,
-            ));
-        }
-    }
-    // o torus gravado: anel usinado separando a carcaça do dômo
-    disco_rect(canvas, cx, cy, r - 4, (55, 57, 63));
-    disco_rect(canvas, cx, cy, r - 5, face);
-    // o dômo: brilho fosco quebrando no topo, sombra na boca de baixo
-    let shade = if on { (122, 124, 134) } else { (76, 78, 86) };
-    for dx in -(r - 6)..=(r - 6) {
-        let dyt = (((r - 6) * (r - 6) - dx * dx) as f32).sqrt().round() as i32;
-        canvas.set_draw_color(Color::RGB(PRATA_HI.0, PRATA_HI.1, PRATA_HI.2));
-        let _ = canvas.fill_rect(Rect::new(cx + dx, cy - dyt - 1, 1, 1));
-        canvas.set_draw_color(Color::RGB(shade.0, shade.1, shade.2));
-        let _ = canvas.fill_rect(Rect::new(cx + dx, cy + dyt, 1, 1));
-    }
-    // o ponteiro gravado (a tinta escura): em pé ligado, deitado desligado
-    canvas.set_draw_color(Color::RGB(PRATA_INK.0, PRATA_INK.1, PRATA_INK.2));
-    if on {
-        let _ = canvas.fill_rect(Rect::new(cx, cy - r / 2, 2, r as u32));
-    } else {
-        let _ = canvas.fill_rect(Rect::new(cx - r / 2, cy - 1, r as u32, 2));
-    }
-}
-
 /// Uma tecla de alumínio moldada do queixo (plan revision: os botões de
 /// volume "mais retro") — o bisel é o que faz a tecla: 1px de assento
 /// escuro em volta, a luz quebrando nos dois primeiros degraus da face e

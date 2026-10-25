@@ -663,13 +663,13 @@ fn game_info_lines(entry: &CatalogEntry, playtime_secs: u64) -> Vec<(String, Str
     ]
 }
 
-/// O id fixo da textura do ícone "H" do HowLongToBeat — 0x484C5442 é "HLTB"
-/// em ASCII. Registrada uma vez (como as medalhas do RA), lida por todo
-/// painel que tiver bloco de tempos.
-
 /// O id fixo da textura da logo da IGDB — 0x49474442 é "IGDB" em ASCII.
 /// Registrada uma vez, lida pelo cabeçalho da seção de nota.
 const IGDB_ICON_IMG: u64 = 0x4947_4442;
+
+/// O id fixo da textura do ícone "H" do HowLongToBeat — 0x484C5442 é "HLTB"
+/// em ASCII. Registrada uma vez (como as medalhas do RA), lida por todo
+/// painel que tiver bloco de tempos.
 const HLTB_ICON_IMG: u64 = 0x484C_5442;
 
 /// O bloco HowLongToBeat do painel — as 4 barras do card do site (história
@@ -2060,7 +2060,6 @@ pub fn run(
                 if let Some(path) = find_local_art(&backcover_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
                         cab.set_image(bid, w, h, &rgba);
-                        focus_budget -= 1;
                     }
                 }
             }
@@ -2645,7 +2644,7 @@ pub fn run(
                         draw_fav_dot(d, x, y, grid.item_w as u32);
                     }
                     if hover_grid == Some(i) {
-                        draw_play_icon(d, x + grid.item_w as i32 - 26, y + grid.item_h as i32 - 26);
+                        draw_play_icon(d, x + grid.item_w - 26, y + grid.item_h - 26);
                     }
                 }
             }
