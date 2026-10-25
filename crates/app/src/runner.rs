@@ -57,7 +57,8 @@ pub enum GameExit {
 }
 
 /// Everything [`run_game`] needs for one session.
-pub struct GameSpec {    pub core: PathBuf,
+pub struct GameSpec {
+    pub core: PathBuf,
     pub rom: PathBuf,
     pub system_dir: PathBuf,
     pub save_dir: PathBuf,
@@ -2187,17 +2188,13 @@ pub fn run_game(
                         audio.queue(core.audio());
                     } else if vol > 0 {
                         vol_buf.clear();
-                        vol_buf.extend(
-                            core.audio()
-                                .chunks_exact(2)
-                                .flat_map(|p| {
-                                    let l =
-                                        (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-                                    let r =
-                                        (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-                                    [l, r]
-                                }),
-                        );
+                        vol_buf.extend(core.audio().chunks_exact(2).flat_map(|p| {
+                            let l = (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)
+                                as i16;
+                            let r = (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)
+                                as i16;
+                            [l, r]
+                        }));
                         audio.queue(&vol_buf);
                     }
                     // vol == 0: mudo, nada entra na fila

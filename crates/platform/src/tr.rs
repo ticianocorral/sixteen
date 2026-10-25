@@ -139,13 +139,19 @@ mod tests {
 
     #[test]
     fn locale_picks_portuguese() {
-        assert_eq!(detect_from(None, None, Some("pt_BR.UTF-8".into()), None), Lang::Pt);
+        assert_eq!(
+            detect_from(None, None, Some("pt_BR.UTF-8".into()), None),
+            Lang::Pt
+        );
         assert_eq!(detect_from(None, None, None, Some("pt".into())), Lang::Pt);
     }
 
     #[test]
     fn anything_else_is_english() {
-        assert_eq!(detect_from(None, Some("en_US.UTF-8".into()), None, None), Lang::En);
+        assert_eq!(
+            detect_from(None, Some("en_US.UTF-8".into()), None, None),
+            Lang::En
+        );
         assert_eq!(
             detect_from(None, Some("C.UTF-8".into()), Some("es_ES".into()), None),
             Lang::En

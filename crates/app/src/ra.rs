@@ -50,9 +50,7 @@ fn encode(s: &str) -> String {
 /// settings screen wraps it in the standard worker + `mpsc` shape.
 pub fn test_login(user: &str, token: &str) -> Result<String, String> {
     if user.is_empty() || token.is_empty() {
-        return Err(
-            tr!("fill in the username and token", "preencha usuário e token").to_string()
-        );
+        return Err(tr!("fill in the username and token", "preencha usuário e token").to_string());
     }
     let resp = agent()
         .get(&format!(
@@ -76,7 +74,10 @@ pub fn test_login(user: &str, token: &str) -> Result<String, String> {
     };
     let points = body.get("TotalPoints").and_then(|v| v.as_i64());
     Ok(match points {
-        Some(p) => tr!(format!("{name} — {p} points"), format!("{name} — {p} pontos")),
+        Some(p) => tr!(
+            format!("{name} — {p} points"),
+            format!("{name} — {p} pontos")
+        ),
         None => name.to_string(),
     })
 }
@@ -1023,7 +1024,10 @@ pub fn release_and_extras(hash: &str) -> (Option<String>, Vec<(String, String)>)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
     {
-        extras.push((tr!("publisher", "editora").to_string(), publisher.to_string()));
+        extras.push((
+            tr!("publisher", "editora").to_string(),
+            publisher.to_string(),
+        ));
     }
     if let Some(developer) = body
         .get("Developer")

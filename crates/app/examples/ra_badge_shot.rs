@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sixteen_platform::{FrameRef, PixelFormat, Platform, DEMO_BADGE_IMG, RA_LOGO_IMG, RaStatus};
+use sixteen_platform::{FrameRef, PixelFormat, Platform, RaStatus, DEMO_BADGE_IMG, RA_LOGO_IMG};
 
 const W: u32 = 1280;
 const H: u32 = 800;
@@ -40,7 +40,11 @@ fn main() -> anyhow::Result<()> {
             let i = (y * w + x) * 4;
             let (r, g, b) = if y < 300 {
                 let t = y as f32 / 300.0;
-                ((30.0 + 40.0 * t) as u8, (70.0 + 50.0 * t) as u8, (120.0 + 30.0 * t) as u8)
+                (
+                    (30.0 + 40.0 * t) as u8,
+                    (70.0 + 50.0 * t) as u8,
+                    (120.0 + 30.0 * t) as u8,
+                )
             } else {
                 let g2 = if (x / 24 + y / 12) % 2 == 0 { 90 } else { 70 };
                 (40, g2, 40)
@@ -109,7 +113,11 @@ fn demo_badge() -> Vec<u8> {
             let d = (dx * dx + dy * dy) as f32;
             let i = ((y * S as i32 + x) * 4) as usize;
             if d <= 30.0 * 30.0 {
-                let c = if d >= 26.0 * 26.0 { (245, 238, 220) } else { (200, 40, 40) };
+                let c = if d >= 26.0 * 26.0 {
+                    (245, 238, 220)
+                } else {
+                    (200, 40, 40)
+                };
                 px[i] = c.0;
                 px[i + 1] = c.1;
                 px[i + 2] = c.2;

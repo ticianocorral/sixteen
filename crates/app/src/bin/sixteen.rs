@@ -514,7 +514,10 @@ fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
                 d.size().1 as i32 - 40,
                 1,
                 (150, 150, 158),
-                sixteen_platform::tr!("enter or esc: back to the shelf", "enter ou esc: voltar pra estante"),
+                sixteen_platform::tr!(
+                    "enter or esc: back to the shelf",
+                    "enter ou esc: voltar pra estante"
+                ),
             );
         };
         cab.frame_2d((18, 18, 20), render);

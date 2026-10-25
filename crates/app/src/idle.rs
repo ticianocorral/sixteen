@@ -199,8 +199,7 @@ pub fn run(
     // the plain idle panel takes over (with the old core prompt if the
     // core is still missing).
     let mut setup = core_missing_at_start(core_installed, dat_installed);
-    let mut core =
-        Download::idle(tr!("download the snes9x core", "baixar núcleo snes9x"));
+    let mut core = Download::idle(tr!("download the snes9x core", "baixar núcleo snes9x"));
     if core_installed {
         core.done = true;
         core.label = tr!("installed".to_string(), "instalado".to_string());
@@ -275,7 +274,10 @@ pub fn run(
             match rx.try_recv() {
                 Ok(pct) => {
                     update_pct = Some(pct);
-                    update_status = tr!(format!("downloading... {pct}%"), format!("baixando... {pct}%"));
+                    update_status = tr!(
+                        format!("downloading... {pct}%"),
+                        format!("baixando... {pct}%")
+                    );
                     update_progress_rx = Some(rx);
                     break;
                 }
@@ -330,7 +332,9 @@ pub fn run(
                 }
                 Ok(Err(e)) => {
                     update_status = tr!(
-                        format!("downloaded, but couldn't apply it ({e}) — will try again on restart"),
+                        format!(
+                            "downloaded, but couldn't apply it ({e}) — will try again on restart"
+                        ),
                         format!("baixado, mas não aplicou ({e}) — tenta de novo ao reiniciar")
                     );
                     apply_rx = None;
@@ -505,7 +509,8 @@ pub fn run(
                         update_rx = Some(rx);
                         update_progress_rx = Some(prx);
                         update_pct = None;
-                        update_status = tr!("downloading...".to_string(), "baixando...".to_string());
+                        update_status =
+                            tr!("downloading...".to_string(), "baixando...".to_string());
                     }
                 }
             }
@@ -540,11 +545,11 @@ pub fn run(
             // liga/desliga (com o warm-up/colapso do tubo), VOL-/VOL+ mudam
             // o volume e acendem o OSD de barrinhas.
             match cab.hit_tv_controls(ox, oy) {
-                            Some(sixteen_platform::TvControl::Power) => cab.toggle_tv_power(),
-                            Some(sixteen_platform::TvControl::VolUp) => cab.nudge_volume(1),
-                            Some(sixteen_platform::TvControl::VolDown) => cab.nudge_volume(-1),
-                            Some(sixteen_platform::TvControl::Channel) => cab.toggle_channel(),
-                            None => {}
+                Some(sixteen_platform::TvControl::Power) => cab.toggle_tv_power(),
+                Some(sixteen_platform::TvControl::VolUp) => cab.nudge_volume(1),
+                Some(sixteen_platform::TvControl::VolDown) => cab.nudge_volume(-1),
+                Some(sixteen_platform::TvControl::Channel) => cab.toggle_channel(),
+                None => {}
             }
             // Setas verdes do nameplate (plan revision): app abre a tela
             // de changelog; core baixa e instala na hora.
@@ -564,7 +569,8 @@ pub fn run(
                             core.rx = Some(rx);
                             core.done = false;
                             core.failed = false;
-                            core.label = tr!("downloading...".to_string(), "baixando...".to_string());
+                            core.label =
+                                tr!("downloading...".to_string(), "baixando...".to_string());
                         }
                         None => {
                             core.label = tr!(
@@ -630,7 +636,8 @@ pub fn run(
                             core.rx = Some(rx);
                             core.done = false;
                             core.failed = false;
-                            core.label = tr!("downloading...".to_string(), "baixando...".to_string());
+                            core.label =
+                                tr!("downloading...".to_string(), "baixando...".to_string());
                         }
                         None => {
                             core.label = tr!(
@@ -651,9 +658,7 @@ pub fn run(
                 // Same gate as the panel buttons above: without the core
                 // there's nowhere to go but out — Confirm is inert, Back
                 // still quits.
-                MenuNav::Confirm if !core_missing && cab.tv_on() => {
-                    return Ok(IdleExit::OpenShelf)
-                }
+                MenuNav::Confirm if !core_missing && cab.tv_on() => return Ok(IdleExit::OpenShelf),
                 MenuNav::Back => return Ok(IdleExit::Quit),
                 _ => {}
             }
@@ -664,7 +669,12 @@ pub fn run(
         let core_status = if core.rx.is_some() || core.failed {
             Some(core.label.clone())
         } else if let Some(until) = core_ok_until {
-            (Instant::now() < until).then(|| tr!("core updated!".to_string(), "núcleo atualizado!".to_string()))
+            (Instant::now() < until).then(|| {
+                tr!(
+                    "core updated!".to_string(),
+                    "núcleo atualizado!".to_string()
+                )
+            })
         } else {
             None
         };
@@ -822,13 +832,19 @@ fn draw_setup(
     );
     d.text(
         center_x(
-            tr!("two downloads and you're ready to play", "dois downloads e você já pode jogar"),
+            tr!(
+                "two downloads and you're ready to play",
+                "dois downloads e você já pode jogar"
+            ),
             1,
         ),
         h * 12 / 100 + 74,
         1,
         SETUP_DIM,
-        tr!("two downloads and you're ready to play", "dois downloads e você já pode jogar"),
+        tr!(
+            "two downloads and you're ready to play",
+            "dois downloads e você já pode jogar"
+        ),
     );
 
     fn draw_button(d: &mut Screen, r: &RectT, label: &str, color: (u8, u8, u8)) {
@@ -861,7 +877,10 @@ fn draw_setup(
         core_r.1 + core_r.3 as i32 + 8,
         1,
         SETUP_DIM,
-        tr!("the engine that runs the games", "o motor que roda os jogos"),
+        tr!(
+            "the engine that runs the games",
+            "o motor que roda os jogos"
+        ),
     );
     d.text(
         dat_r.0 + 4,

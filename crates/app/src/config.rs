@@ -380,7 +380,8 @@ mod tests {
         assert_eq!(cfg.lang, LangOpt::En);
         // "auto" (the locale-driven default of the brief middle revision)
         // folds into the new default instead of erroring.
-        cfg.apply(toml::from_str("lang = \"auto\"").unwrap()).unwrap();
+        cfg.apply(toml::from_str("lang = \"auto\"").unwrap())
+            .unwrap();
         assert_eq!(cfg.lang, LangOpt::En);
         // Unknown value keeps the current one (warn, not an error — same rule
         // as the stale keyboard binds).

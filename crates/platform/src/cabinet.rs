@@ -2202,7 +2202,15 @@ impl Cabinet {
                     draw_chin_osd(c, font, images, screen, out_h, nameplate, lines, *badge);
                 }
                 ChinOsd::Ra { hardcore } => {
-                    draw_chin_ra(c, font, images, screen, canvas_rect.width() as i32, nameplate, *hardcore);
+                    draw_chin_ra(
+                        c,
+                        font,
+                        images,
+                        screen,
+                        canvas_rect.width() as i32,
+                        nameplate,
+                        *hardcore,
+                    );
                 }
                 ChinOsd::None => {}
             }
@@ -2615,7 +2623,10 @@ impl Cabinet {
     /// A TV está ligada (ou virando)? `false` no `Off`/`Collapsing` — o
     /// idle usa para saber o que desenhar (painel vivo ou vidro morto).
     pub fn tv_on(&self) -> bool {
-        !matches!(self.tv_power, Some(TvPower::Off) | Some(TvPower::Collapsing { .. }))
+        !matches!(
+            self.tv_power,
+            Some(TvPower::Off) | Some(TvPower::Collapsing { .. })
+        )
     }
 
     /// Ligar/desligar: dispara o warm-up (ponto -> linha -> raster abrindo,
@@ -2719,7 +2730,11 @@ impl Cabinet {
                 } else {
                     (1.0 - (t - 0.35) / 0.65 * 0.8).max(0.2)
                 };
-                TvPhase::Raster { open, hot, ponto: false }
+                TvPhase::Raster {
+                    open,
+                    hot,
+                    ponto: false,
+                }
             }
             Some(TvPower::Collapsing { frames }) => {
                 let t = frames as f32 / TV_COLLAPSE_FRAMES as f32;
@@ -2765,8 +2780,7 @@ impl Cabinet {
             self.rng ^= self.rng >> 7;
             self.rng ^= self.rng << 17;
             let x = screen.x() + ((self.rng as u64) % (screen.width() as u64)) as i32;
-            let y =
-                screen.y() + (((self.rng as u64) >> 16) % (screen.height() as u64)) as i32;
+            let y = screen.y() + (((self.rng as u64) >> 16) % (screen.height() as u64)) as i32;
             specks.push((x, y, self.rng & 1 == 0));
         }
         specks
@@ -2896,7 +2910,11 @@ impl Cabinet {
         // é desenhado por cima); em transição, o normal (a máscara do vidro
         // faz o resto); ligada, o nível de sempre.
         let phase = self.tv_phase();
-        let drawn_level = if matches!(phase, TvPhase::Dead) { 0.0 } else { level };
+        let drawn_level = if matches!(phase, TvPhase::Dead) {
+            0.0
+        } else {
+            level
+        };
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
         let canvas_rect = cabinet_canvas_rect(real_w, real_h);
         self.canvas_rect = canvas_rect;
@@ -3059,7 +3077,15 @@ impl Cabinet {
             if tv_on {
                 draw_ch_osd(c, font, screen, &ch_label);
                 if let Some(status) = ra_status {
-                    draw_chin_ra(c, font, images, screen, canvas_rect.width() as i32, nameplate, status.hardcore);
+                    draw_chin_ra(
+                        c,
+                        font,
+                        images,
+                        screen,
+                        canvas_rect.width() as i32,
+                        nameplate,
+                        status.hardcore,
+                    );
                 }
             }
             draw_panel(
@@ -3863,16 +3889,17 @@ impl Screen<'_> {
         let max_off = (dh - rh).max(0.0);
         let dx = rect.0 as f32;
         let dy = rect.1 as f32 - max_off * pan.clamp(0.0, 1.0);
-        self.canvas.set_clip_rect(Some(Rect::new(
-            rect.0,
-            rect.1,
-            rect.2,
-            rect.3,
-        )));
+        self.canvas
+            .set_clip_rect(Some(Rect::new(rect.0, rect.1, rect.2, rect.3)));
         let _ = self.canvas.copy(
             &img.tex,
             None::<sdl3::render::FRect>,
-            Rect::new(dx.round() as i32, dy.round() as i32, dw.max(1.0) as u32, dh.max(1.0) as u32),
+            Rect::new(
+                dx.round() as i32,
+                dy.round() as i32,
+                dw.max(1.0) as u32,
+                dh.max(1.0) as u32,
+            ),
         );
         self.canvas.set_clip_rect(None);
     }
@@ -4074,7 +4101,11 @@ fn draw_brand_logo(
 /// signal (same reasoning as `draw_brand`'s chin text).
 fn draw_ch_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect, label: &str) {
     const SCALE: u32 = 3;
-    let label = if label.ends_with(' ') { label.to_string() } else { format!(" {} ", label) };
+    let label = if label.ends_with(' ') {
+        label.to_string()
+    } else {
+        format!(" {} ", label)
+    };
     let w = GLYPH_W as i32 * SCALE as i32 * label.chars().count() as i32;
     let margin = 24;
     let x = screen.right() - margin - w;
@@ -4159,8 +4190,10 @@ pub const RA_LOGO_IMG: u64 = u64::MAX - 7;
 const BRAND_LOGO_ID: u64 = u64::MAX - 8;
 const BRAND_LOGO_W: u32 = 1724;
 const BRAND_LOGO_H: u32 = 281;
-const BRAND_LOGO_RGBA: &[u8] =
-    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/assets/brand_sixteen.rgba"));
+const BRAND_LOGO_RGBA: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/assets/brand_sixteen.rgba"
+));
 
 impl Cabinet {
     /// Drop expired fronts, then draw the front block — or, with the queue
@@ -4450,7 +4483,12 @@ fn draw_chin_osd(
     // Mesma folga copy<->emblema do badge fixo: 10px (plan revision:
     // "afastar um pouco a logo das copys"). Sem disco, a copy encosta no
     // canto com a margem 14 do par fechar/minimizar.
-    let row_right = right - if has_badge { DISC as i32 + COPY_GAP } else { 14 };
+    let row_right = right
+        - if has_badge {
+            DISC as i32 + COPY_GAP
+        } else {
+            14
+        };
     let left_limit = screen.left() + nameplate_w + MARGIN * 2 + DISC as i32 + COPY_GAP;
     let max_cols = ((row_right - left_limit).max(cell) / cell) as usize;
     let header = truncate_to_cols(&lines[0], max_cols);
@@ -4465,8 +4503,8 @@ fn draw_chin_osd(
         if i == 0 {
             // A cauda (separadores + pontos + modo) é fixa; a truncagem
             // "..." mora só no nome, que é o que dá leitura ao bloco.
-            let tail_cols: usize = (lines.len() - 2) * 3
-                + lines[2..].iter().map(|l| l.chars().count()).sum::<usize>();
+            let tail_cols: usize =
+                (lines.len() - 2) * 3 + lines[2..].iter().map(|l| l.chars().count()).sum::<usize>();
             let room = max_cols.saturating_sub(tail_cols);
             body.push((truncate_to_cols(line, room), LIGHT));
         } else {
@@ -4476,7 +4514,15 @@ fn draw_chin_osd(
     if has_badge {
         // Centrado no eixo 30 — o mesmo datum do badge fixo e do par
         // fechar/minimizar; a troca badge<->notificação não salta.
-        draw_image_absolute(canvas, images, badge.unwrap_or(0), disc_x, disc_y, DISC, DISC);
+        draw_image_absolute(
+            canvas,
+            images,
+            badge.unwrap_or(0),
+            disc_x,
+            disc_y,
+            DISC,
+            DISC,
+        );
     }
     let draw_row = |canvas: &mut WindowCanvas,
                     font: &mut Texture,
@@ -4498,7 +4544,15 @@ fn draw_chin_osd(
                 seg,
                 usize::MAX,
             );
-            draw_text_absolute(canvas, font, pen, y, TextStyle::new(1, *color), seg, usize::MAX);
+            draw_text_absolute(
+                canvas,
+                font,
+                pen,
+                y,
+                TextStyle::new(1, *color),
+                seg,
+                usize::MAX,
+            );
             pen += seg.chars().count() as i32 * cell;
         }
     };
@@ -4519,8 +4573,6 @@ fn truncate_to_cols(s: &str, max_cols: usize) -> String {
 /// não tem seta neste frame. Saída de [`draw_brand`] para o hit-test do
 /// idle (plan revision: "ao clicar no icone verde de atualizar").
 type UpdateArrowRects = (Option<Rect>, Option<Rect>);
-
-
 
 fn draw_brand(
     canvas: &mut WindowCanvas,
@@ -5040,13 +5092,22 @@ fn draw_panel(
             btn_w,
             btn_h,
         );
-        let insert_drawn = draw_button(canvas, font, btn, tr!("GAME SHELF", "ESTANTE DE GAMES"), true);
+        let insert_drawn = draw_button(
+            canvas,
+            font,
+            btn,
+            tr!("GAME SHELF", "ESTANTE DE GAMES"),
+            true,
+        );
         // A estante mora no tubo: com a TV desligada, o aviso fica logo
         // abaixo do botão (a Livraria e as Configurações não dependem da
         // TV — só a estante de games).
         let mut hint_bottom = insert_drawn.bottom();
         if !tv_on {
-            let hint = tr!("turn the TV on to open the shelf", "ligue a TV para abrir a estante");
+            let hint = tr!(
+                "turn the TV on to open the shelf",
+                "ligue a TV para abrir a estante"
+            );
             let hint_w = GLYPH_W as i32 * hint.chars().count() as i32;
             draw_text_absolute(
                 canvas,
@@ -5064,11 +5125,23 @@ fn draw_panel(
         // revistoteca em PDF (pasta `magazine`), leitura na TV. Mesma
         // flutuação, mesma largura do vizinho da estante.
         let liv_btn = Rect::new(btn.x(), hint_bottom + 18, btn_w, btn_h);
-        let livraria_drawn = draw_button(canvas, font, liv_btn, tr!("RETRO LIBRARY", "LIVRARIA RETRO"), true);
+        let livraria_drawn = draw_button(
+            canvas,
+            font,
+            liv_btn,
+            tr!("RETRO LIBRARY", "LIVRARIA RETRO"),
+            true,
+        );
         // O MUSEU DO CONSOLE logo abaixo (manual, poster, garantia etc. —
         // os PDFs da documentação da época, pasta `museu`). Mesma largura.
         let mus_btn = Rect::new(btn.x(), livraria_drawn.bottom() + 18, btn_w, btn_h);
-        let museu_drawn = draw_button(canvas, font, mus_btn, tr!("CONSOLE MUSEUM", "MUSEU DO CONSOLE"), true);
+        let museu_drawn = draw_button(
+            canvas,
+            font,
+            mus_btn,
+            tr!("CONSOLE MUSEUM", "MUSEU DO CONSOLE"),
+            true,
+        );
         cy = museu_drawn.bottom();
 
         let btn_h = (GLYPH_H + 12) as i32;
@@ -5079,7 +5152,13 @@ fn draw_panel(
             (PanelButton::Museu, museu_drawn),
             (
                 PanelButton::Settings,
-                draw_button(canvas, font, settings, tr!("Settings", "Configurações"), true),
+                draw_button(
+                    canvas,
+                    font,
+                    settings,
+                    tr!("Settings", "Configurações"),
+                    true,
+                ),
             ),
         ];
         // O botão do modo dev (plan revision: "habilitar botão em cima da
@@ -5557,7 +5636,13 @@ fn draw_shelf_panel(
         ),
         (
             ShelfButton::Settings,
-            draw_button(canvas, font, settings_rect, tr!("Settings", "Configurações"), true),
+            draw_button(
+                canvas,
+                font,
+                settings_rect,
+                tr!("Settings", "Configurações"),
+                true,
+            ),
         ),
     ];
     if let Some(ach_r) = ach_rect {
@@ -6092,15 +6177,22 @@ fn draw_tv_glass_phase(canvas: &mut WindowCanvas, screen: Rect, phase: &TvPhase)
                     let _ = canvas.fill_rect(Rect::new(sx, sy, sw as u32, (top - sy) as u32));
                 }
                 if bottom < sy + sh {
-                    let _ = canvas.fill_rect(Rect::new(sx, bottom, sw as u32, (sy + sh - bottom) as u32));
+                    let _ = canvas.fill_rect(Rect::new(
+                        sx,
+                        bottom,
+                        sw as u32,
+                        (sy + sh - bottom) as u32,
+                    ));
                 }
                 // a borda do raster: gradiente âmbar quente
                 for i in 0..8 {
                     let k = 1.0 - i as f32 / 8.0;
                     let a = (200.0 * hot * k) as u8;
                     canvas.set_draw_color(Color::RGBA(255, 214, 150, a));
-                    let _ = canvas.fill_rect(Rect::new(sx, (top + i).min(bottom - 1), sw as u32, 1));
-                    let _ = canvas.fill_rect(Rect::new(sx, (bottom - 1 - i).max(top), sw as u32, 1));
+                    let _ =
+                        canvas.fill_rect(Rect::new(sx, (top + i).min(bottom - 1), sw as u32, 1));
+                    let _ =
+                        canvas.fill_rect(Rect::new(sx, (bottom - 1 - i).max(top), sw as u32, 1));
                 }
                 // a lavagem do brilho dentro do raster (o fósforo estourado)
                 if *hot > 0.0 {
@@ -6221,7 +6313,12 @@ fn draw_tv_chin_controls(
         ch_label,
         usize::MAX,
     );
-    let ch = Rect::new(ch_left + ch_lw + 8, cy - key_h / 2, ch_key_w as u32, key_h as u32);
+    let ch = Rect::new(
+        ch_left + ch_lw + 8,
+        cy - key_h / 2,
+        ch_key_w as u32,
+        key_h as u32,
+    );
     draw_silver_key(canvas, ch, on);
     let tw = GLYPH_W as i32 * 3;
     draw_text_absolute(
@@ -6235,43 +6332,40 @@ fn draw_tv_chin_controls(
     );
 
     // O par do volume, com o rótulo inline — - e + em preto.
-    let draw_pair = |canvas: &mut WindowCanvas,
-                     font: &mut Texture,
-                     left_x: i32,
-                     label: &str|
-     -> (Rect, Rect) {
-        let lw = GLYPH_W as i32 * label.chars().count() as i32;
-        draw_text_absolute(
-            canvas,
-            font,
-            left_x,
-            cy - GLYPH_H as i32 / 2,
-            TextStyle::new(1, ink),
-            label,
-            usize::MAX,
-        );
-        let down = Rect::new(left_x + lw + 8, cy - key_h / 2, key_w as u32, key_h as u32);
-        let up = Rect::new(
-            down.x() + pair_gap + key_w as i32,
-            down.y(),
-            key_w as u32,
-            key_h as u32,
-        );
-        for (r, glyph) in [(down, "-"), (up, "+")] {
-            draw_silver_key(canvas, r, on);
-            let tw = GLYPH_W as i32 * glyph.chars().count() as i32;
+    let draw_pair =
+        |canvas: &mut WindowCanvas, font: &mut Texture, left_x: i32, label: &str| -> (Rect, Rect) {
+            let lw = GLYPH_W as i32 * label.chars().count() as i32;
             draw_text_absolute(
                 canvas,
                 font,
-                r.x() + (r.width() as i32 - tw) / 2,
-                r.y() + (r.height() as i32 - GLYPH_H as i32) / 2,
-                TextStyle::new(1, key_ink),
-                glyph,
+                left_x,
+                cy - GLYPH_H as i32 / 2,
+                TextStyle::new(1, ink),
+                label,
                 usize::MAX,
             );
-        }
-        (down, up)
-    };
+            let down = Rect::new(left_x + lw + 8, cy - key_h / 2, key_w as u32, key_h as u32);
+            let up = Rect::new(
+                down.x() + pair_gap + key_w as i32,
+                down.y(),
+                key_w as u32,
+                key_h as u32,
+            );
+            for (r, glyph) in [(down, "-"), (up, "+")] {
+                draw_silver_key(canvas, r, on);
+                let tw = GLYPH_W as i32 * glyph.chars().count() as i32;
+                draw_text_absolute(
+                    canvas,
+                    font,
+                    r.x() + (r.width() as i32 - tw) / 2,
+                    r.y() + (r.height() as i32 - GLYPH_H as i32) / 2,
+                    TextStyle::new(1, key_ink),
+                    glyph,
+                    usize::MAX,
+                );
+            }
+            (down, up)
+        };
     let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w as i32 * 2;
     let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
 
@@ -6907,7 +7001,13 @@ fn draw_pause_book(
         let next_btn = Rect::new(lx + half as i32 + 8, nav_y, half, btn_h as u32);
         buttons.push((
             PanelButton::PauseTextPrev,
-            draw_button(canvas, font, prev_btn, tr!("< previous", "< anterior"), pause.text_page > 0),
+            draw_button(
+                canvas,
+                font,
+                prev_btn,
+                tr!("< previous", "< anterior"),
+                pause.text_page > 0,
+            ),
         ));
         buttons.push((
             PanelButton::PauseTextNext,
@@ -7029,7 +7129,13 @@ fn draw_pause_book(
     let next_btn = Rect::new(rx + half as i32 + 8, nav_y, half, btn_h as u32);
     buttons.push((
         PanelButton::PauseNotePrev,
-        draw_button(canvas, font, prev_btn, tr!("< previous", "< anterior"), pause.page > 0),
+        draw_button(
+            canvas,
+            font,
+            prev_btn,
+            tr!("< previous", "< anterior"),
+            pause.page > 0,
+        ),
     ));
     buttons.push((
         PanelButton::PauseNoteNext,
@@ -7091,7 +7197,13 @@ fn draw_pause_book(
         );
         buttons.push((
             PanelButton::PauseContinue,
-            draw_button(canvas, font, continue_btn, tr!("Back to the game", "Voltar ao jogo"), true),
+            draw_button(
+                canvas,
+                font,
+                continue_btn,
+                tr!("Back to the game", "Voltar ao jogo"),
+                true,
+            ),
         ));
     }
 
@@ -7342,7 +7454,13 @@ fn draw_modal(
         let off_btn = Rect::new(x + (seg_w as i32 + seg_gap) * 2, cy, seg_w, btn_h as u32);
         buttons.push((
             PanelButton::ModalFilterAll,
-            draw_button(canvas, font, all_btn, tr!("All", "Todos"), modal.cheat_filter.is_none()),
+            draw_button(
+                canvas,
+                font,
+                all_btn,
+                tr!("All", "Todos"),
+                modal.cheat_filter.is_none(),
+            ),
         ));
         buttons.push((
             PanelButton::ModalFilterOn,

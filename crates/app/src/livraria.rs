@@ -150,9 +150,16 @@ struct Book {
 
 /// Evento do worker do LEITOR (um por revista aberta).
 enum PageEv {
-    Ready { pages: usize },
+    Ready {
+        pages: usize,
+    },
     Fail(String),
-    Page { page: usize, w: u32, h: u32, rgba: Vec<u8> },
+    Page {
+        page: usize,
+        w: u32,
+        h: u32,
+        rgba: Vec<u8>,
+    },
 }
 
 /// O leitor, enquanto uma revista está aberta: a página só pede render ao
@@ -362,10 +369,12 @@ fn download_pdf(url: String, dest: PathBuf, ev_tx: Sender<DlEv>) {
             .timeout(Duration::from_secs(300))
             .user_agent("Mozilla/5.0 (compatible; SixteeN Livraria)")
             .build();
-        let resp = agent
-            .get(&url)
-            .call()
-            .map_err(|e| tr!(format!("the URL didn't respond: {e}"), format!("o URL não respondeu: {e}")))?;
+        let resp = agent.get(&url).call().map_err(|e| {
+            tr!(
+                format!("the URL didn't respond: {e}"),
+                format!("o URL não respondeu: {e}")
+            )
+        })?;
         let total = resp
             .header("Content-Length")
             .and_then(|s| s.parse::<u64>().ok());
@@ -410,7 +419,11 @@ fn download_pdf(url: String, dest: PathBuf, ev_tx: Sender<DlEv>) {
         }
         if head.len() >= 5 && &head[..5] != b"%PDF-" {
             let _ = std::fs::remove_file(&part);
-            return Err(tr!("the downloaded file isn't a PDF", "o arquivo baixado não é um PDF").to_string());
+            return Err(tr!(
+                "the downloaded file isn't a PDF",
+                "o arquivo baixado não é um PDF"
+            )
+            .to_string());
         }
         std::fs::rename(&part, &dest).map_err(|e| e.to_string())?;
         Ok(bytes)
@@ -601,8 +614,10 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                         dl_label = tr!(
                             format!("{} added ({})!", kind.item_singular(), fmt_bytes(bytes)),
                             match kind {
-                                LivKind::Revistas => format!("revista adicionada ({})!", fmt_bytes(bytes)),
-                                LivKind::Museu => format!("documento adicionado ({})!", fmt_bytes(bytes)),
+                                LivKind::Revistas =>
+                                    format!("revista adicionada ({})!", fmt_bytes(bytes)),
+                                LivKind::Museu =>
+                                    format!("documento adicionado ({})!", fmt_bytes(bytes)),
                             }
                         );
                         dl_err = None;
@@ -729,7 +744,13 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                             dl_err = None;
                         }
                         None => {
-                            dl_err = Some(tr!("this URL has no file name", "esse URL não vem com nome de arquivo").to_string());
+                            dl_err = Some(
+                                tr!(
+                                    "this URL has no file name",
+                                    "esse URL não vem com nome de arquivo"
+                                )
+                                .to_string(),
+                            );
                         }
                     }
                 }
@@ -763,7 +784,11 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                                 .unwrap_or(0.72);
                             let dh = aw as f32 / aspect.max(0.0001);
                             let vis = (ah as f32 / dh).clamp(0.1, 1.0);
-                            let dir = if matches!(nav, MenuNav::Down) { 1.0 } else { -1.0 };
+                            let dir = if matches!(nav, MenuNav::Down) {
+                                1.0
+                            } else {
+                                -1.0
+                            };
                             r.pan = (r.pan + dir * vis * 0.8).clamp(0.0, 1.0);
                         }
                         MenuNav::Left => r.page = r.page.saturating_sub(1).max(1),
@@ -901,7 +926,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, kind: LivKind) -> Result<LivP
                             TvControl::Power => cab.toggle_tv_power(),
                             TvControl::VolUp => cab.nudge_volume(1),
                             TvControl::VolDown => cab.nudge_volume(-1),
-                                                            TvControl::Channel => cab.toggle_channel(),
+                            TvControl::Channel => cab.toggle_channel(),
                         }
                         continue;
                     }
@@ -1000,7 +1025,16 @@ fn draw_composite(
         } else {
             draw_shelf(d, kind, books, sel, top, on_url, &cov_done, &cov_failed);
         }
-        draw_foot(d, kind, editing_url, &url_draft, caret_on, dl_label, dl_err, dl_ok);
+        draw_foot(
+            d,
+            kind,
+            editing_url,
+            &url_draft,
+            caret_on,
+            dl_label,
+            dl_err,
+            dl_ok,
+        );
     };
     cab.frame_idle_2d(BG, render);
 }
@@ -1013,7 +1047,9 @@ fn open_reader(book: &Book) -> Read {
     let path = book.path.clone();
     std::thread::spawn(move || {
         let Ok(pages) = crate::manual::page_count(&path) else {
-            let _ = ev_tx.send(PageEv::Fail(tr!("the PDF didn't open", "o PDF não abriu").to_string()));
+            let _ = ev_tx.send(PageEv::Fail(
+                tr!("the PDF didn't open", "o PDF não abriu").to_string(),
+            ));
             return;
         };
         let _ = ev_tx.send(PageEv::Ready { pages });
@@ -1053,7 +1089,6 @@ fn open_reader(book: &Book) -> Read {
     }
 }
 
-
 // --- desenho ----------------------------------------------------------------
 
 /// Botão flat do app (o mesmo estilo dos botões da tela de update):
@@ -1075,7 +1110,13 @@ fn draw_flat_button(d: &mut Screen, r: ScrRect, label: &str, active: bool) {
     let ty = r.1 + (r.3 as i32 - 20) / 2;
     d.text(tx, ty, 1, cor, label);
     if sub {
-        d.fill(tx, ty + 21, tw.max(9) as u32, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+        d.fill(
+            tx,
+            ty + 21,
+            tw.max(9) as u32,
+            2,
+            (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+        );
     }
 }
 
@@ -1115,15 +1156,15 @@ fn draw_shelf(
         // A gaveta vazia explica as duas portas (plan revision: PDFs por
         // download OU largados à mão na pasta).
         let rt = rack_top(h as u32);
-        d.text_wrapped(MARGIN, rt + 10, iw, 1, TEXT, tr!("The shelf is empty.", "A estante está vazia."));
         d.text_wrapped(
             MARGIN,
-            rt + 42,
+            rt + 10,
             iw,
             1,
-            DIM,
-            kind.empty_intro(),
+            TEXT,
+            tr!("The shelf is empty.", "A estante está vazia."),
         );
+        d.text_wrapped(MARGIN, rt + 42, iw, 1, DIM, kind.empty_intro());
         d.text_wrapped(
             MARGIN,
             rt + 68,
@@ -1135,7 +1176,14 @@ fn draw_shelf(
                 "1. largue os arquivos direto na pasta do app:"
             ),
         );
-        d.text_wrapped(MARGIN, rt + 92, iw, 1, DIM, &LivKind::Revistas.dir().display().to_string());
+        d.text_wrapped(
+            MARGIN,
+            rt + 92,
+            iw,
+            1,
+            DIM,
+            &LivKind::Revistas.dir().display().to_string(),
+        );
         d.text_wrapped(
             MARGIN,
             rt + 122,
@@ -1157,7 +1205,9 @@ fn draw_shelf(
             for c in 0..per {
                 let i = top + row * per + c;
                 let Some(book) = books.get(i) else { continue };
-                let Some(r) = tile_rect(scr, top, i) else { continue };
+                let Some(r) = tile_rect(scr, top, i) else {
+                    continue;
+                };
                 // A capa SEM ESTICAR e SEM CORTAR: a caixa tem a
                 // proporção exata da página 1 do PDF (retrato de revista
                 // vira tile alto; capa dupla/paisagem vira tile deitado),
@@ -1186,7 +1236,13 @@ fn draw_shelf(
                 } else if cov_failed.contains(&book.path) {
                     // O worker já tentou esta capa: o scan não tem imagem
                     // na página 1 — fala isso, sem "sempre carregando".
-                    d.text(cr.0 + 6, cr.1 + cr.3 as i32 / 2 - 10, 1, DIM, tr!("no cover", "sem capa"));
+                    d.text(
+                        cr.0 + 6,
+                        cr.1 + cr.3 as i32 / 2 - 10,
+                        1,
+                        DIM,
+                        tr!("no cover", "sem capa"),
+                    );
                 } else {
                     // A capa ainda vem: o título carrega o tile.
                     d.text_wrapped(cr.0 + 6, cr.1 + 10, cr.2 - 12, 1, DIM, &book.title);
@@ -1205,7 +1261,13 @@ fn draw_shelf(
             d.text(MARGIN, MARGIN + 58, 1, DIM, "« in flashes");
         }
         if top + per * ROWS < books.len() {
-            d.text(w - MARGIN - 36, MARGIN + 58, 1, DIM, tr!("more »", "tem mais »"));
+            d.text(
+                w - MARGIN - 36,
+                MARGIN + 58,
+                1,
+                DIM,
+                tr!("more »", "tem mais »"),
+            );
         }
     }
 
@@ -1256,7 +1318,10 @@ fn draw_foot(
             by + 36,
             1,
             DIM,
-            tr!("enter to download · esc to cancel", "enter baixa · esc cancela"),
+            tr!(
+                "enter to download · esc to cancel",
+                "enter baixa · esc cancela"
+            ),
         );
         return;
     }
@@ -1270,13 +1335,7 @@ fn draw_foot(
     } else if !dl_label.is_empty() {
         d.text(MARGIN, sy, 1, DIM, dl_label);
     } else {
-        d.text(
-            MARGIN,
-            sy,
-            1,
-            DIM,
-            kind.footer_hint(),
-        );
+        d.text(MARGIN, sy, 1, DIM, kind.footer_hint());
     }
 }
 
@@ -1338,7 +1397,11 @@ fn draw_reader(
                 }
             )
         } else if read.empty.contains(&read.page) {
-            tr!("this page has no image in the scan", "esta página não tem imagem no scan").to_string()
+            tr!(
+                "this page has no image in the scan",
+                "esta página não tem imagem no scan"
+            )
+            .to_string()
         } else {
             tr!("rendering the page…", "renderizando a página…").to_string()
         };
@@ -1390,7 +1453,13 @@ mod tests {
 
     fn unique_tmp_name() -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
-        format!("livraria-{}.pdf", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos())
+        format!(
+            "livraria-{}.pdf",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )
     }
 
     #[test]
@@ -1422,7 +1491,16 @@ pub fn capture_preview(cab: &mut Cabinet, path: &Path) -> Result<()> {
         }
     }
     let render = |d: &mut Screen| {
-        draw_shelf(d, LivKind::Revistas, &books, 0, 0, false, &HashSet::new(), &HashSet::new());
+        draw_shelf(
+            d,
+            LivKind::Revistas,
+            &books,
+            0,
+            0,
+            false,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         draw_foot(d, LivKind::Revistas, false, "", true, "", None, false);
     };
     cab.capture_shelf(BG, render, path)
@@ -1432,11 +1510,7 @@ pub fn capture_preview(cab: &mut Cabinet, path: &Path) -> Result<()> {
 /// O leiter📸: abre a primeira da fila, pede a página `page`, ESPERA a
 /// contagem + a textura (o worker é assíncrono; o preview não corre 60fps)
 /// e captura um frame com o leitor num estado de uso real.
-pub fn capture_reader_preview(
-    cab: &mut Cabinet,
-    page: usize,
-    path: &Path,
-) -> Result<()> {
+pub fn capture_reader_preview(cab: &mut Cabinet, page: usize, path: &Path) -> Result<()> {
     let books = scan_books(LivKind::Revistas);
     let Some(book) = books.first() else {
         // Sem revista nenhuma, a foto da estante vazia serve.
@@ -1475,9 +1549,7 @@ pub fn capture_reader_preview(
                 Err(mpsc::TryRecvError::Disconnected) => break,
             }
         }
-        if read.ready
-            && (cab.has_image(page_id(&book.path, page)) || read.empty.contains(&page))
-        {
+        if read.ready && (cab.has_image(page_id(&book.path, page)) || read.empty.contains(&page)) {
             break;
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -1501,7 +1573,16 @@ pub fn capture_url_preview(cab: &mut Cabinet, path: &Path) -> Result<()> {
         }
     }
     let render = |d: &mut Screen| {
-        draw_shelf(d, LivKind::Revistas, &books, 0, 0, false, &HashSet::new(), &HashSet::new());
+        draw_shelf(
+            d,
+            LivKind::Revistas,
+            &books,
+            0,
+            0,
+            false,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         draw_foot(
             d,
             LivKind::Revistas,

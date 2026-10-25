@@ -137,10 +137,28 @@ fn frame_estante(d: &mut Screen, frac: f32, dot: bool, glow: f32) {
             d.fill(0, cy + r - 1, sw as u32, 1, (255, 240, 210, a));
         }
         // franjas cromáticas
-        d.fill(0, cy - 2, sw as u32, 1, (255, 120, 110, (160.0 * int) as u8));
-        d.fill(0, cy + 1, sw as u32, 1, (120, 150, 255, (160.0 * int) as u8));
+        d.fill(
+            0,
+            cy - 2,
+            sw as u32,
+            1,
+            (255, 120, 110, (160.0 * int) as u8),
+        );
+        d.fill(
+            0,
+            cy + 1,
+            sw as u32,
+            1,
+            (120, 150, 255, (160.0 * int) as u8),
+        );
         // núcleo
-        d.fill(0, cy - 1, sw as u32, 2, (255, 255, 250, (235.0 * int + 20.0).min(255.0) as u8));
+        d.fill(
+            0,
+            cy - 1,
+            sw as u32,
+            2,
+            (255, 255, 250, (235.0 * int + 20.0).min(255.0) as u8),
+        );
         // o tubo apagando em volta
         d.fill(0, 0, sw as u32, top.max(0) as u32, (5, 5, 6, 255));
         d.fill(
@@ -210,7 +228,11 @@ fn chiclete(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str, pressed
     let (w, h) = (w as i32, h as i32);
     let raio = (h / 5).max(2);
     let corpo = if pressed {
-        (CHICLETE_CORPO.0 - 18, CHICLETE_CORPO.1 - 18, CHICLETE_CORPO.2 - 16)
+        (
+            CHICLETE_CORPO.0 - 18,
+            CHICLETE_CORPO.1 - 18,
+            CHICLETE_CORPO.2 - 16,
+        )
     } else {
         CHICLETE_CORPO
     };
@@ -221,7 +243,12 @@ fn chiclete(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str, pressed
             y + r,
             (w - inset * 2).max(0) as u32,
             1,
-            (CHICLETE_ASSENTO.0, CHICLETE_ASSENTO.1, CHICLETE_ASSENTO.2, 255),
+            (
+                CHICLETE_ASSENTO.0,
+                CHICLETE_ASSENTO.1,
+                CHICLETE_ASSENTO.2,
+                255,
+            ),
         );
     }
     for r in 0..h - 2 {

@@ -87,7 +87,13 @@ fn comparativo(d: &mut Screen) {
         if ativa {
             // sublinhado no item ativo, 2px, a largura do texto
             let w = a.chars().count() as i32 * 9;
-            d.fill(x, y4 + 26 + 21, w as u32, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+            d.fill(
+                x,
+                y4 + 26 + 21,
+                w as u32,
+                2,
+                (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+            );
         }
         x += a.chars().count() as i32 * 9 + 36;
     }
@@ -104,14 +110,27 @@ fn comparativo(d: &mut Screen) {
     // 3. Reflexo do vidro: faixa diagonal clara, canto superior esquerdo.
     reflexo(d, sw, sh);
     // 4. Filete de bloom na borda interna do vidro (luz vazando).
-    d.outline(1, 1, (sw - 2) as u32, (sh - 2) as u32, 1, (255, 255, 255, 10));
+    d.outline(
+        1,
+        1,
+        (sw - 2) as u32,
+        (sh - 2) as u32,
+        1,
+        (255, 255, 255, 10),
+    );
 }
 
 /// O estilo atual (`draw_button` do cabinet): caixa com borda clara quando
 /// lit, texto centrado.
 fn botao_atual(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str) {
     d.outline(x, y, w, h, 1, (TEXTO.0, TEXTO.1, TEXTO.2, 255));
-    d.fill(x + 1, y + 1, w - 2, h - 2, (PAINEL_BG.0, PAINEL_BG.1, PAINEL_BG.2, 255));
+    d.fill(
+        x + 1,
+        y + 1,
+        w - 2,
+        h - 2,
+        (PAINEL_BG.0, PAINEL_BG.1, PAINEL_BG.2, 255),
+    );
     let tw = label.chars().count() as i32 * 9;
     d.text(
         x + (w as i32 - tw) / 2,
@@ -128,9 +147,19 @@ fn botao_atual(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str) {
 fn botao_chiclete(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str, lit: bool) {
     let (w, h) = (w as i32, h as i32);
     let raio = (h / 5).max(2);
-    let corpo = if lit { CHICLETE_CORPO_LIT } else { CHICLETE_CORPO };
+    let corpo = if lit {
+        CHICLETE_CORPO_LIT
+    } else {
+        CHICLETE_CORPO
+    };
     let linha = |d: &mut Screen, yy: i32, inset: i32, ww: i32, c: (u8, u8, u8)| {
-        d.fill(x + inset, yy, (ww - inset * 2).max(0) as u32, 1, (c.0, c.1, c.2, 255));
+        d.fill(
+            x + inset,
+            yy,
+            (ww - inset * 2).max(0) as u32,
+            1,
+            (c.0, c.1, c.2, 255),
+        );
     };
     // o assento (anel externo)
     for r in 0..h {
@@ -144,13 +173,7 @@ fn botao_chiclete(d: &mut Screen, x: i32, y: i32, w: u32, h: u32, label: &str, l
     }
     let cor_label = if lit { CHICLETE_LABEL } else { DIM };
     let tw = label.chars().count() as i32 * 9;
-    d.text(
-        x + (w - tw) / 2,
-        y + (h - 20) / 2,
-        1,
-        cor_label,
-        label,
-    );
+    d.text(x + (w - tw) / 2, y + (h - 20) / 2, 1, cor_label, label);
 }
 
 /// A alternativa C: item de menu de fósforo — sem caixa, texto verde no
@@ -163,7 +186,13 @@ fn fosforo_item(d: &mut Screen, x: i32, y: i32, label: &str, ativo: bool) {
     d.text(x + 18, y, 1, cor, label);
     if ativo {
         let w = label.chars().count() as i32 * 9;
-        d.fill(x + 18, y + 21, w as u32, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+        d.fill(
+            x + 18,
+            y + 21,
+            w as u32,
+            2,
+            (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+        );
     }
 }
 

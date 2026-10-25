@@ -18,10 +18,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use sixteen_domain::{Catalog, CatalogEntry, Order};
+use sixteen_platform::tr;
 use sixteen_platform::{
     Cabinet, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton, ShelfPanelInfo,
 };
-use sixteen_platform::tr;
 
 use crate::idle;
 
@@ -2045,9 +2045,7 @@ pub fn run(
                 }
             }
             let cid = cartridge_id(&e.rom.sha1);
-            if focus_budget > 0
-                && !cab.has_image(cid)
-                && tried_cartridge.insert(e.rom.sha1.clone())
+            if focus_budget > 0 && !cab.has_image(cid) && tried_cartridge.insert(e.rom.sha1.clone())
             {
                 if let Some(path) = find_local_art(&cartridge_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
@@ -2057,9 +2055,7 @@ pub fn run(
                 }
             }
             let bid = backcover_id(&e.rom.sha1);
-            if focus_budget > 0
-                && !cab.has_image(bid)
-                && tried_backcover.insert(e.rom.sha1.clone())
+            if focus_budget > 0 && !cab.has_image(bid) && tried_backcover.insert(e.rom.sha1.clone())
             {
                 if let Some(path) = find_local_art(&backcover_dir, &e.rom.path) {
                     if let Ok((w, h, rgba)) = decode_art(&path) {
@@ -2268,10 +2264,7 @@ pub fn run(
                 if let Some(i) = &infos {
                     // o lançamento vai pelo campo `release` do painel
                     if let Some(editora) = &i.publisher {
-                        info.push((
-                            tr!("publisher", "editora").to_string(),
-                            editora.clone(),
-                        ));
+                        info.push((tr!("publisher", "editora").to_string(), editora.clone()));
                     }
                     if let Some(regiao) = &i.region {
                         if regiao != "outra" {
@@ -2949,14 +2942,25 @@ fn draw_refresh_button(d: &mut Screen, r: (i32, i32, u32, u32)) {
 /// sublinhado quando ativo, `DIM` sem sublinhado quando inativo — sem
 /// caixa nenhuma, o OSD é o próprio texto. O rect de clique continua sendo
 /// o que o caller guarda (a geometria não muda, só o desenho).
-fn draw_fosforo_btn(d: &mut Screen, (bx, by, bw, bh): (i32, i32, u32, u32), label: &str, ativo: bool) {
+fn draw_fosforo_btn(
+    d: &mut Screen,
+    (bx, by, bw, bh): (i32, i32, u32, u32),
+    label: &str,
+    ativo: bool,
+) {
     let (cor, sub) = if ativo { (FOSFORO, true) } else { (DIM, false) };
     let tw = label.chars().count() as i32 * 9;
     let tx = bx + (bw as i32 - tw).max(0) / 2;
     let ty = by + (bh as i32 - 20) / 2;
     d.text(tx, ty, 1, cor, label);
     if sub {
-        d.fill(tx, ty + 21, tw.max(9) as u32, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+        d.fill(
+            tx,
+            ty + 21,
+            tw.max(9) as u32,
+            2,
+            (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+        );
     }
 }
 

@@ -29,13 +29,13 @@ fn main() -> anyhow::Result<()> {
 
     // (abertura do raster 0..1, brilho extra do fósforo 0..1, neve?)
     let fases: [(f32, f32, bool); 7] = [
-        (0.0, 0.0, false), // 1: apagada
+        (0.0, 0.0, false),  // 1: apagada
         (0.0, 0.35, false), // 2: ponto fraco (filamento acordando)
-        (0.0, 1.0, false), // 3: ponto forte
+        (0.0, 1.0, false),  // 3: ponto forte
         (0.08, 1.0, false), // 4: virou linha
         (0.45, 0.85, true), // 5: raster abrindo, neve estourada
-        (1.0, 0.35, true), // 6: raster aberto, brilho assentando
-        (1.0, 0.0, true),  // 7: brilho normal — a estante aparece
+        (1.0, 0.35, true),  // 6: raster aberto, brilho assentando
+        (1.0, 0.0, true),   // 7: brilho normal — a estante aparece
     ];
     for (n, (frac, hot, neve)) in fases.into_iter().enumerate() {
         let path = out.join(format!("poweron-{}.bmp", n + 1));
@@ -121,7 +121,13 @@ fn frame(d: &mut Screen, frac: f32, hot: f32, neve: bool) {
     } else {
         // Antes do sinal: o raster vazio, um cinza quente.
         let v = (30.0 + 60.0 * hot) as u8;
-        d.fill(0, top, sw as u32, virt_h as u32, (v, v, (v + 4).min(255), 255));
+        d.fill(
+            0,
+            top,
+            sw as u32,
+            virt_h as u32,
+            (v, v, (v + 4).min(255), 255),
+        );
     }
 
     // As bordas do raster: gradiente âmbar de ~10px fundindo com o conteúdo
@@ -130,7 +136,11 @@ fn frame(d: &mut Screen, frac: f32, hot: f32, neve: bool) {
         for i in 0..10 {
             let k = 1.0 - i as f32 / 10.0;
             let a = (235.0 * hot * (0.35 + 0.65 * k)) as u8;
-            let c = if i < 4 { (255, 252, 235) } else { (255, 214, 150) };
+            let c = if i < 4 {
+                (255, 252, 235)
+            } else {
+                (255, 214, 150)
+            };
             d.fill(0, top + i, sw as u32, 1, (c.0, c.1, c.2, a));
             d.fill(0, top + virt_h - 1 - i, sw as u32, 1, (c.0, c.1, c.2, a));
         }
@@ -139,7 +149,13 @@ fn frame(d: &mut Screen, frac: f32, hot: f32, neve: bool) {
         for i in 0..4 {
             let a = ((26.0 * hot) as u8).saturating_mul((4 - i) as u8) / 4;
             d.fill(i, i, (sw - 2 * i) as u32, 1, (255, 255, 255, a.max(1)));
-            d.fill(i, sh - 1 - i, (sw - 2 * i) as u32, 1, (255, 255, 255, a.max(1)));
+            d.fill(
+                i,
+                sh - 1 - i,
+                (sw - 2 * i) as u32,
+                1,
+                (255, 255, 255, a.max(1)),
+            );
         }
     }
 

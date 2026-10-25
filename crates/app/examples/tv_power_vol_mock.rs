@@ -97,12 +97,24 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
                 // TV antiga — não um retângulo cheio)
                 let cor = if aceso { FOSFORO } else { PLASTICO_ESC };
                 d.fill(x, by, (SEG / 2 - 2) as u32, 34, (cor.0, cor.1, cor.2, 255));
-                d.fill(x + SEG / 2 + 2, by, (SEG / 2 - 2) as u32, 26, (cor.0, cor.1, cor.2, 255));
+                d.fill(
+                    x + SEG / 2 + 2,
+                    by,
+                    (SEG / 2 - 2) as u32,
+                    26,
+                    (cor.0, cor.1, cor.2, 255),
+                );
             }
             // o filete de brilho sob as barras acesas — fósforo pingando
             if vol > 0 {
                 let w = blocos * vol as i32 - 6;
-                d.fill(bx, by + 40, w.max(4) as u32, 1, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 160));
+                d.fill(
+                    bx,
+                    by + 40,
+                    w.max(4) as u32,
+                    1,
+                    (FOSFORO.0, FOSFORO.1, FOSFORO.2, 160),
+                );
             }
         }
     } else {
@@ -117,9 +129,21 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
     // ---- O QUEIXO (faixa de plástico embaixo do vidro) ------------------
     let ch = 90;
     let cy = sh - ch;
-    d.fill(0, cy, sw as u32, ch as u32, (PLASTICO.0, PLASTICO.1, PLASTICO.2, 255));
+    d.fill(
+        0,
+        cy,
+        sw as u32,
+        ch as u32,
+        (PLASTICO.0, PLASTICO.1, PLASTICO.2, 255),
+    );
     // a sombra do vidro sobre o plástico
-    d.fill(0, cy, sw as u32, 3, (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255));
+    d.fill(
+        0,
+        cy,
+        sw as u32,
+        3,
+        (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255),
+    );
 
     // nameplate à esquerda (como no app)
     d.text(34, cy + 18, 1, (92, 86, 78), "SixteeN v1.2.0");
@@ -134,7 +158,13 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
     // o anel (assento afundado) — círculo escuro
     for dy in -19..=19 {
         let dx = ((19 * 19 - dy * dy) as f32).sqrt().round() as i32;
-        d.fill(pcx - dx, pcy + dy, (dx * 2) as u32, 1, (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255));
+        d.fill(
+            pcx - dx,
+            pcy + dy,
+            (dx * 2) as u32,
+            1,
+            (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255),
+        );
     }
     // sombra interna do anel (luz de cima)
     for dx in -14..=14 {
@@ -148,7 +178,13 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
     }
     for dy in -12..=12 {
         let dx = ((12 * 12 - dy * dy) as f32).sqrt().round() as i32;
-        d.fill(pcx - dx, pcy + dy, (dx * 2) as u32, 1, (CHAVE.0, CHAVE.1, CHAVE.2, 255));
+        d.fill(
+            pcx - dx,
+            pcy + dy,
+            (dx * 2) as u32,
+            1,
+            (CHAVE.0, CHAVE.1, CHAVE.2, 255),
+        );
     }
     // highlight discreto no topo do botão (plástico fosco)
     for dx in -8..=8 {
@@ -167,10 +203,22 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
     let led_c = if on { LED_ON } else { LED_OFF };
     for dy in -5..=5 {
         let dx = ((5 * 5 - dy * dy) as f32).sqrt().round() as i32;
-        d.fill(pcx - 40 - dx, pcy + dy, (dx * 2) as u32, 1, (led_c.0, led_c.1, led_c.2, 255));
+        d.fill(
+            pcx - 40 - dx,
+            pcy + dy,
+            (dx * 2) as u32,
+            1,
+            (led_c.0, led_c.1, led_c.2, 255),
+        );
     }
     if on {
-        d.fill(pcx - 43, pcy - 3, 2, 2, (LED_ON_HI.0, LED_ON_HI.1, LED_ON_HI.2, 255));
+        d.fill(
+            pcx - 43,
+            pcy - 3,
+            2,
+            2,
+            (LED_ON_HI.0, LED_ON_HI.1, LED_ON_HI.2, 255),
+        );
     }
 
     // VOL- e VOL+: botõezinhos retangulares (as teclas do console, em mini)
@@ -180,12 +228,24 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
         let bx = x - (bw as i32 + 10) * dx_desl - bw as i32;
         let by = pcy - 16;
         // assento
-        d.fill(bx, by, bw, 32, (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255));
+        d.fill(
+            bx,
+            by,
+            bw,
+            32,
+            (PLASTICO_ESC.0, PLASTICO_ESC.1, PLASTICO_ESC.2, 255),
+        );
         // a tecla
         d.fill(bx + 1, by + 1, bw - 2, 30, (CHAVE.0, CHAVE.1, CHAVE.2, 255));
         // o rótulo dentro
         let tw = rotulo.chars().count() as i32 * 9;
-        d.text(bx + (bw as i32 - tw) / 2, by + 8, 1, (243, 240, 232), rotulo);
+        d.text(
+            bx + (bw as i32 - tw) / 2,
+            by + 8,
+            1,
+            (243, 240, 232),
+            rotulo,
+        );
     }
     // etiqueta do conjunto
     d.text(pcx - 40 - 14 - 74 - 74 - 26, cy + ch - 16, 1, DIM, "VOLUME");

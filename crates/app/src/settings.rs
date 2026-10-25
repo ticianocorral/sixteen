@@ -143,13 +143,9 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                     if login_connect {
                         cfg.ra_connect = Some(token);
                         let _ = cfg.save();
-                         login_status = tr!(
-                            LoginStatus::Ok(
-                                "account linked — achievements unlocked".to_string()
-                            ),
-                            LoginStatus::Ok(
-                                "conta conectada — conquistas liberadas".to_string()
-                            )
+                        login_status = tr!(
+                            LoginStatus::Ok("account linked — achievements unlocked".to_string()),
+                            LoginStatus::Ok("conta conectada — conquistas liberadas".to_string())
                         );
                         login_connect = false;
                     } else {
@@ -225,12 +221,8 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
                     let (user, senha) = (cfg.ra_user.clone(), ra_draft.trim().to_string());
                     if user.is_empty() || senha.is_empty() {
                         login_status = tr!(
-                            LoginStatus::Failed(
-                                "fill in the username and password".to_string()
-                            ),
-                            LoginStatus::Failed(
-                                "preencha usuário e senha".to_string()
-                            )
+                            LoginStatus::Failed("fill in the username and password".to_string()),
+                            LoginStatus::Failed("preencha usuário e senha".to_string())
                         );
                     } else {
                         login_status = LoginStatus::Checking;
@@ -629,7 +621,10 @@ fn core_installed_label() -> Option<String> {
     Some(match days {
         0 => tr!("installed today", "instalado hoje").to_string(),
         1 => tr!("installed 1 day ago", "instalado há 1 dia").to_string(),
-        n => tr!(format!("installed {n} days ago"), format!("instalado há {n} dias")),
+        n => tr!(
+            format!("installed {n} days ago"),
+            format!("instalado há {n} dias")
+        ),
     })
 }
 
@@ -660,11 +655,9 @@ fn run_rom_rename() -> String {
             "todas já têm o nome certinho"
         )
         .to_string(),
-        RenameOutcome::NoDat => tr!(
-            "nointro.dat not found",
-            "nointro.dat não encontrado"
-        )
-        .to_string(),
+        RenameOutcome::NoDat => {
+            tr!("nointro.dat not found", "nointro.dat não encontrado").to_string()
+        }
     }
 }
 
@@ -674,8 +667,14 @@ fn core_row_label(status: &CoreStatus) -> String {
             let mb = *downloaded as f64 / 1_048_576.0;
             match total {
                 Some(t) => tr!(
-                    format!("Core: downloading... {mb:.1}/{:.1} MB", *t as f64 / 1_048_576.0),
-                    format!("Núcleo: baixando... {mb:.1}/{:.1} MB", *t as f64 / 1_048_576.0)
+                    format!(
+                        "Core: downloading... {mb:.1}/{:.1} MB",
+                        *t as f64 / 1_048_576.0
+                    ),
+                    format!(
+                        "Núcleo: baixando... {mb:.1}/{:.1} MB",
+                        *t as f64 / 1_048_576.0
+                    )
                 ),
                 None => tr!(
                     format!("Core: downloading... {mb:.1} MB"),
@@ -684,9 +683,15 @@ fn core_row_label(status: &CoreStatus) -> String {
             }
         }
         CoreStatus::Done => tr!("Core: updated!", "Núcleo: atualizado!").to_string(),
-        CoreStatus::Failed(e) => tr!(format!("Core: update failed — {e}"), format!("Núcleo: falha na atualização — {e}")),
+        CoreStatus::Failed(e) => tr!(
+            format!("Core: update failed — {e}"),
+            format!("Núcleo: falha na atualização — {e}")
+        ),
         CoreStatus::Idle => match core_installed_label() {
-            Some(installed) => tr!(format!("Core: update ({installed})"), format!("Núcleo: atualizar ({installed})")),
+            Some(installed) => tr!(
+                format!("Core: update ({installed})"),
+                format!("Núcleo: atualizar ({installed})")
+            ),
             None => tr!("Core: download", "Núcleo: baixar").to_string(),
         },
     }
@@ -832,7 +837,10 @@ fn draw_sistema(
             format!("Idioma: {}", lang_value_name(cfg.lang)),
         ),
         rename_status
-            .unwrap_or(tr!("Rename ROMs to No-Intro names", "Renomear ROMs para nomes No-Intro"))
+            .unwrap_or(tr!(
+                "Rename ROMs to No-Intro names",
+                "Renomear ROMs para nomes No-Intro"
+            ))
             .to_string(),
     ];
     for (i, row) in rows.iter().enumerate() {
@@ -890,13 +898,22 @@ fn draw_conquistas(
                 tr!("Test login (not tested yet)", "Testar login (não testado)").to_string()
             }
         }
-        LoginStatus::Checking => tr!("Test login: testing...", "Testar login: testando...").to_string(),
-        LoginStatus::Ok(l) => tr!(format!("Test login: ok — {l}"), format!("Testar login: ok — {l}")),
+        LoginStatus::Checking => {
+            tr!("Test login: testing...", "Testar login: testando...").to_string()
+        }
+        LoginStatus::Ok(l) => tr!(
+            format!("Test login: ok — {l}"),
+            format!("Testar login: ok — {l}")
+        ),
         LoginStatus::Failed(e) => tr!(format!("Test login: {e}"), format!("Testar login: {e}")),
     };
     let rows = [
         field(RA_ROW_USER, tr!("Username", "Usuário"), &cfg.ra_user),
-        field(RA_ROW_TOKEN, tr!("Web API key", "Chave da web API"), &cfg.ra_token),
+        field(
+            RA_ROW_TOKEN,
+            tr!("Web API key", "Chave da web API"),
+            &cfg.ra_token,
+        ),
         if editing == Some(RA_ROW_SENHA) {
             format!("{}: {draft}_", tr!("Password", "Senha"))
         } else {
@@ -907,7 +924,10 @@ fn draw_conquistas(
             format!(
                 "Hardcore mode: {}",
                 if cfg.ra_hardcore {
-                    tr!("on (no cheats/savestates)", "ligado (sem cheats/savestates)")
+                    tr!(
+                        "on (no cheats/savestates)",
+                        "ligado (sem cheats/savestates)"
+                    )
                 } else {
                     tr!("off", "desligado")
                 }

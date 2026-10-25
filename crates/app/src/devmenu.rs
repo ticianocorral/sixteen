@@ -90,8 +90,10 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
     let mut rx: Option<Receiver<InstallMsg>> = None;
     // Status line under the button — hint while idle, live progress while
     // downloading, outcome afterwards (kept until the next attempt).
-    let mut status =
-        String::from(tr!("downloads a package with one game and its assets", "baixa um pacote com uma rom e os assets dela"));
+    let mut status = String::from(tr!(
+        "downloads a package with one game and its assets",
+        "baixa um pacote com uma rom e os assets dela"
+    ));
     let mut status_color = DIM;
     let mut busy = false;
 
@@ -116,10 +118,10 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
                     busy = false;
                     status_color = GREEN;
                     status = tr!(
+                        format!("{n} files installed — click refresh on the shelf to see the game"),
                         format!(
-                            "{n} files installed — click refresh on the shelf to see the game"
-                        ),
-                        format!("instalado! {n} arquivos — clique atualizar na estante para ver o jogo")
+                            "instalado! {n} arquivos — clique atualizar na estante para ver o jogo"
+                        )
                     );
                 }
                 Ok(InstallMsg::Failed(e)) => {
@@ -330,7 +332,10 @@ pub fn capture_preview(cab: &mut Cabinet, path: &std::path::Path) -> Result<()> 
             TEXT,
             label,
         );
-        let hint = tr!("downloads a package with one game and its assets", "baixa um pacote com uma rom e os assets dela");
+        let hint = tr!(
+            "downloads a package with one game and its assets",
+            "baixa um pacote com uma rom e os assets dela"
+        );
         d.text(
             (w as i32 - hint.chars().count() as i32 * CELL) / 2,
             iy + ih as i32 + 18,

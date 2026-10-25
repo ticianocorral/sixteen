@@ -108,7 +108,10 @@ use std::io::Cursor;
 
 /// Um PDF de 3 páginas (uma imagem por página, exatamente como os scans de
 /// revista que a livraria lê) — o mesmo caminho que `manual.rs` percorre.
-fn make_magazine_pdf(path: &PathBuf, palette: Vec<([u8; 3], [u8; 3], [u8; 3])>) -> anyhow::Result<()> {
+fn make_magazine_pdf(
+    path: &PathBuf,
+    palette: Vec<([u8; 3], [u8; 3], [u8; 3])>,
+) -> anyhow::Result<()> {
     use lopdf::{dictionary, Document, Object, Stream};
 
     let mut pages = Vec::new();
@@ -173,8 +176,7 @@ fn make_magazine_pdf(path: &PathBuf, palette: Vec<([u8; 3], [u8; 3], [u8; 3])>) 
         "Type" => "Catalog",
         "Pages" => pages_id,
     }));
-    doc.trailer
-        .set("Root", Object::Reference(catalog_id));
+    doc.trailer.set("Root", Object::Reference(catalog_id));
     doc.save(path)?;
     Ok(())
 }

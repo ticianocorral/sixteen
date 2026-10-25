@@ -159,7 +159,10 @@ mod tests {
         }
         // The renamed file is the OLD one (player content rides along),
         // not the fresh mock.
-        assert_eq!(fs::read(assets.join("cover/example.png")).unwrap(), b"old seed");
+        assert_eq!(
+            fs::read(assets.join("cover/example.png")).unwrap(),
+            b"old seed"
+        );
 
         // Both present (player already made an example.png): the old file
         // stays — never deleted, it may hold player art — and the seed
@@ -170,7 +173,10 @@ mod tests {
             fs::read(assets.join("cover/example.png")).unwrap(),
             b"old seed"
         );
-        assert_eq!(fs::read(assets.join("cover/exemplo.png")).unwrap(), b"old again");
+        assert_eq!(
+            fs::read(assets.join("cover/exemplo.png")).unwrap(),
+            b"old again"
+        );
 
         let _ = fs::remove_dir_all(&assets);
     }

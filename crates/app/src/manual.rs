@@ -102,7 +102,9 @@ pub fn render_page(path: &Path, page: usize, max: u32) -> Result<Option<PageImag
         let cfg = PdfRenderConfig::new()
             .set_maximum_width(max as i32)
             .set_maximum_height(max as i32);
-        let bitmap = page.render_with_config(&cfg).map_err(|e| anyhow!("pdf: {e}"))?;
+        let bitmap = page
+            .render_with_config(&cfg)
+            .map_err(|e| anyhow!("pdf: {e}"))?;
         let rgba = bitmap
             .as_image()
             .map_err(|e| anyhow!("pdf: {e}"))?
@@ -277,17 +279,15 @@ fn stream_data(doc: &PdfDocument, stream: &Stream) -> Option<Vec<u8>> {
             use std::io::Read;
             const MAX_DECOMPRESSED: u64 = 96 * 1024 * 1024;
             let mut out = Vec::new();
-            let mut zlib = flate2::read::ZlibDecoder::new(&stream.content[..])
-                .take(MAX_DECOMPRESSED);
+            let mut zlib =
+                flate2::read::ZlibDecoder::new(&stream.content[..]).take(MAX_DECOMPRESSED);
             if zlib.read_to_end(&mut out).is_err() || out.len() as u64 >= MAX_DECOMPRESSED {
                 // Raw deflate (sem header zlib) é raríssimo em PDF, mas o
                 // fallback é barato; atingir o teto também descarta a stream.
-                let mut raw = flate2::read::DeflateDecoder::new(&stream.content[..])
-                    .take(MAX_DECOMPRESSED);
+                let mut raw =
+                    flate2::read::DeflateDecoder::new(&stream.content[..]).take(MAX_DECOMPRESSED);
                 let mut alt = Vec::new();
-                if raw.read_to_end(&mut alt).is_ok()
-                    && (alt.len() as u64) < MAX_DECOMPRESSED
-                {
+                if raw.read_to_end(&mut alt).is_ok() && (alt.len() as u64) < MAX_DECOMPRESSED {
                     return Some(alt);
                 }
                 return None;
@@ -356,11 +356,7 @@ mod tests {
         // pdfium (o renderizador atual) compõe a página de verdade.
         let content = |img_ref: u32| -> Vec<u8> {
             let body = format!("q 2 0 0 2 0 0 cm /Im{img_ref} Do Q\n");
-            let mut out = format!(
-                "<< /Length {} >>\nstream\n",
-                body.len()
-            )
-            .into_bytes();
+            let mut out = format!("<< /Length {} >>\nstream\n", body.len()).into_bytes();
             out.extend(body.into_bytes());
             out.extend(b"endstream");
             out

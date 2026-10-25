@@ -163,7 +163,8 @@ fn main() -> anyhow::Result<()> {
         manual_first_page: None,
         award_img: None,
 
-        igdb: None,        hltb,
+        igdb: None,
+        hltb,
     });
 
     cab.capture_shelf(

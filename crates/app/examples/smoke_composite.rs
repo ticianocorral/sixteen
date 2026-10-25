@@ -19,8 +19,12 @@ fn main() -> anyhow::Result<()> {
         cab.frame_2d((10, 10, 11), draw);
         cab.frame_shelf((10, 10, 11), draw);
     }
-    cab.capture_2d((10, 10, 11), draw, std::path::Path::new("/tmp/badge/smoke-composite.bmp"))
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    cab.capture_2d(
+        (10, 10, 11),
+        draw,
+        std::path::Path::new("/tmp/badge/smoke-composite.bmp"),
+    )
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("wrote /tmp/badge/smoke-composite.bmp");
     Ok(())
 }
