@@ -443,6 +443,30 @@ impl Platform {
         self.gamepads = gamepads;
     }
 
+    /// Ports follow SDL's enumeration order, so an idle pad (a Bluetooth Pro
+    /// Controller left on, say) can squat on port 0 while the pad actually
+    /// being played ends up as player 2 and is ignored by the menus. When the
+    /// first pad is idle and a later one has a button down, that one moves to
+    /// the front — the pad in the player's hands is player 1.
+    fn promote_active_pad(&mut self) {
+        if self.gamepads.len() < 2 {
+            return;
+        }
+        let pressed = |pad: &Gamepad| {
+            MENU_PAD_MAP.iter().any(|(btn, _)| pad.button(*btn))
+                || [PadBtn::South, PadBtn::East, PadBtn::West, PadBtn::North]
+                    .iter()
+                    .any(|b| pad.button(*b))
+        };
+        if pressed(&self.gamepads[0].1) {
+            return;
+        }
+        if let Some(i) = self.gamepads.iter().skip(1).position(|(_, p)| pressed(p)) {
+            let pad = self.gamepads.remove(i + 1);
+            self.gamepads.insert(0, pad);
+        }
+    }
+
     /// Resolve a pending hotplug: only when the connected-id set actually
     /// differs from the last sync does anything reopen. A flap that comes and
     /// goes between two frames (or removes and re-adds before the next poll
@@ -604,6 +628,7 @@ impl Platform {
             }
         }
         self.refresh_gamepads_if_changed();
+        self.promote_active_pad();
         // Gamepad: rising edges only.
         let pad = self.gamepads.first().map(|(_, pad)| pad);
         for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
@@ -798,6 +823,7 @@ impl Platform {
             }
         }
         self.refresh_gamepads_if_changed();
+        self.promote_active_pad();
         self.sample_gamepads(input);
         out
     }

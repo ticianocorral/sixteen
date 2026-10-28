@@ -1209,7 +1209,7 @@ impl Cabinet {
             static_hiss: false,
             hiss: None,
             hiss_rng: 0x2545_f491,
-            tv_power: Some(TvPower::Off),
+            tv_power: None, // abre com a TV ligada, como o PolyStnX
             volume: 8,
             volume_osd_until: None,
             tv_power_buttons: None,
