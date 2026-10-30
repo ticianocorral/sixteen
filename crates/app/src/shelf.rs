@@ -504,12 +504,85 @@ fn pick_play(
     }
 }
 
+/// Quem sabe pintar retângulos: a tela da estante (`Screen`) ou um buffer
+/// RGBA na memória (`Raster`) — o móvel é desenhado no buffer uma vez e
+/// colado como uma imagem só a cada quadro.
+trait Paint {
+    fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, c: (u8, u8, u8, u8));
+}
+
+impl Paint for Screen<'_> {
+    fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, c: (u8, u8, u8, u8)) {
+        Screen::fill(self, x, y, w, h, c);
+    }
+}
+
+/// Um buffer RGBA transparente com `fill` de alpha "source over" — o
+/// mesmo resultado do `fill` na tela, sem GPU.
+struct Raster {
+    w: u32,
+    h: u32,
+    px: Vec<u8>,
+}
+
+impl Raster {
+    fn new(w: u32, h: u32) -> Self {
+        Self {
+            w,
+            h,
+            px: vec![0; (w * h * 4) as usize],
+        }
+    }
+}
+
+impl Paint for Raster {
+    fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, c: (u8, u8, u8, u8)) {
+        let x0 = x.max(0) as u32;
+        let y0 = y.max(0) as u32;
+        let x1 = ((x + w as i32).max(0) as u32).min(self.w);
+        let y1 = ((y + h as i32).max(0) as u32).min(self.h);
+        let sa = c.3 as u32;
+        for yy in y0..y1 {
+            for xx in x0..x1 {
+                let i = ((yy * self.w + xx) * 4) as usize;
+                let p = &mut self.px[i..i + 4];
+                let da = p[3] as u32;
+                let oa = sa + da * (255 - sa) / 255;
+                if oa == 0 {
+                    continue;
+                }
+                for (ch, src) in [(0, c.0), (1, c.1), (2, c.2)] {
+                    let dc = p[ch] as u32;
+                    p[ch] = ((src as u32 * sa + dc * da * (255 - sa) / 255) / oa) as u8;
+                }
+                p[3] = oa as u8;
+            }
+        }
+    }
+}
+
+/// O móvel da estante desenhado num buffer: o corpo (fundo, montantes,
+/// travessa) e a prateleira sob cada fileira visível da grade — a
+/// prateleira mora no vão de `GAP`, sem mexer nos rects de clique.
+fn furniture_layer(scr_w: u32, scr_h: u32, grid: &GridLayout) -> sixteen_platform::PreparedArt {
+    let mut r = Raster::new(scr_w, scr_h);
+    draw_cabinet(&mut r, scr_w, scr_h, grid.y0 + 1);
+    for row in 0..grid.vis_rows {
+        let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
+        draw_shelf_board(&mut r, MARGIN, scr_w - MARGIN as u32 * 2, y, 14);
+    }
+    sixteen_platform::PreparedArt::raw(r.w, r.h, r.px)
+}
+
+/// O id da textura do móvel (fundo, laterais e prateleiras) da estante.
+const FURNITURE_IMG: u64 = 0x4D4F_5645_4C00_0000; // "MOVEL"
+
 /// O MÓVEL em volta das capas: o painel de fundo (madeira escura com veios
 /// verticais, escurecendo para os cantos como o fundo de um armário),
 /// os dois montantes laterais e a travessa do topo — a grade vira o
 /// interior de uma estante, em vez de capas soltas no escuro. `top` é onde
 /// a travessa assenta (logo abaixo do cabeçalho).
-fn draw_cabinet(d: &mut Screen, scr_w: u32, scr_h: u32, top: i32) {
+fn draw_cabinet(d: &mut impl Paint, scr_w: u32, scr_h: u32, top: i32) {
     const POST: i32 = 12;
     let x0 = MARGIN - POST - 4;
     let x1 = scr_w as i32 - MARGIN + 4;
@@ -585,7 +658,7 @@ fn draw_cabinet(d: &mut Screen, scr_w: u32, scr_h: u32, top: i32) {
 /// (quarto-de-círculo) sob as duas pontas — curta, para não invadir a copy
 /// da fileira de baixo. Mora no vão de `GAP`/`STRIP_GAP` entre fileiras —
 /// nenhuma geometria de clique muda.
-fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
+fn draw_shelf_board(d: &mut impl Paint, x: i32, w: u32, y: i32, h: i32) {
     // O tampo visto de cima, entrando para o fundo: uma faixa mais clara
     // acima do lábio, com a quina do fundo escura — a prateleira ganha
     // profundidade e as capas pousam EM CIMA dela.
@@ -2061,6 +2134,7 @@ pub fn run(
     let mut view: Vec<CatalogEntry> = Vec::new();
     let mut favorites: Vec<CatalogEntry> = Vec::new();
     let mut ra = ShelfRa::new();
+    let mut furniture_key = None;
     let mut ach = AchView::default();
     let mut man = ShelfManual::default();
     cab.set_close_button(true);
@@ -2548,6 +2622,22 @@ pub fn run(
         } else {
             None
         };
+        // O móvel muda só com a geometria da grade: redesenhado no buffer
+        // quando ela muda (janela, filtro que tira a grade do modo lista).
+        if !grid.list_mode {
+            let key = (
+                scr_w,
+                scr_h,
+                grid.y0,
+                grid.cell_h,
+                grid.item_h,
+                grid.vis_rows,
+            );
+            if furniture_key != Some(key) {
+                cab.set_prepared_image(FURNITURE_IMG, furniture_layer(scr_w, scr_h, &grid));
+                furniture_key = Some(key);
+            }
+        }
         let render = |d: &mut Screen| {
             if let Some(m) = &man.reader {
                 man.rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
@@ -2613,9 +2703,9 @@ pub fn run(
             }
 
             if !grid.list_mode {
-                // O móvel começa na listagem geral — os favoritos ficam
-                // fora dele, soltos acima.
-                draw_cabinet(d, scr_w, scr_h, grid.y0 + 1);
+                // O móvel (fundo, laterais e prateleiras), já pronto numa
+                // textura — uma cópia só, não ~150 retângulos por quadro.
+                d.image_fit(FURNITURE_IMG, 0, 0, scr_w, scr_h);
             }
             d.text(MARGIN, all_games_label_y, 1, DIM, all_games_title());
 
@@ -2636,13 +2726,6 @@ pub fn run(
                     d.text(x + 6, y + 3, 1, color, &label);
                 }
             } else {
-                // A madeira sob cada fileira visível — as caixas pousam
-                // nela (a prateleira mora no vão de GAP, sem mexer nos
-                // rects de clique).
-                for row in 0..grid.vis_rows {
-                    let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
-                    draw_shelf_board(d, MARGIN, scr_w - MARGIN as u32 * 2, y, 14);
-                }
                 for (i, entry) in view.iter().enumerate() {
                     let Some((x, y)) = grid.cell_pos(i, cur.top_row) else {
                         continue;
@@ -3022,7 +3105,7 @@ fn draw_scrollbar(d: &mut Screen, grid: &GridLayout, view_len: usize, top_row: u
 /// arquivo ou não — a maioria dos jogos não tem, e disco não é de graça.
 struct ShelfArt {
     tx: mpsc::Sender<ArtJob>,
-    rx: Receiver<(u64, Option<Decoded>)>,
+    rx: Receiver<(u64, Option<sixteen_platform::PreparedArt>)>,
     cover_dir: PathBuf,
     logo_dir: PathBuf,
     cartridge_dir: PathBuf,
@@ -3059,8 +3142,11 @@ impl ShelfArt {
             .name("shelf-art".into())
             .spawn(move || {
                 for job in jobs {
+                    // Decode E preparo (limpeza da arte 3D vazada) aqui
+                    // — a thread de UI só sobe a textura.
                     let img = find_local_art(&job.dir, &job.rom_path)
-                        .and_then(|p| decode_art_scaled(&p, job.max).ok());
+                        .and_then(|p| decode_art_scaled(&p, job.max).ok())
+                        .map(|(w, h, rgba)| sixteen_platform::prepare_art(w, h, rgba));
                     if done.send((job.id, img)).is_err() {
                         break;
                     }
@@ -3140,8 +3226,8 @@ impl ShelfArt {
     /// frame (o upload da textura também custa).
     fn drain(&self, cab: &mut Cabinet) {
         for (id, img) in self.rx.try_iter().take(4) {
-            if let Some((w, h, rgba)) = img {
-                cab.set_image(id, w, h, &rgba);
+            if let Some(art) = img {
+                cab.set_prepared_image(id, art);
             }
         }
     }

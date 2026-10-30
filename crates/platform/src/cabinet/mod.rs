@@ -1095,6 +1095,112 @@ struct ImgTex {
     vazado: bool,
 }
 
+/// Uma arte pronta para subir: os pixels (já limpos, se vazada), a caixa
+/// do conteúdo e a flag de transparência. Montada por [`prepare_art`] —
+/// em qualquer thread.
+pub struct PreparedArt {
+    pub(crate) w: u32,
+    pub(crate) h: u32,
+    pub(crate) rgba: Vec<u8>,
+    pub(crate) content: (u32, u32, u32, u32),
+    pub(crate) vazado: bool,
+}
+
+impl PreparedArt {
+    /// Uma arte já pronta, sem passar pela limpeza de arte vazada — para
+    /// camadas desenhadas pelo próprio app (sombras translúcidas de
+    /// propósito, que a limpeza da matte apagaria).
+    pub fn raw(w: u32, h: u32, rgba: Vec<u8>) -> Self {
+        Self {
+            w,
+            h,
+            rgba,
+            content: (0, 0, w, h),
+            vazado: false,
+        }
+    }
+}
+
+/// O trabalho de CPU de registrar uma arte, separado do upload: detecta a
+/// transparência, acha a caixa do conteúdo e, na arte vazada, limpa a
+/// matte cinza e sangra a cor nas bordas (varreduras pixel a pixel que
+/// custavam milissegundos na thread de UI ao rolar capas 3D).
+pub fn prepare_art(w: u32, h: u32, rgba: Vec<u8>) -> PreparedArt {
+    if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
+        return PreparedArt {
+            w,
+            h,
+            rgba,
+            content: (0, 0, w, h),
+            vazado: false,
+        };
+    }
+    let vazado = rgba.as_chunks::<4>().0.iter().any(|p| p[3] < 250);
+    // O content_bbox varre pixel a pixel — só importa para arte VAZADA
+    // (a caixa 3D do painel recorta por ele). Para páginas/capas
+    // opacas (o PDF do leitor: ~23M pixels), pular a varredura era a
+    // diferença entre virar a página fluido e travar um frame.
+    let content = if vazado {
+        content_bbox(w, h, &rgba)
+    } else {
+        (0, 0, w, h)
+    };
+    // Arte vazada (render 3D em ângulo): a matte do render —
+    // anti-aliasing CINZA em volta da caixa — vira franja cinza quando a
+    // textura é reduzida com filtro linear. No upload, limpa: semi cinza
+    // sai do todo. Em seguida, SANGRIA DE BORDA: o rgb dos texels
+    // vazados herda a cor do conteúdo vizinho — com filtro linear, o
+    // contorno mistura caixa com caixa (e não com preto/cinza), e quem
+    // faz o fade é só o alpha: transparência de verdade, sem halo
+    // escuro na volta nem sombra na base.
+    let rgba = if vazado {
+        let mut limpa = rgba.clone();
+        for p in limpa.as_chunks_mut::<4>().0 {
+            let (r, g, b, a) = (p[0], p[1], p[2], p[3]);
+            if a > 0 && a < 250 && r.abs_diff(g) < 24 && g.abs_diff(b) < 24 {
+                p[3] = 0;
+            }
+        }
+        let (wu, hu) = (w as usize, h as usize);
+        for _ in 0..2 {
+            let fonte = limpa.clone();
+            for y in 0..hu {
+                for x in 0..wu {
+                    let i = (y * wu + x) * 4;
+                    if fonte[i + 3] != 0 {
+                        continue;
+                    }
+                    let vizinho = [
+                        x.checked_sub(1).map(|nx| (nx, y)),
+                        Some((x + 1, y)).filter(|&(nx, _)| nx < wu),
+                        y.checked_sub(1).map(|ny| (x, ny)),
+                        Some((x, y + 1)).filter(|&(_, ny)| ny < hu),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .find(|&(nx, ny)| fonte[(ny * wu + nx) * 4 + 3] > 0);
+                    if let Some((nx, ny)) = vizinho {
+                        let j = (ny * wu + nx) * 4;
+                        limpa[i] = fonte[j];
+                        limpa[i + 1] = fonte[j + 1];
+                        limpa[i + 2] = fonte[j + 2];
+                    }
+                }
+            }
+        }
+        limpa
+    } else {
+        rgba
+    };
+    PreparedArt {
+        w,
+        h,
+        rgba,
+        content,
+        vazado,
+    }
+}
+
 /// The bounding box of pixels with any alpha, in texture pixels — an
 /// image-sized box when the art has no transparency at all. Scans at most
 /// one pass over the RGBA buffer (art textures are loaded once).
@@ -2334,7 +2440,25 @@ impl Cabinet {
     // frame — so the shelf bulges with the same tube.
 
     /// Register/replace an image from tightly-packed RGBA8 (call between frames).
+    /// A preparação ([`prepare_art`]) roda aqui mesmo; quem carrega arte
+    /// numa thread de fundo prepara lá e chama [`Cabinet::set_prepared_image`].
     pub fn set_image(&mut self, id: u64, w: u32, h: u32, rgba: &[u8]) {
+        if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
+            return;
+        }
+        self.set_prepared_image(id, prepare_art(w, h, rgba.to_vec()));
+    }
+
+    /// Sobe para a GPU uma arte já preparada por [`prepare_art`] — só o
+    /// upload da textura, nada de varredura de pixels na thread de UI.
+    pub fn set_prepared_image(&mut self, id: u64, art: PreparedArt) {
+        let PreparedArt {
+            w,
+            h,
+            rgba,
+            content,
+            vazado,
+        } = art;
         if w == 0 || h == 0 || rgba.len() < (w * h * 4) as usize {
             return;
         }
@@ -2347,65 +2471,7 @@ impl Cabinet {
         };
         tex.set_blend_mode(BlendMode::Blend);
         tex.set_scale_mode(SdlScaleMode::Linear);
-        let vazado = rgba.as_chunks::<4>().0.iter().any(|p| p[3] < 250);
-        // O content_bbox varre pixel a pixel — só importa para arte VAZADA
-        // (a caixa 3D do painel recorta por ele). Para páginas/capas
-        // opacas (o PDF do leitor: ~23M pixels), pular a varredura era a
-        // diferença entre virar a página fluido e travar um frame.
-        let content = if vazado {
-            content_bbox(w, h, rgba)
-        } else {
-            (0, 0, w, h)
-        };
-        // Arte vazada (render 3D em ângulo): a matte do render —
-        // anti-aliasing CINZA em volta da caixa — vira franja cinza quando a
-        // textura é reduzida com filtro linear. No upload, limpa: semi cinza
-        // sai do todo. Em seguida, SANGRIA DE BORDA: o rgb dos texels
-        // vazados herda a cor do conteúdo vizinho — com filtro linear, o
-        // contorno mistura caixa com caixa (e não com preto/cinza), e quem
-        // faz o fade é só o alpha: transparência de verdade, sem halo
-        // escuro na volta nem sombra na base.
-        let rgba_limpa;
-        let rgba = if vazado {
-            let mut limpa = rgba.to_vec();
-            for p in limpa.as_chunks_mut::<4>().0 {
-                let (r, g, b, a) = (p[0], p[1], p[2], p[3]);
-                if a > 0 && a < 250 && r.abs_diff(g) < 24 && g.abs_diff(b) < 24 {
-                    p[3] = 0;
-                }
-            }
-            let (wu, hu) = (w as usize, h as usize);
-            for _ in 0..2 {
-                let fonte = limpa.clone();
-                for y in 0..hu {
-                    for x in 0..wu {
-                        let i = (y * wu + x) * 4;
-                        if fonte[i + 3] != 0 {
-                            continue;
-                        }
-                        let vizinho = [
-                            x.checked_sub(1).map(|nx| (nx, y)),
-                            Some((x + 1, y)).filter(|&(nx, _)| nx < wu),
-                            y.checked_sub(1).map(|ny| (x, ny)),
-                            Some((x, y + 1)).filter(|&(_, ny)| ny < hu),
-                        ]
-                        .into_iter()
-                        .flatten()
-                        .find(|&(nx, ny)| fonte[(ny * wu + nx) * 4 + 3] > 0);
-                        if let Some((nx, ny)) = vizinho {
-                            let j = (ny * wu + nx) * 4;
-                            limpa[i] = fonte[j];
-                            limpa[i + 1] = fonte[j + 1];
-                            limpa[i + 2] = fonte[j + 2];
-                        }
-                    }
-                }
-            }
-            rgba_limpa = limpa;
-            &rgba_limpa
-        } else {
-            rgba
-        };
+        let rgba = &rgba[..];
         if tex.update(None, rgba, (w * 4) as usize).is_err() {
             return;
         }

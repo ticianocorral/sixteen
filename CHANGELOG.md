@@ -44,6 +44,19 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 - **Capas decodificadas em segundo plano** — busca e decode das artes da
   estante (capa, logo, cartucho, contracapa) saem da thread de UI para um
   worker: rolar a estante não engasga mais a cada capa nova.
+- **Badge de conquista sem travar o jogo** — quando o badge ainda não
+  estava em cache, o download acontecia dentro do laço do jogo (o jogo
+  congelava por uma fração de segundo). Agora vai numa thread; o aviso sai
+  na hora e a imagem entra quando chega.
+- **Capas 3D preparadas no worker** — a limpeza da arte vazada (matte
+  cinza e sangria de borda, varreduras pixel a pixel) saiu da thread de
+  UI: `prepare_art` roda junto do decode, e a UI só sobe a textura.
+- **Móvel da estante em cache** — fundo, laterais e prateleiras são
+  desenhados uma vez num buffer (quando a grade muda) e colados como uma
+  imagem só, em vez de ~150 retângulos por quadro.
+- **Configurações gravam ao sair** — o `sixteen.cfg` é gravado uma vez ao
+  deixar a tela, se algo mudou (antes, cada passo de um ajuste gravava).
+  Login e token do RA seguem gravando na hora.
 - **Fades sem recriar a malha do CRT** — a estante e as telas 2D surgindo
   da estática reaproveitam a malha em cache e só reescrevem o alpha.
 - **Filtro NTSC lê o frame direto** — sem remontar ~57 mil pixels por

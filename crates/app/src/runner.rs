@@ -1269,32 +1269,29 @@ fn queue_game_audio(
     // vol == 0: mudo, nada entra na fila
 }
 
+/// Badges decodificados fora do laço do jogo: (id da imagem, (w, h, rgba)).
+type BadgeTx = std::sync::mpsc::Sender<(u64, (u32, u32, Vec<u8>))>;
+
 /// Uma conquista desbloqueada na TV: o "plim", o badge (do cache, ou
 /// baixado na hora se o prefetch ainda não trouxe) e o aviso no queixo.
-fn notify_unlock(cab: &mut Cabinet, unlock: &crate::ra::Unlock) {
+fn notify_unlock(cab: &mut Cabinet, unlock: &crate::ra::Unlock, badges: &BadgeTx) {
     // O "plim" da conquista (plan revision: "coloque uma
     // notificação sonora ao ganhar uma conquista") — sobre o
     // áudio do jogo, pelo stream de foley.
     crate::sfx::play(cab, crate::sfx::Sfx::Achievement);
-    // Badge: fetched/decoded once, cached to disk with the
-    // other RA caches. One blocking fetch per unlock is
-    // acceptable (a few hundred ms, once ever per game).
-    let badge_img = unlock.badge.clone();
-    if !badge_img.is_empty() {
-        match crate::ra::badge_path(&badge_img) {
-            Some(path) => {
-                if let Ok((w, h, rgba)) = decode_art(&path, 512) {
-                    cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
-                }
+    // O badge: do cache em disco ou baixado — numa thread, nunca no laço
+    // do jogo (o download segurava o frame por centenas de ms). O aviso
+    // sai na hora; a imagem entra no queixo quando chegar (o laço drena
+    // `BadgeRx` a cada frame).
+    let badge = unlock.badge.clone();
+    if !badge.is_empty() {
+        let tx = badges.clone();
+        std::thread::spawn(move || {
+            let path = crate::ra::badge_path(&badge).or_else(|| crate::ra::download_badge(&badge));
+            if let Some(img) = path.and_then(|p| decode_art(&p, 512).ok()) {
+                let _ = tx.send((osd_badge_id(&badge), img));
             }
-            None => {
-                if let Some(path) = crate::ra::download_badge(&badge_img) {
-                    if let Ok((w, h, rgba)) = decode_art(&path, 512) {
-                        cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
-                    }
-                }
-            }
-        }
+        });
     }
     cab.push_osd(
         &[
@@ -1615,6 +1612,7 @@ pub fn run_game(
     let mut next = Instant::now();
     let mut frames: u32 = 0;
     let mut fps_meter = FpsMeter::new();
+    let (badge_tx, badge_rx): (BadgeTx, _) = std::sync::mpsc::channel();
     let mut last_dims = (0u32, 0u32);
     // Don't let the audio queue run more than ~0.15 s ahead (latency creep).
     let audio_cap = (av.sample_rate / 6.0) as usize;
@@ -2354,6 +2352,10 @@ pub fn run_game(
                 }
             }
 
+            for (id, (w, h, rgba)) in badge_rx.try_iter() {
+                cab.set_image(id, w, h, &rgba);
+            }
+
             // RA evaluation (plan fase 3) — the real frame's RAM, before any
             // speculative run-ahead frames mutate the state further.
             if let (true, Some(ra)) = (powered, &mut ra_session) {
@@ -2371,7 +2373,7 @@ pub fn run_game(
                         .as_ref()
                         .expect("checked above")
                         .submit_unlock(&unlock);
-                    notify_unlock(cab, &unlock);
+                    notify_unlock(cab, &unlock, &badge_tx);
                 }
             }
 

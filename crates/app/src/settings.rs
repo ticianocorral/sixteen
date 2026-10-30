@@ -110,7 +110,23 @@ enum LoginStatus {
 /// Run the settings screen until the player backs all the way out. Returns
 /// `true` if the whole app should quit (window closed / Cmd-Q) instead of
 /// returning to the shelf.
+/// A tela de configurações. Os ajustes valem na hora (idioma, tela cheia,
+/// hiss...), mas o `sixteen.cfg` é gravado UMA vez, ao sair, se algo mudou
+/// — segurar uma seta num ajuste gerava uma gravação por passo. Login e
+/// token do RetroAchievements continuam gravando na hora (credencial não
+/// espera a saída da tela).
 pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<bool> {
+    let before = cfg.to_toml();
+    let result = run_screen(plat, cab, cfg);
+    if cfg.to_toml() != before {
+        if let Err(e) = cfg.save() {
+            log::warn!("settings: saving config: {e}");
+        }
+    }
+    result
+}
+
+fn run_screen(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<bool> {
     let mut sec = SEC_JOGO;
     let mut sel: usize = 0;
     let mut controls_top: usize = 0;
@@ -282,11 +298,9 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<b
             // of each row, a gamepad button on the right ("controle:").
             if let Some(name) = m.captured_key {
                 bind_row(cfg, row, &name);
-                let _ = cfg.save();
                 awaiting_key = None;
             } else if let Some(btn) = m.captured_pad {
                 bind_pad_row(plat, cfg, row, btn);
-                let _ = cfg.save();
                 awaiting_key = None;
             } else if m.capture_cancelled {
                 awaiting_key = None;
@@ -475,11 +489,9 @@ fn activate_row(
             0 => {
                 cfg.fullscreen = !cfg.fullscreen;
                 cab.toggle_fullscreen();
-                let _ = cfg.save();
             }
             _ => {
                 cfg.hiss_on_static = !cfg.hiss_on_static;
-                let _ = cfg.save();
                 cab.set_static_hiss(cfg.hiss_on_static);
             }
         },
@@ -487,7 +499,6 @@ fn activate_row(
             0 => start_core_download(core_status, core_worker),
             1 => {
                 cfg.check_updates_on_start = !cfg.check_updates_on_start;
-                let _ = cfg.save();
             }
             // The language row: english ↔ português, applied live — the
             // very next frame's `tr!` calls read the new one, so this
@@ -495,7 +506,6 @@ fn activate_row(
             2 => {
                 cfg.lang = cfg.lang.cycle();
                 apply_lang(cfg);
-                let _ = cfg.save();
             }
             _ => *rename_status = Some(run_rom_rename()),
         },
@@ -504,7 +514,6 @@ fn activate_row(
             3 => start_login_test(cfg, login_status, login_worker),
             _ => {
                 cfg.ra_hardcore = !cfg.ra_hardcore;
-                let _ = cfg.save();
             }
         },
         SEC_CONTROLES => *awaiting_key = Some(*sel),
@@ -546,25 +555,20 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _righ
         (SEC_VIDEO, 0) => {
             cfg.fullscreen = !cfg.fullscreen;
             cab.toggle_fullscreen();
-            let _ = cfg.save();
         }
         (SEC_VIDEO, 1) => {
             cfg.hiss_on_static = !cfg.hiss_on_static;
-            let _ = cfg.save();
             cab.set_static_hiss(cfg.hiss_on_static);
         }
         (SEC_SISTEMA, 1) => {
             cfg.check_updates_on_start = !cfg.check_updates_on_start;
-            let _ = cfg.save();
         }
         (SEC_SISTEMA, 2) => {
             cfg.lang = cfg.lang.cycle();
             apply_lang(cfg);
-            let _ = cfg.save();
         }
         (SEC_CONQUISTAS, 4) => {
             cfg.ra_hardcore = !cfg.ra_hardcore;
-            let _ = cfg.save();
         }
         _ => {}
     }
