@@ -7,7 +7,7 @@
 use sixteen_platform::Platform;
 
 fn main() -> anyhow::Result<()> {
-    let mut plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
         .create_cabinet("smoke", 1280, 800, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;

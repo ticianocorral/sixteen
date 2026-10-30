@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sixteen_platform::{Cabinet, FrameRef, PanelButton, PixelFormat, Platform, DEMO_BADGE_IMG};
+use sixteen_platform::{FrameRef, PanelButton, PixelFormat, Platform, DEMO_BADGE_IMG};
 
 fn main() -> anyhow::Result<()> {
     let out_dir = PathBuf::from("docs/mocks");

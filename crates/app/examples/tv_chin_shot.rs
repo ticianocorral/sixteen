@@ -23,7 +23,7 @@ fn main() -> anyhow::Result<()> {
     let out = PathBuf::from("/tmp/badge");
     std::fs::create_dir_all(&out)?;
 
-    let mut plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let plat = Platform::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let mut cab = plat
         .create_cabinet("SixteeN", W, H, false)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;

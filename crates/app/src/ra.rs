@@ -428,7 +428,10 @@ fn net_err(e: ureq::Error) -> String {
             .and_then(|b| b.get("Error").and_then(|v| v.as_str()).map(str::to_string))
             .unwrap_or_else(|| format!("HTTP {code}")),
         ureq::Error::Transport(t) => {
-            tr!(format!("network: {}", t.kind()), format!("rede: {}", t.kind()))
+            tr!(
+                format!("network: {}", t.kind()),
+                format!("rede: {}", t.kind())
+            )
         }
     }
 }

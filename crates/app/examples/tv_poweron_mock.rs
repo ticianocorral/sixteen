@@ -121,13 +121,7 @@ fn frame(d: &mut Screen, frac: f32, hot: f32, neve: bool) {
     } else {
         // Antes do sinal: o raster vazio, um cinza quente.
         let v = (30.0 + 60.0 * hot) as u8;
-        d.fill(
-            0,
-            top,
-            sw as u32,
-            virt_h as u32,
-            (v, v, (v + 4).min(255), 255),
-        );
+        d.fill(0, top, sw as u32, virt_h as u32, (v, v, (v + 4), 255));
     }
 
     // As bordas do raster: gradiente âmbar de ~10px fundindo com o conteúdo

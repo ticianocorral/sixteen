@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     cab.set_nameplate("SixteeN v1.2.0\nsnes9x 1.63");
 
-    cab.capture_shelf(BG, |d| comparativo(d), &out.join("tv-botoes.bmp"))
+    cab.capture_shelf(BG, comparativo, &out.join("tv-botoes.bmp"))
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("{}", out.join("tv-botoes.bmp").display());
     Ok(())

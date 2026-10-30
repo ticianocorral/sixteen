@@ -187,7 +187,7 @@ impl NtscFilter {
         // com o pitch real, sem remontar ~57k pixels em `in_buf` por frame.
         let direct = cfg!(target_endian = "little")
             && src.as_ptr().align_offset(2) == 0
-            && src_pitch_bytes % 2 == 0
+            && src_pitch_bytes.is_multiple_of(2)
             && src_pitch_bytes >= w * 2
             && h > 0
             && src.len() >= (h - 1) * src_pitch_bytes + w * 2;
@@ -241,12 +241,22 @@ mod tests {
         }
         let mut a = NtscFilter::new(Preset::Rgb);
         let mut b = NtscFilter::new(Preset::Rgb);
-        let aligned = if buf.as_ptr().align_offset(2) == 0 { 0 } else { 1 };
-        let out_a = a.process(&buf[aligned..], w as u32, h as u32, pitch).0.to_vec();
+        let aligned = if buf.as_ptr().align_offset(2) == 0 {
+            0
+        } else {
+            1
+        };
+        let out_a = a
+            .process(&buf[aligned..], w as u32, h as u32, pitch)
+            .0
+            .to_vec();
         let mut shifted = vec![0u8; pitch * h + 1];
         let off = 1 - aligned;
         shifted[off..off + pitch * h].copy_from_slice(&buf[aligned..aligned + pitch * h]);
-        let out_b = b.process(&shifted[off..], w as u32, h as u32, pitch).0.to_vec();
+        let out_b = b
+            .process(&shifted[off..], w as u32, h as u32, pitch)
+            .0
+            .to_vec();
         assert_eq!(out_a, out_b);
     }
 

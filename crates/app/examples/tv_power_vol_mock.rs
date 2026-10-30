@@ -79,19 +79,19 @@ fn frame(d: &mut Screen, on: bool, vol: u8, osd: bool) {
         if osd {
             const SEG: i32 = 22; // largura de um segmento
             const TOTAL: u8 = 16;
-            let blocos = 3 * (SEG + 6) as i32;
+            let blocos = 3 * (SEG + 6);
             let bx = (sw - blocos * (TOTAL as i32)) / 2 + 10;
             let by = sh - 90 - 120;
 
             // rótulo "VOLUME" à esquerda das barras, no fósforo
             d.text(bx - 90, by + 6, 1, FOSFORO, "VOLUME");
             let maximo = vol >= TOTAL;
-            let pct = format!("{}{}", if maximo { "MAX" } else { "" }, "");
+            let _pct = format!("{}{}", if maximo { "MAX" } else { "" }, "");
             if maximo {
                 d.text(bx + blocos * TOTAL as i32 + 16, by + 6, 1, FOSFORO, "MAX");
             }
             for i in 0..TOTAL {
-                let aceso = (i as u8) < vol;
+                let aceso = i < vol;
                 let x = bx + i as i32 * blocos;
                 // o segmento: par de barras verticais (o jeito dos OSD de
                 // TV antiga — não um retângulo cheio)

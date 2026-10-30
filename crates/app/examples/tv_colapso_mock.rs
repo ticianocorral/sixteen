@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
 
     // --- 2. O queixo: grade de ventilação + bloom do bezel ---------------
     let path = out.join("chin.bmp");
-    cab.capture_shelf(BG, |d| tela_chin(d), &path)
+    cab.capture_shelf(BG, tela_chin, &path)
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     println!("{}", out.display());

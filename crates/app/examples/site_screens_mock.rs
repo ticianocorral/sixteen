@@ -7,6 +7,8 @@
 //! BMPs to /tmp/site-mocks/ (hero, inicial, ra, cart-NN frames). Convert to
 //! site/assets/ with `sips -s format png` and assemble the GIF with ffmpeg.
 
+#![allow(clippy::too_many_arguments)]
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -223,7 +225,7 @@ fn main() -> anyhow::Result<()> {
                 let (w, _h) = d.size();
                 let w = w as i32;
                 let dim = (150, 150, 158);
-                let txt = (230, 230, 235);
+                let _txt = (230, 230, 235);
                 let sel = (245, 245, 250, 255);
                 d.text(m, m - 12, 2, dim, "12 games");
                 // Busca no canto.
@@ -233,9 +235,9 @@ fn main() -> anyhow::Result<()> {
                 d.text(bx + 10, m - 6, 1, dim, "buscar...");
                 // Faixa de jogados recentemente.
                 d.text(m, 72, 1, dim, "jogados recentemente");
-                for i in 0..3 {
+                for (i, id) in covers_ids.iter().take(3).enumerate() {
                     let x = m + i as i32 * (160 + 14);
-                    d.image_fit(covers_ids[i], x, 100, 160, 120);
+                    d.image_fit(*id, x, 100, 160, 120);
                 }
                 // Grade principal, primeiro tile selecionado.
                 d.text(m, 262, 1, dim, "todos os jogos");
@@ -388,16 +390,7 @@ fn scene(w: u32, h: u32) -> Vec<u8> {
         }
     }
     // Herói: o tomate.
-    draw_sprite(
-        &mut px,
-        w,
-        h,
-        120,
-        h - 64 - 33,
-        3,
-        &tomato(),
-        &TOMATO_COLORS,
-    );
+    draw_sprite(&mut px, w, h, 120, h - 64 - 33, 3, &tomato(), TOMATO_COLORS);
     // HUD.
     hud_text(&mut px, w, 16, 12, "PONTOS 003200");
     hud_text(&mut px, w, w - 118, 12, "TOMATE 1");
@@ -444,7 +437,7 @@ fn draw_sprite(
             if ch == '.' {
                 continue;
             }
-            let Some((_, c)) = colors.iter().find(|(k, _)| k.chars().next() == Some(ch)) else {
+            let Some((_, c)) = colors.iter().find(|(k, _)| k.starts_with(ch)) else {
                 continue;
             };
             for yy in 0..s {
@@ -597,7 +590,7 @@ fn put_rgba(px: &mut [u8], w: u32, h: u32, x: i32, y: i32, c: (u8, u8, u8, u8)) 
 /// transparente.
 fn logo_image() -> Vec<u8> {
     let (w, h) = (LOGO_W as usize * 4, LOGO_H as usize);
-    let mut px = vec![0u8; w * h as usize];
+    let mut px = vec![0u8; w * h];
     let (w32, h32) = (LOGO_W, LOGO_H);
     let red = (200u8, 40u8, 40u8, 255u8);
     let green = (60u8, 140u8, 60u8, 255u8);

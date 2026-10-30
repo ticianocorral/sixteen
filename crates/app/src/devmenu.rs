@@ -223,13 +223,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
             let single = status.chars().count() as i32 * CELL;
             let status_y = (py + ph as i32).max(iy + ih as i32) + 18;
             if single <= w as i32 - 40 {
-                d.text(
-                    (w as i32 - single) / 2,
-                    status_y,
-                    1,
-                    status_color,
-                    &status,
-                );
+                d.text((w as i32 - single) / 2, status_y, 1, status_color, &status);
             } else {
                 d.text_wrapped(40, status_y, w - 80, 1, status_color, &status);
             }

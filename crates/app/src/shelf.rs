@@ -1063,14 +1063,7 @@ pub fn run(
     }
     let mut all = all_scanned;
 
-    let cover_dir = crate::dirs::assets_dir().join("cover");
-    let logo_dir = crate::dirs::assets_dir().join("logo");
-    let cartridge_dir = crate::dirs::assets_dir().join("cartridge");
-    let backcover_dir = crate::dirs::assets_dir().join("backcover");
-    // Never re-stat a game's art more than once per shelf visit — most games
-    // won't have any, and disk isn't free even if it's cheap.
-    let mut tried_cover: HashSet<String> = HashSet::new();
-    let art = ArtLoader::spawn();
+    let mut art = ShelfArt::new();
     // Back cover enlarged (plan revision: "ao clicar no back cover
     // possibilitar mostrar em tamanho maior"): Some = the "voltar" button's
     // screen-local rect — the zoom replaces the tube's content until
@@ -1101,9 +1094,6 @@ pub fn run(
     // O PDF do jogo focused, resolvido uma vez por jogo (fs por frame não).
     let manual_dir = crate::dirs::assets_dir().join("manual");
     let mut manual_paths: HashMap<String, Option<PathBuf>> = HashMap::new();
-    let mut tried_logo: HashSet<String> = HashSet::new();
-    let mut tried_cartridge: HashSet<String> = HashSet::new();
-    let mut tried_backcover: HashSet<String> = HashSet::new();
 
     let mut sel: usize = 0;
     let mut top_row: usize = 0;
@@ -1574,7 +1564,12 @@ pub fn run(
                                 view.get(sel)
                             };
                             if let Some(e) = picked {
-                                return Ok(pick_play(catalog, &logo_dir, &cartridge_dir, e));
+                                return Ok(pick_play(
+                                    catalog,
+                                    &art.logo_dir,
+                                    &art.cartridge_dir,
+                                    e,
+                                ));
                             }
                         }
                     }
@@ -1713,15 +1708,11 @@ pub fn run(
                                 if let Some(e) = picked {
                                     let bid = backcover_id(&e.rom.sha1);
                                     if cab.has_image(bid) {
-                                        if let Some(path) =
-                                            find_local_art(&backcover_dir, &e.rom.path)
-                                        {
-                                            if let Ok((w, h, rgba)) = decode_art_scaled(&path, 2048)
-                                            {
-                                                cab.set_image(bid, w, h, &rgba);
-                                                zoom_close = Some(bid);
-                                            }
-                                        }
+                                        // Abre já com a miniatura; a versão
+                                        // de 2048 px vem do worker e troca a
+                                        // textura quando fica pronta.
+                                        zoom_close = Some(bid);
+                                        art.request_zoom(bid, ArtKind::Backcover, e);
                                     }
                                 }
                             }
@@ -1808,15 +1799,11 @@ pub fn run(
                                 if let Some(e) = picked {
                                     let cid = cartridge_id(&e.rom.sha1);
                                     if cab.has_image(cid) {
-                                        if let Some(path) =
-                                            find_local_art(&cartridge_dir, &e.rom.path)
-                                        {
-                                            if let Ok((w, h, rgba)) = decode_art_scaled(&path, 2048)
-                                            {
-                                                cab.set_image(cid, w, h, &rgba);
-                                                zoom_close = Some(cid);
-                                            }
-                                        }
+                                        // Abre já com a miniatura; a versão
+                                        // de 2048 px vem do worker e troca a
+                                        // textura quando fica pronta.
+                                        zoom_close = Some(cid);
+                                        art.request_zoom(cid, ArtKind::Cartridge, e);
                                     }
                                 }
                             }
@@ -1869,7 +1856,12 @@ pub fn run(
                         {
                             if in_fav && i == fav_idx {
                                 if let Some(e) = favorites.get(i) {
-                                    return Ok(pick_play(catalog, &logo_dir, &cartridge_dir, e));
+                                    return Ok(pick_play(
+                                        catalog,
+                                        &art.logo_dir,
+                                        &art.cartridge_dir,
+                                        e,
+                                    ));
                                 }
                             } else {
                                 in_recent = false;
@@ -1887,7 +1879,12 @@ pub fn run(
                         {
                             if in_recent && i == recent_idx {
                                 if let Some(e) = recent.get(i) {
-                                    return Ok(pick_play(catalog, &logo_dir, &cartridge_dir, e));
+                                    return Ok(pick_play(
+                                        catalog,
+                                        &art.logo_dir,
+                                        &art.cartridge_dir,
+                                        e,
+                                    ));
                                 }
                             } else {
                                 in_fav = false;
@@ -1897,7 +1894,12 @@ pub fn run(
                         } else if let Some(i) = grid.tile_at(lx, ly, top_row, view.len()) {
                             if !in_recent && i == sel {
                                 if let Some(e) = view.get(i) {
-                                    return Ok(pick_play(catalog, &logo_dir, &cartridge_dir, e));
+                                    return Ok(pick_play(
+                                        catalog,
+                                        &art.logo_dir,
+                                        &art.cartridge_dir,
+                                        e,
+                                    ));
                                 }
                             } else {
                                 in_recent = false;
@@ -1918,72 +1920,21 @@ pub fn run(
             top_row = sel_row + 1 - grid.vis_rows;
         }
 
-        // Local art for whatever just scrolled into view — no network, no
-        // worker thread, so this happens inline, capped at ONE decode per
-        // frame: scrolling a full page fills over a dozen frames instead of
-        // hitching on dozens of JPEG decodes in a single one. Each sha1 is
-        // tried at most once per visit, whether or not a file turns up; a
-        // tile whose budget ran out simply waits for the next frame.
-        // O que o worker de artes já decodificou entra no cabinet; os
-        // tiles visíveis sem imagem só fazem o pedido (busca + decode fora
-        // da thread de UI). Pedidos com teto por frame: a fila anda na
-        // ordem da tela, os de cima primeiro.
+        // Artes do que está à vista: o que o worker já decodificou entra
+        // no cabinet; tiles sem imagem fazem o pedido — a grade com teto de
+        // 8 pedidos por frame (a fila anda na ordem da tela), as faixas de
+        // favoritos e recentes logo atrás.
         art.drain(cab);
-        let mut lookup_budget = 8usize;
-        for (i, entry) in view.iter().enumerate() {
-            if grid.cell_pos(i, top_row).is_none() {
-                continue;
-            }
-            let id = cover_id(&entry.rom.sha1);
-            if cab.has_image(id) {
-                continue;
-            }
-            if lookup_budget == 0 {
-                break;
-            }
-            if !tried_cover.insert(entry.rom.sha1.clone()) {
-                continue;
-            }
-            lookup_budget -= 1;
-            art.request(id, &cover_dir, &entry.rom.path);
-        }
-        // The favorites strip is outside the scroll window too — its own
-        // pass.
-        for (i, entry) in favorites
+        let grid_tiles = view
             .iter()
             .enumerate()
-            .skip(fav_scroll)
-            .take(strip_vis)
-        {
-            let id = cover_id(&entry.rom.sha1);
-            if cab.has_image(id) {
-                continue;
-            }
-            if !tried_cover.insert(entry.rom.sha1.clone()) {
-                continue;
-            }
-            art.request(id, &cover_dir, &entry.rom.path);
-            let _ = i;
-        }
-        // The recent strip sits outside the main grid's scroll window, so it
-        // needs its own pass — a recently-played game might not be among the
-        // rows currently visible below.
-        for (i, entry) in recent
-            .iter()
-            .enumerate()
-            .skip(recent_scroll)
-            .take(strip_vis)
-        {
-            let id = cover_id(&entry.rom.sha1);
-            if cab.has_image(id) {
-                continue;
-            }
-            if !tried_cover.insert(entry.rom.sha1.clone()) {
-                continue;
-            }
-            art.request(id, &cover_dir, &entry.rom.path);
-            let _ = i;
-        }
+            .filter(|(i, _)| grid.cell_pos(*i, top_row).is_some())
+            .map(|(_, e)| e);
+        art.request_covers(cab, grid_tiles, 8);
+        let favs_shown = favorites.iter().skip(fav_scroll).take(strip_vis);
+        art.request_covers(cab, favs_shown, usize::MAX);
+        let recent_shown = recent.iter().skip(recent_scroll).take(strip_vis);
+        art.request_covers(cab, recent_shown, usize::MAX);
 
         let focused: Option<&CatalogEntry> = if in_fav {
             favorites.get(fav_idx)
@@ -2020,22 +1971,7 @@ pub fn run(
             last_focus = focus_key;
         }
         if let Some(e) = focused {
-            // Logo, cartucho e contracapa do jogo focado: pedidos ao worker
-            // de artes (antes eram decodificados aqui, um por frame).
-            let wid = wheel_id(&e.rom.sha1);
-            if !cab.has_image(wid) && tried_logo.insert(e.rom.sha1.clone()) {
-                art.request(wid, &logo_dir, &e.rom.path);
-            }
-            let cid = cartridge_id(&e.rom.sha1);
-            if !cab.has_image(cid) && tried_cartridge.insert(e.rom.sha1.clone())
-            {
-                art.request(cid, &cartridge_dir, &e.rom.path);
-            }
-            let bid = backcover_id(&e.rom.sha1);
-            if !cab.has_image(bid) && tried_backcover.insert(e.rom.sha1.clone())
-            {
-                art.request(bid, &backcover_dir, &e.rom.path);
-            }
+            art.request_focus(cab, e);
         }
 
         // RA identification (plan fase 2): drain the in-flight reply, and
@@ -2072,10 +2008,9 @@ pub fn run(
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
         }
-        if !ra_completion_tried && opts.ra.is_some() {
+        if let (false, Some((user, web_key, _connect))) = (ra_completion_tried, opts.ra.clone()) {
             ra_completion_tried = true;
             let (tx, rx) = mpsc::channel();
-            let (user, web_key, _connect) = opts.ra.clone().unwrap();
             std::thread::spawn(move || {
                 let _ = tx.send(crate::ra::fetch_completion(&user, &web_key));
             });
@@ -2977,35 +2912,127 @@ fn draw_scrollbar(d: &mut Screen, grid: &GridLayout, view_len: usize, top_row: u
 /// both at >2x and keeps alpha for transparent logos).
 /// Decodificação das artes da estante fora da thread de UI: um JPEG de
 /// capa custa 10–40 ms, mais que o frame inteiro (16,6 ms) — decodificado
-/// no laço, cada capa nova engasgava a rolagem. O laço só pede (`request`)
-/// e, a cada frame, registra no cabinet o que já ficou pronto (`drain`).
-/// Busca no disco (`find_local_art`) também vai para cá. A thread termina
-/// sozinha quando o `ArtLoader` sai de escopo (o canal fecha).
-struct ArtLoader {
-    tx: mpsc::Sender<(u64, PathBuf, String)>,
-    rx: Receiver<(u64, Option<(u32, u32, Vec<u8>)>)>,
+/// no laço, cada capa nova engasgava a rolagem. O laço só pede e, a cada
+/// frame, registra no cabinet o que já ficou pronto (`drain`). A busca no
+/// disco (`find_local_art`) também vai para o worker. A thread termina
+/// sozinha quando o `ShelfArt` sai de escopo (o canal fecha).
+///
+/// Cada arte é tentada no máximo uma vez por visita à estante, achando
+/// arquivo ou não — a maioria dos jogos não tem, e disco não é de graça.
+struct ShelfArt {
+    tx: mpsc::Sender<ArtJob>,
+    rx: Receiver<(u64, Option<Decoded>)>,
+    cover_dir: PathBuf,
+    logo_dir: PathBuf,
+    cartridge_dir: PathBuf,
+    backcover_dir: PathBuf,
+    tried: HashSet<(ArtKind, String)>,
 }
 
-impl ArtLoader {
-    fn spawn() -> Self {
-        let (tx, jobs) = mpsc::channel::<(u64, PathBuf, String)>();
+/// Uma arte decodificada: largura, altura e os pixels RGBA.
+type Decoded = (u32, u32, Vec<u8>);
+
+/// Qual arte de um jogo — cada uma tem sua pasta em `assets/`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum ArtKind {
+    Cover,
+    Logo,
+    Cartridge,
+    Backcover,
+}
+
+/// Um pedido ao worker: a imagem `id`, a arte de `rom_path` em `dir`,
+/// reduzida para caber em `max` px.
+struct ArtJob {
+    id: u64,
+    dir: PathBuf,
+    rom_path: String,
+    max: u32,
+}
+
+impl ShelfArt {
+    fn new() -> Self {
+        let (tx, jobs) = mpsc::channel::<ArtJob>();
         let (done, rx) = mpsc::channel();
         let _ = std::thread::Builder::new()
             .name("shelf-art".into())
             .spawn(move || {
-                for (id, dir, rom_path) in jobs {
-                    let img = find_local_art(&dir, &rom_path).and_then(|p| decode_art(&p).ok());
-                    if done.send((id, img)).is_err() {
+                for job in jobs {
+                    let img = find_local_art(&job.dir, &job.rom_path)
+                        .and_then(|p| decode_art_scaled(&p, job.max).ok());
+                    if done.send((job.id, img)).is_err() {
                         break;
                     }
                 }
             });
-        Self { tx, rx }
+        let assets = crate::dirs::assets_dir();
+        Self {
+            tx,
+            rx,
+            cover_dir: assets.join("cover"),
+            logo_dir: assets.join("logo"),
+            cartridge_dir: assets.join("cartridge"),
+            backcover_dir: assets.join("backcover"),
+            tried: HashSet::new(),
+        }
     }
 
-    /// Pede a arte de `rom_path` em `dir` para a imagem `id`.
-    fn request(&self, id: u64, dir: &Path, rom_path: &str) {
-        let _ = self.tx.send((id, dir.to_path_buf(), rom_path.to_string()));
+    fn dir(&self, kind: ArtKind) -> &Path {
+        match kind {
+            ArtKind::Cover => &self.cover_dir,
+            ArtKind::Logo => &self.logo_dir,
+            ArtKind::Cartridge => &self.cartridge_dir,
+            ArtKind::Backcover => &self.backcover_dir,
+        }
+    }
+
+    fn send(&self, id: u64, kind: ArtKind, e: &CatalogEntry, max: u32) {
+        let _ = self.tx.send(ArtJob {
+            id,
+            dir: self.dir(kind).to_path_buf(),
+            rom_path: e.rom.path.clone(),
+            max,
+        });
+    }
+
+    /// Pede a miniatura (512 px) de `kind` para `e`, se a imagem ainda não
+    /// está no cabinet e não foi tentada nesta visita. `true` = pediu.
+    fn request(&mut self, cab: &Cabinet, id: u64, kind: ArtKind, e: &CatalogEntry) -> bool {
+        if cab.has_image(id) || !self.tried.insert((kind, e.rom.sha1.clone())) {
+            return false;
+        }
+        self.send(id, kind, e, 512);
+        true
+    }
+
+    /// As capas de `entries`, no máximo `cap` pedidos novos.
+    fn request_covers<'a>(
+        &mut self,
+        cab: &Cabinet,
+        entries: impl Iterator<Item = &'a CatalogEntry>,
+        cap: usize,
+    ) {
+        let mut left = cap;
+        for e in entries {
+            if left == 0 {
+                break;
+            }
+            if self.request(cab, cover_id(&e.rom.sha1), ArtKind::Cover, e) {
+                left -= 1;
+            }
+        }
+    }
+
+    /// Logo, cartucho e contracapa do jogo focado (o painel lateral).
+    fn request_focus(&mut self, cab: &Cabinet, e: &CatalogEntry) {
+        self.request(cab, wheel_id(&e.rom.sha1), ArtKind::Logo, e);
+        self.request(cab, cartridge_id(&e.rom.sha1), ArtKind::Cartridge, e);
+        self.request(cab, backcover_id(&e.rom.sha1), ArtKind::Backcover, e);
+    }
+
+    /// O zoom: a versão de 2048 px troca a miniatura quando chegar.
+    fn request_zoom(&self, id: u64, kind: ArtKind, e: &CatalogEntry) {
+        self.send(id, kind, e, 2048);
     }
 
     /// Registra no cabinet o que já foi decodificado — no máximo 4 por
@@ -3019,13 +3046,9 @@ impl ArtLoader {
     }
 }
 
-fn decode_art(path: &Path) -> Result<(u32, u32, Vec<u8>)> {
-    decode_art_scaled(path, 512)
-}
-
-/// Same decode, with an explicit size cap — the back cover's zoomed view
-/// re-decodes at full resolution so the enlargement stays crisp.
-pub(crate) fn decode_art_scaled(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>)> {
+/// Decode one art image, thumbnailed to fit `max` px (512 for the shelf
+/// and panel; 2048 for the zoomed view, so the enlargement stays crisp).
+pub(crate) fn decode_art_scaled(path: &Path, max: u32) -> Result<Decoded> {
     let img = image::open(path)?.thumbnail(max, max).to_rgba8();
     let (w, h) = img.dimensions();
     Ok((w, h, img.into_raw()))

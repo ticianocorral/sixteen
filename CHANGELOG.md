@@ -49,6 +49,18 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 - **Filtro NTSC lê o frame direto** — sem remontar ~57 mil pixels por
   frame antes do blit.
 
+### Interno
+- **`cabinet.rs` (8 mil linhas) dividido em módulos** — `geometry`
+  (proporções e malhas), `chrome` (mobília da TV), `chin` (queixo: RA,
+  OSD, placa), `panel_art`, `panel`, `text`, `controls` e `pause` (livro e
+  modais). Só mudança de lugar, sem mudança de comportamento.
+- **Estante: estado das artes num `ShelfArt`** — worker, pastas e o
+  "já tentei" de capa/logo/cartucho/contracapa num lugar só, com métodos
+  (`request_covers`, `request_focus`, `request_zoom`); o zoom de 2048 px
+  também vai pelo worker (abre na hora com a miniatura).
+- **Jogo: `FpsMeter` e `preview_modal`** extraídos do `run_game`.
+- **Clippy zerado** em todo o workspace (inclui os exemplos) e `cargo fmt`.
+
 ### Removido
 - **Livraria Retro (revistas) e Museu do Console (manuais do console)** —
   telas, botões e pastas `docs/magazines`/`docs/console-docs` saem do app

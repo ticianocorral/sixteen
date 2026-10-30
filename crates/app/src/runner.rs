@@ -392,6 +392,45 @@ fn command_rows(
     rows
 }
 
+/// O painel de desempenho do modo dev: fps medido em janelas de 1 s;
+/// temperatura/RAM lidas no máximo a cada 2 s, e só com o painel ligado.
+struct FpsMeter {
+    window_start: Instant,
+    window_frames: u32,
+    sys_next: Instant,
+}
+
+impl FpsMeter {
+    fn new() -> Self {
+        Self {
+            window_start: Instant::now(),
+            window_frames: 0,
+            sys_next: Instant::now(),
+        }
+    }
+
+    /// Conta um frame apresentado; fecha a janela de 1 s e alimenta o
+    /// painel quando ela vence.
+    fn frame(&mut self, cab: &mut Cabinet) {
+        self.window_frames += 1;
+        let window = self.window_start.elapsed();
+        if window < Duration::from_secs(1) {
+            return;
+        }
+        let fps = self.window_frames as f64 / window.as_secs_f64();
+        self.window_start = Instant::now();
+        self.window_frames = 0;
+        if cab.perf_overlay() && Instant::now() >= self.sys_next {
+            self.sys_next = Instant::now() + Duration::from_secs(2);
+            cab.set_perf_readout(
+                fps.round() as u32,
+                sixteen_platform::sysinfo::cpu_temp_celsius(),
+                sixteen_platform::sysinfo::process_ram_mb(),
+            );
+        }
+    }
+}
+
 /// Write battery SRAM to `path` if it changed since the last flush.
 fn flush_sram(path: &Path, last: &mut Option<Vec<u8>>, cur: Option<Vec<u8>>) {
     if let Some(cur) = cur {
@@ -1097,6 +1136,82 @@ fn show_text_slot(cab: &mut Cabinet, notes_dir: &Path, title: &str, slot: u8, me
     cab.set_pause_text_page((slot - 1) as usize, pinned, content.as_deref());
 }
 
+/// Headless `--debug-shot-modal`: monta um dos modais (salvar, carregar,
+/// print, cheats e variantes) em vez do gameplay, para a captura.
+fn preview_modal(
+    cab: &mut Cabinet,
+    kind: &str,
+    spec: &GameSpec,
+    title: &str,
+    notes_meta: &NotesMeta,
+    cheat_defs: &[sixteen_domain::CheatDef],
+    cheat_state: &[bool],
+) {
+    match kind {
+        "save" => cab.set_modal(
+            tr!("Save state", "Salvar estado"),
+            &save_slot_rows(&spec.save_dir, title),
+        ),
+        "load" => cab.set_modal(
+            tr!("Load state", "Carregar estado"),
+            &load_slot_rows(&spec.save_dir, title),
+        ),
+        "print" => cab.set_modal(
+            tr!("Where to save the screenshot?", "Onde salvar o print?"),
+            &print_slot_rows(&spec.notes_dir, title, notes_meta),
+        ),
+        // Not a real step on its own (there's no row list once
+        // naming starts) — previews the draft view `NoteEdit::
+        // PrintName` switches to after a slot's picked.
+        "print-name" => {
+            cab.set_modal(
+                tr!("Where to save the screenshot?", "Onde salvar o print?"),
+                &[],
+            );
+            cab.set_modal_draft(
+                Some(""),
+                NoteEdit::PrintName(1).limit(),
+                NoteEdit::PrintName(1).heading(),
+            );
+        }
+        "cheats" => {
+            cab.set_modal(
+                "Cheats",
+                &cheat_modal_rows(&cheat_rows(cheat_defs, cheat_state)),
+            );
+            cab.set_modal_searchable(true);
+        }
+        // Previews the search box already filtered, without a live
+        // GUI to type into it — the filter word is fixed (dev/
+        // testing only, not configurable from the CLI).
+        "cheats-search" => {
+            cab.set_modal(
+                "Cheats",
+                &cheat_modal_rows(&cheat_rows(cheat_defs, cheat_state)),
+            );
+            cab.set_modal_searchable(true);
+            cab.set_modal_search("infinit");
+        }
+        // Previews the on/off state filter, forcing the first
+        // cheat on first so "Ligados" has something to show
+        // (dev/testing only — no CLI way to pick which).
+        "cheats-filtered" => {
+            let mut state = cheat_state.to_vec();
+            if let Some(first) = state.first_mut() {
+                *first = true;
+            }
+            cab.set_modal("Cheats", &cheat_modal_rows(&cheat_rows(cheat_defs, &state)));
+            cab.set_modal_searchable(true);
+            cab.set_modal_filter(Some(true));
+        }
+        other => {
+            log::warn!(
+                "--debug-shot-modal {other}: unknown, expected save/load/print/print-name/cheats/cheats-search/cheats-filtered"
+            )
+        }
+    }
+}
+
 /// Load the core + ROM and run until the player leaves, drawing into `cab` (the
 /// one persistent window). `plat` and `cab` both outlive the call so `sixteen`
 /// can reuse them for the next screen.
@@ -1262,7 +1377,6 @@ pub fn run_game(
     // The command legend's last drawn signature (a "(feito!)" flash active?
     // all print slots pinned?) — `None` forces the first frame to draw it.
     let mut prev_sig: Option<(bool, bool)> = None;
-    let _ = &prev_sig;
     let commands = command_rows(
         &flash,
         !cheat_defs.is_empty(),
@@ -1347,72 +1461,15 @@ pub fn run_game(
     // as the pause book above, just picking which modal by name.
     if let Some(kind) = &spec.debug_shot_modal {
         if let Some((path, _)) = &spec.shot {
-            match kind.as_str() {
-                "save" => cab.set_modal(
-                    tr!("Save state", "Salvar estado"),
-                    &save_slot_rows(&spec.save_dir, &title),
-                ),
-                "load" => cab.set_modal(
-                    tr!("Load state", "Carregar estado"),
-                    &load_slot_rows(&spec.save_dir, &title),
-                ),
-                "print" => cab.set_modal(
-                    tr!("Where to save the screenshot?", "Onde salvar o print?"),
-                    &print_slot_rows(&spec.notes_dir, &title, &notes_meta),
-                ),
-                // Not a real step on its own (there's no row list once
-                // naming starts) — previews the draft view `NoteEdit::
-                // PrintName` switches to after a slot's picked.
-                "print-name" => {
-                    cab.set_modal(
-                        tr!("Where to save the screenshot?", "Onde salvar o print?"),
-                        &[],
-                    );
-                    cab.set_modal_draft(
-                        Some(""),
-                        NoteEdit::PrintName(1).limit(),
-                        NoteEdit::PrintName(1).heading(),
-                    );
-                }
-                "cheats" => {
-                    cab.set_modal(
-                        "Cheats",
-                        &cheat_modal_rows(&cheat_rows(&cheat_defs, &cheat_state)),
-                    );
-                    cab.set_modal_searchable(true);
-                }
-                // Previews the search box already filtered, without a live
-                // GUI to type into it — the filter word is fixed (dev/
-                // testing only, not configurable from the CLI).
-                "cheats-search" => {
-                    cab.set_modal(
-                        "Cheats",
-                        &cheat_modal_rows(&cheat_rows(&cheat_defs, &cheat_state)),
-                    );
-                    cab.set_modal_searchable(true);
-                    cab.set_modal_search("infinit");
-                }
-                // Previews the on/off state filter, forcing the first
-                // cheat on first so "Ligados" has something to show
-                // (dev/testing only — no CLI way to pick which).
-                "cheats-filtered" => {
-                    let mut state = cheat_state.clone();
-                    if let Some(first) = state.first_mut() {
-                        *first = true;
-                    }
-                    cab.set_modal(
-                        "Cheats",
-                        &cheat_modal_rows(&cheat_rows(&cheat_defs, &state)),
-                    );
-                    cab.set_modal_searchable(true);
-                    cab.set_modal_filter(Some(true));
-                }
-                other => {
-                    log::warn!(
-                        "--debug-shot-modal {other}: unknown, expected save/load/print/print-name/cheats/cheats-search/cheats-filtered"
-                    )
-                }
-            }
+            preview_modal(
+                cab,
+                kind,
+                spec,
+                &title,
+                &notes_meta,
+                &cheat_defs,
+                &cheat_state,
+            );
             cab.capture_modal_bmp(path)
                 .map_err(|e| anyhow!(e.to_string()))?;
             log::info!("wrote {} (modal preview: {kind})", path.display());
@@ -1454,11 +1511,7 @@ pub fn run_game(
     let frame_time = Duration::from_secs_f64(1.0 / av.fps.max(1.0));
     let mut next = Instant::now();
     let mut frames: u32 = 0;
-    // Painel de desempenho do modo dev: fps medido em janelas de 1 s;
-    // temperatura/RAM lidas no máximo a cada 2 s (só com o painel ligado).
-    let mut fps_window_start = Instant::now();
-    let mut fps_window_frames: u32 = 0;
-    let mut sys_next = Instant::now();
+    let mut fps_meter = FpsMeter::new();
     let mut last_dims = (0u32, 0u32);
     // Don't let the audio queue run more than ~0.15 s ahead (latency creep).
     let audio_cap = (av.sample_rate / 6.0) as usize;
@@ -2333,21 +2386,7 @@ pub fn run_game(
                 let aspect = core.av_info().aspect_ratio;
                 cab.set_session_time(live_session_time(powered_elapsed, powered_since));
                 cab.present_frame(&fref, aspect);
-                fps_window_frames += 1;
-                let window = fps_window_start.elapsed();
-                if window >= Duration::from_secs(1) {
-                    let fps = fps_window_frames as f64 / window.as_secs_f64();
-                    fps_window_start = Instant::now();
-                    fps_window_frames = 0;
-                    if cab.perf_overlay() && Instant::now() >= sys_next {
-                        sys_next = Instant::now() + Duration::from_secs(2);
-                        cab.set_perf_readout(
-                            fps.round() as u32,
-                            sixteen_platform::sysinfo::cpu_temp_celsius(),
-                            sixteen_platform::sysinfo::process_ram_mb(),
-                        );
-                    }
-                }
+                fps_meter.frame(cab);
 
                 if let Some(slot) = note_request.take() {
                     match save_note_image(&spec.notes_dir, &title, slot, &frame) {
