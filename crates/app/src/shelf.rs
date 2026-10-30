@@ -20,7 +20,8 @@ use anyhow::Result;
 use sixteen_domain::{Catalog, CatalogEntry, Order};
 use sixteen_platform::tr;
 use sixteen_platform::{
-    Cabinet, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton, ShelfPanelInfo,
+    Cabinet, MenuInput, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton,
+    ShelfPanelInfo,
 };
 
 use crate::idle;
@@ -1049,6 +1050,577 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
     }
 }
 
+/// O estado do RetroAchievements na estante: identificação por jogo
+/// (um hash+fetch em voo por vez, cada jogo tentado uma vez por visita —
+/// o cache em disco deixa as próximas visitas instantâneas), a linha
+/// "X de Y (Z%)" do painel, o progresso do perfil e os badges.
+struct ShelfRa {
+    /// sha1 → jogo identificado (`None` = o servidor não conhece / sem set).
+    games: HashMap<String, Option<crate::ra::RaGame>>,
+    tried: HashSet<String>,
+    worker: Option<Receiver<Result<Option<crate::ra::RaGame>, String>>>,
+    /// O sha1 do pedido em voo.
+    pending: String,
+    /// O "X de Y (Z%)" por jogo, calculado uma vez por foco (custa o hash
+    /// da ROM) e refeito quando o progresso do perfil chega.
+    tally: HashMap<String, Option<(usize, usize, Option<crate::ra::Award>)>>,
+    /// sha1 → hash RA, guardado pela identificação para o painel não
+    /// refazer o hash da ROM a cada frame.
+    hashes: HashMap<String, String>,
+    /// Progresso do perfil (o substituto do GetUserUnlocks): uma chamada
+    /// por visita traz as conquistas ganhas fora deste app.
+    completion: Option<HashMap<u64, crate::ra::CompletionEntry>>,
+    completion_tried: bool,
+    completion_worker: Option<Receiver<Result<HashMap<u64, crate::ra::CompletionEntry>, String>>>,
+    /// Badges já registrados como textura (nome → id da imagem).
+    badge_ids: HashMap<String, u64>,
+    badge_tried: HashSet<String>,
+    /// Próxima varredura do disco atrás de badges que faltam — 4×/s, não a
+    /// cada frame (era um stat por badge ausente a 60 Hz).
+    badge_scan_next: Instant,
+    /// Earned do servidor para os [x] da lista (uma tentativa por jogo por
+    /// visita): o worker une no arquivo local e devolve o set resultante.
+    earned_worker: Option<Receiver<(String, Option<crate::ra::EarnedMap>)>>,
+    earned_tried: HashSet<String>,
+}
+
+impl ShelfRa {
+    fn new() -> Self {
+        Self {
+            games: HashMap::new(),
+            tried: HashSet::new(),
+            worker: None,
+            pending: String::new(),
+            tally: HashMap::new(),
+            hashes: HashMap::new(),
+            completion: None,
+            completion_tried: false,
+            completion_worker: None,
+            badge_ids: HashMap::new(),
+            badge_tried: HashSet::new(),
+            badge_scan_next: Instant::now(),
+            earned_worker: None,
+            earned_tried: HashSet::new(),
+        }
+    }
+
+    /// Um frame do RA na estante: recolhe as respostas dos workers
+    /// (identificação, progresso do perfil, earned), registra badges que já
+    /// estão no disco e dispara a identificação do jogo focado.
+    fn poll(
+        &mut self,
+        cab: &mut Cabinet,
+        ach: &mut AchView,
+        account: Option<&(String, String, String)>,
+        focused: Option<&CatalogEntry>,
+    ) {
+        // RA identification (plan fase 2): drain the in-flight reply, and
+        // kick the next one for the focused game when the account is on.
+        if let Some(rx) = &self.worker {
+            match rx.try_recv() {
+                Ok(Ok(g)) => {
+                    self.games.insert(self.pending.clone(), g);
+                    self.worker = None;
+                }
+                Ok(Err(e)) => {
+                    log::info!("ra identify {}: {e}", self.pending);
+                    self.games.insert(self.pending.clone(), None);
+                    self.worker = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.worker = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        if let Some(rx) = &self.completion_worker {
+            match rx.try_recv() {
+                Ok(Ok(map)) => {
+                    log::info!("ra: progresso do perfil carregado ({} jogos)", map.len());
+                    self.completion = Some(map);
+                    // Tallys já montados nasceram sem o servidor — refazer.
+                    self.tally.clear();
+                    self.completion_worker = None;
+                }
+                Ok(Err(e)) => {
+                    log::info!("ra completion: {e}");
+                    self.completion_worker = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.completion_worker = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        if let (false, Some((user, web_key, _connect))) = (self.completion_tried, account.cloned())
+        {
+            self.completion_tried = true;
+            let (tx, rx) = mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(crate::ra::fetch_completion(&user, &web_key));
+            });
+            self.completion_worker = Some(rx);
+        }
+        // Earned do servidor chegando: o set já foi unido no disco — a lista
+        // aberta deste jogo ganha os [x] (e o "X/Y" do cabeçalho) na hora.
+        if let Some(rx) = &self.earned_worker {
+            match rx.try_recv() {
+                Ok((hash, Some(ids))) => {
+                    if ach.hash.as_deref() == Some(hash.as_str()) {
+                        if let Some(list) = ach.data.as_mut() {
+                            list.earned = ids;
+                        }
+                    }
+                    self.earned_worker = None;
+                }
+                Ok((hash, None)) => {
+                    log::info!("ra earned {hash}: sem ids do servidor");
+                    self.earned_worker = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.earned_worker = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        // Badges do jogo aberto que já estão no disco viram texturas — umas
+        // poucas por frame para o primeiro carregamento não engasgar. O
+        // prefetch continua baixando em background: na medida que os PNGs
+        // aparecem, os badges entram na lista (de qualquer jogo aberto).
+        if ach.open && Instant::now() >= self.badge_scan_next {
+            self.badge_scan_next = Instant::now() + Duration::from_millis(250);
+            if let Some(list) = ach.data.as_ref() {
+                let mut novos = 0;
+                for a in &list.achievements {
+                    if novos >= 4 {
+                        // Ainda há badges no disco para registrar: a
+                        // próxima leva sai no frame seguinte.
+                        self.badge_scan_next = Instant::now();
+                        break;
+                    }
+                    if self.badge_ids.contains_key(&a.badge) {
+                        continue;
+                    }
+                    if let Some(path) = crate::ra::badge_path(&a.badge) {
+                        if let Ok(img) = image::open(&path).map(|i| i.to_rgba8()) {
+                            let id = badge_image_id(&a.badge);
+                            cab.set_image(id, img.width(), img.height(), img.as_raw());
+                            self.badge_ids.insert(a.badge.clone(), id);
+                            novos += 1;
+                        }
+                    }
+                }
+            }
+        }
+        if self.worker.is_none() {
+            if let (Some((user, web_key, connect)), Some(e)) = (account, focused) {
+                let sha1 = e.rom.sha1.clone();
+                if !self.tried.contains(&sha1) {
+                    self.tried.insert(sha1.clone());
+                    match crate::ra::hash_rom(std::path::Path::new(&e.rom.path)) {
+                        Err(err) => {
+                            log::info!("ra hash {}: {err}", e.rom.path);
+                            self.games.insert(sha1, None);
+                        }
+                        Ok(hash) => {
+                            self.hashes.insert(sha1.clone(), hash.clone());
+                            if let Some(g) = crate::ra::cached_game(&hash) {
+                                self.games.insert(sha1, Some(g));
+                            } else if crate::ra::is_cached_unknown(&hash) {
+                                self.games.insert(sha1, None);
+                            } else {
+                                let (tx, rx) = mpsc::channel();
+                                let (user, web_key, connect) =
+                                    (user.clone(), web_key.clone(), connect.clone());
+                                std::thread::spawn(move || {
+                                    let _ = tx.send(crate::ra::fetch_game(
+                                        &user, &web_key, &connect, &hash,
+                                    ));
+                                });
+                                self.worker = Some(rx);
+                                self.pending = sha1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A lista de conquistas dentro da TV: aberta ou não, a rolagem, os dados
+/// (carregados uma vez por abertura), o hash RA do jogo aberto (para o
+/// earned do servidor casar com a lista) e o rect do botão "voltar".
+#[derive(Default)]
+struct AchView {
+    open: bool,
+    top: usize,
+    data: Option<crate::ra::ShelfAchievements>,
+    hash: Option<String>,
+    voltar: (i32, i32, u32, u32),
+}
+
+impl AchView {
+    /// A lista dona do tubo: d-pad/roda rolam, Back ou "voltar" fecha.
+    fn handle_input(&mut self, cab: &mut Cabinet, m: &MenuInput) -> AchInput {
+        let (_, sh) = cab.shelf_screen_size();
+        let row_h = 22;
+        let visible = ((sh as i32 - MARGIN * 2 - HEADER_H - 60) / row_h).max(1) as usize;
+        let len = self.data.as_ref().map_or(0, |d| d.achievements.len());
+        for nav in &m.nav {
+            match nav {
+                MenuNav::Up | MenuNav::PageUp => self.top = self.top.saturating_sub(1),
+                MenuNav::Down | MenuNav::PageDown => {
+                    if self.top + visible < len {
+                        self.top += 1;
+                    }
+                }
+                MenuNav::Home => self.top = 0,
+                MenuNav::End => self.top = len.saturating_sub(visible),
+                MenuNav::Back => self.open = false,
+                _ => {}
+            }
+        }
+        if let Some((x, y)) = m.click {
+            let (ox, oy) = cab.window_to_output(x, y);
+            if cab.hit_close_button(ox, oy) {
+                return AchInput::Quit;
+            }
+            if cab.hit_minimize_button(ox, oy) {
+                cab.minimize();
+                return AchInput::Minimized;
+            }
+            if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
+                if in_rect(lx, ly, self.voltar) {
+                    self.open = false;
+                }
+            }
+        }
+        AchInput::Stay
+    }
+}
+
+/// O que o input da lista de conquistas pede ao laço da estante.
+enum AchInput {
+    Stay,
+    Minimized,
+    Quit,
+}
+
+/// O manual em PDF aberto na TV: o worker decodifica as páginas sob
+/// demanda; o estado guarda o pedido em voo para não repetir.
+struct ManualState {
+    sha1: String,
+    pages: usize,
+    page: usize,
+    requested: HashSet<usize>,
+}
+
+/// Os manuais na estante: o leitor aberto, os workers vivos (preview da
+/// 1ª página por jogo + o leitor), a contagem de páginas por jogo, os
+/// botões do frame anterior e o PDF de cada jogo (resolvido uma vez).
+struct ShelfManual {
+    reader: Option<ManualState>,
+    channels: Vec<Receiver<crate::manual::ManualEv>>,
+    tx: Option<mpsc::Sender<usize>>,
+    pages: HashMap<String, usize>,
+    preview_tried: HashSet<String>,
+    rects: (ViewBtn, ViewBtn, ViewBtn),
+    dir: PathBuf,
+    paths: HashMap<String, Option<PathBuf>>,
+}
+
+impl ShelfManual {
+    /// O leitor dono do tubo: ‹/› viram página (os rects vieram do frame
+    /// anterior), voltar/Back fecha.
+    fn handle_input(&mut self, cab: &mut Cabinet, m: &MenuInput) {
+        for nav in m.nav.iter() {
+            if let Some(m) = self.reader.as_mut() {
+                match nav {
+                    MenuNav::Left => m.page = m.page.saturating_sub(1).max(1),
+                    MenuNav::Right if m.page < m.pages => m.page += 1,
+                    MenuNav::Back => {
+                        self.reader = None;
+                        self.tx = None;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if self.reader.is_some() {
+            if let Some((x, y)) = m.click {
+                let (ox, oy) = cab.window_to_output(x, y);
+                if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
+                    let (prev, next, voltar) = self.rects;
+                    if in_rect(lx, ly, prev) {
+                        if let Some(mm) = self.reader.as_mut() {
+                            mm.page = mm.page.saturating_sub(1).max(1);
+                        }
+                    } else if in_rect(lx, ly, next) {
+                        if let Some(mm) = self.reader.as_mut() {
+                            if mm.page < mm.pages {
+                                mm.page += 1;
+                            }
+                        }
+                    } else if in_rect(lx, ly, voltar) {
+                        self.reader = None;
+                        self.tx = None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Um frame dos manuais: eventos dos workers (contagem ao abrir e
+    /// páginas renderizadas viram texturas) e o pedido da página corrente e
+    /// da seguinte assim que faltam.
+    fn poll(&mut self, cab: &mut Cabinet) {
+        // Manual (plan revision): eventos do worker — contagem ao abrir e
+        // páginas renderizadas viram texturas; a página corrente (e a
+        // seguinte, de brincadeira) são pedidas assim que faltam.
+        let mut live_channels = Vec::with_capacity(self.channels.len());
+        for rx in self.channels.drain(..) {
+            match rx.try_recv() {
+                Ok(crate::manual::ManualEv::Ready { sha1, pages }) => {
+                    self.pages.insert(sha1.clone(), pages);
+                    if let Some(m) = self.reader.as_mut() {
+                        if m.sha1 == sha1 {
+                            m.pages = pages;
+                        }
+                    }
+                    live_channels.push(rx);
+                }
+                Ok(crate::manual::ManualEv::Page {
+                    sha1,
+                    page,
+                    w,
+                    h,
+                    rgba,
+                }) => {
+                    // A textura é registrada SEMPRE (preview incluído) — o
+                    // registro anterior dependia do leitor estar aberto e
+                    // descartava a página do preview (plan revision: "a
+                    // primeira pgina nao aparece no painel").
+                    if w > 0 {
+                        cab.set_image(manual_page_id(&sha1, page), w, h, &rgba);
+                    }
+                    if let Some(m) = self.reader.as_mut() {
+                        if m.sha1 == sha1 {
+                            m.requested.insert(page);
+                        }
+                    }
+                    live_channels.push(rx);
+                }
+                // O worker morreu (fechou sem página nenhuma) — sem canal.
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => live_channels.push(rx),
+            }
+        }
+        self.channels = live_channels;
+        if let (Some(m), Some(tx)) = (self.reader.as_mut(), self.tx.as_ref()) {
+            if m.pages > 0 && !m.requested.contains(&m.page) {
+                m.requested.insert(m.page);
+                let _ = tx.send(m.page);
+            }
+            let next_page = m.page + 1;
+            if next_page <= m.pages && !m.requested.contains(&next_page) {
+                m.requested.insert(next_page);
+                let _ = tx.send(next_page);
+            }
+        }
+    }
+}
+
+impl Default for ShelfManual {
+    fn default() -> Self {
+        Self {
+            reader: None,
+            channels: Vec::new(),
+            tx: None,
+            pages: HashMap::new(),
+            preview_tried: HashSet::new(),
+            rects: ((0, 0, 1, 1), (0, 0, 1, 1), (0, 0, 1, 1)),
+            dir: crate::dirs::assets_dir().join("manual"),
+            paths: HashMap::new(),
+        }
+    }
+}
+
+/// O painel lateral do jogo focado: logo/cartucho/contracapa já
+/// carregados, lançamento e infos da tabela embutida, o "X de Y (Z%)" e a
+/// medalha do RA, o tempo de jogo, IGDB, HowLongToBeat e o preview do
+/// manual (disparado uma vez por jogo).
+fn focused_panel_info(
+    cab: &mut Cabinet,
+    e: &CatalogEntry,
+    ra: &mut ShelfRa,
+    man: &mut ShelfManual,
+    section: PanelSection,
+    scroll: usize,
+) -> ShelfPanelInfo {
+    let wid = wheel_id(&e.rom.sha1);
+    let cid = cartridge_id(&e.rom.sha1);
+    let bid = backcover_id(&e.rom.sha1);
+    let save_title = crate::runner::rom_title(Path::new(&e.rom.path));
+    let playtime = crate::runner::total_playtime_secs(&crate::dirs::saves_dir(), &save_title);
+    // The DAT's year, if it had one, moves into its own "release"
+    // slot (plan revision) instead of sitting in the generic
+    // info list alongside publisher/category/description.
+    // A tabela única embutida (crc → tudo): lançamento,
+    // editora, região e nota da IGDB — sem DAT, sem rede.
+    let infos = sixteen_domain::infos::lookup(&e.rom.crc32);
+    let mut info: Vec<(String, String)> = Vec::new();
+    if let Some(i) = &infos {
+        // o lançamento vai pelo campo `release` do painel
+        if let Some(editora) = &i.publisher {
+            info.push((tr!("publisher", "editora").to_string(), editora.clone()));
+        }
+        if let Some(regiao) = &i.region {
+            if regiao != "outra" {
+                info.push((tr!("region", "região").to_string(), regiao.clone()));
+            }
+        }
+        if let Some(critica) = &i.nota_critica {
+            if !critica.is_empty() {
+                info.push((tr!("rating", "nota (crítica)").to_string(), critica.clone()));
+            }
+        }
+    }
+    let release = infos.as_ref().and_then(|i| i.year.clone());
+    let mut award_img: Option<u64> = None;
+    if let Some(Some(_)) = ra.games.get(&e.rom.sha1) {
+        // "30 de 58 (52%)" — o tally custa um hash de ROM inteiro,
+        // então fica cacheado por visita (e refresco quando o
+        // completion progress do servidor chega).
+        let tally = *ra.tally.entry(e.rom.sha1.clone()).or_insert_with(|| {
+            ra.hashes
+                .get(&e.rom.sha1)
+                .and_then(|h| crate::ra::tally_from_cache(h, ra.completion.as_ref()))
+        });
+        // A medalha de prêmio do RA desenhada ao lado do número
+        // da linha de conquistas (pixel-art gerada por
+        // `medal_rgba`, uma textura por variante).
+        if let Some((earned, total, award)) = tally {
+            let pct = (earned * 100 + total / 2).checked_div(total).unwrap_or(0);
+            info.push((
+                tr!("achievements", "conquistas").to_string(),
+                tr!(
+                    format!("{earned} of {total} ({pct}%)"),
+                    format!("{earned} de {total} ({pct}%)")
+                ),
+            ));
+            // "zerado (softcore)" / "mastered" — o prêmio em
+            // palavras, junto das infos (plan revision).
+            if let Some(a) = award {
+                info.push(("status".to_string(), a.label().to_string()));
+            }
+            if let Some(medal) = award.map(|a| a.medal()) {
+                let id = crate::ra::medal_image_id(medal);
+                if !cab.has_image(id) {
+                    let (w, h, rgba) = crate::ra::medal_rgba(medal);
+                    cab.set_image(id, w, h, &rgba);
+                }
+                award_img = Some(id);
+            }
+        }
+        // Os badges do set já baixando em background — a notificação
+        // e a lista da estante os encontram em cache na hora.
+        if ra.badge_tried.insert(e.rom.sha1.clone()) {
+            crate::ra::prefetch_badges(std::path::Path::new(&e.rom.path));
+        }
+    }
+    info.extend(game_info_lines(e, playtime));
+    // O bloco HowLongToBeat no fim da aba — as 4 barras do card
+    // do site, tempos da tabela embutida por CRC32 (nada de
+    // rede); jogo fora da tabela não ganha bloco nenhum.
+    // A seção de nota da IGDB + o HowLongToBeat, ambos da
+    // tabela única — o HLTB fecha o painel.
+    let igdb = infos
+        .as_ref()
+        .and_then(|i| i.nota.clone())
+        .filter(|nota| !nota.is_empty())
+        .map(|nota| sixteen_platform::IgdbSection {
+            icon: igdb_icon_registered(cab),
+            nota: format!("{nota} / 100"),
+        });
+    let hltb = infos
+        .as_ref()
+        .map(|i| hltb_bars(i, hltb_icon_registered(cab)));
+    let manual_path = man
+        .paths
+        .entry(e.rom.sha1.clone())
+        .or_insert_with(|| find_local_manual(&man.dir, &e.rom.path))
+        .clone();
+    // Preview: contagem + primeira página decodificadas uma vez
+    // por jogo — a aba manual as mostra como as artes mostram
+    // capa/cartucho (plan revision).
+    if let Some(preview_path) = &manual_path {
+        if man.preview_tried.insert(e.rom.sha1.clone()) {
+            let (ev_tx, ev_rx) = mpsc::channel();
+            let preview_path = preview_path.clone();
+            let preview_sha1 = e.rom.sha1.clone();
+            std::thread::spawn(move || {
+                let pages = crate::manual::page_count(&preview_path).unwrap_or(0);
+                let _ = ev_tx.send(crate::manual::ManualEv::Ready {
+                    sha1: preview_sha1.clone(),
+                    pages,
+                });
+                if let Ok(Some(img)) = crate::manual::render_page(&preview_path, 1, 512) {
+                    let _ = ev_tx.send(crate::manual::ManualEv::Page {
+                        sha1: preview_sha1.clone(),
+                        page: 1,
+                        w: img.w,
+                        h: img.h,
+                        rgba: img.rgba,
+                    });
+                }
+            });
+            man.channels.push(ev_rx);
+        }
+    }
+    let ra_state = ra.games.get(&e.rom.sha1);
+    ShelfPanelInfo {
+        title: e.title().into_owned(),
+        logo_img: cab.has_image(wid).then_some(wid),
+        cartridge_img: cab.has_image(cid).then_some(cid),
+        backcover_img: cab.has_image(bid).then_some(bid),
+        release,
+        info,
+        section,
+        scroll,
+        favorite: Some(e.rom.favorite),
+        // Identificado = botão desenhado; hash marcado "versão
+        // não suportada" = botão desativado com o motivo
+        // (plan revision).
+        achievements: ra_state.is_some_and(|g| g.is_some()),
+        achievements_reason: ra_state
+            .and_then(|g| g.as_ref())
+            .filter(|g| g.unsupported)
+            .map(|_| tr!("unsupported version", "versão sem suporte").to_string()),
+        manual_first_page: manual_path
+            .is_some()
+            .then(|| manual_page_id(&e.rom.sha1, 1)),
+        award_img,
+        igdb,
+        hltb,
+    }
+}
+
+/// O painel quando não há jogo nenhum na estante.
+fn empty_panel_info() -> ShelfPanelInfo {
+    ShelfPanelInfo {
+        title: tr!("no games found", "nenhum jogo encontrado").to_string(),
+        logo_img: None,
+        cartridge_img: None,
+        backcover_img: None,
+        release: None,
+        info: Vec::new(),
+        section: PanelSection::Informacoes,
+        scroll: 0,
+        favorite: None,
+        achievements: false,
+        achievements_reason: None,
+        manual_first_page: None,
+        award_img: None,
+        igdb: None,
+        hltb: None,
+    }
+}
+
 /// Show the shelf in `cab` (the one persistent window) until the player picks a
 /// game or cancels. `plat` and `cab` both outlive the call.
 pub fn run(
@@ -1076,24 +1648,10 @@ pub fn run(
     // O manual em PDF aberto na TV (plan revision) — worker decodifica as
     // páginas sob demanda; o estado guarda o pedido em voo para não
     // repetir. `manual_rects` são os botões do frame anterior.
-    struct ManualState {
-        sha1: String,
-        pages: usize,
-        page: usize,
-        requested: HashSet<usize>,
-    }
-    let mut manual: Option<ManualState> = None;
     // Vários workers podem estar vivos (preview da 1ª página por jogo +
     // o leitor aberto); todos falam ManualEv.
-    let mut manual_channels: Vec<Receiver<crate::manual::ManualEv>> = Vec::new();
-    let mut manual_tx: Option<std::sync::mpsc::Sender<usize>> = None;
     // Contagem de páginas por jogo (do preview) — o leitor nasce com ela.
-    let mut manual_pages: HashMap<String, usize> = HashMap::new();
-    let mut manual_preview_tried: HashSet<String> = HashSet::new();
-    let mut manual_rects: (ViewBtn, ViewBtn, ViewBtn) = ((0, 0, 1, 1), (0, 0, 1, 1), (0, 0, 1, 1));
     // O PDF do jogo focused, resolvido uma vez por jogo (fs por frame não).
-    let manual_dir = crate::dirs::assets_dir().join("manual");
-    let mut manual_paths: HashMap<String, Option<PathBuf>> = HashMap::new();
 
     let mut sel: usize = 0;
     let mut top_row: usize = 0;
@@ -1144,61 +1702,38 @@ pub fn run(
     // server doesn't know it / no set), one hash+fetch in flight at a
     // time, each game tried at most once per visit — the disk cache makes
     // later visits instant.
-    let mut ra_games: std::collections::HashMap<String, Option<crate::ra::RaGame>> =
-        std::collections::HashMap::new();
-    let mut ra_tried: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut ra_worker: Option<Receiver<Result<Option<crate::ra::RaGame>, String>>> = None;
-    let mut ra_pending: String = String::new();
     // The panel's "X de Y (Z%)" line (plan revision) — the tally per game,
     // cached per visit: it costs a full ROM hash, so it's computed once when
     // the game first reaches the panel and refreshed when the completion
     // progress lands.
-    let mut ra_tally: std::collections::HashMap<
-        String,
-        Option<(usize, usize, Option<crate::ra::Award>)>,
-    > = std::collections::HashMap::new();
     // Lançamento/editora que o RA tem e o DAT/TOSEC não, mesmo cache de
     // um-cálculo-por-foco (leitura do JSON da identificação).
     // sha1 → hash RA, guardado pela própria identificação para o painel não
     // refazer o hash da ROM a cada frame.
-    let mut ra_hashes: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     // Completion progress (o substituto do GetUserUnlocks, morto na API
     // atual): uma chamada por visita traz os counts de todo o perfil — a
     // fonte das conquistas ganhas fora deste app.
-    let mut ra_completion: Option<std::collections::HashMap<u64, crate::ra::CompletionEntry>> =
-        None;
-    let mut ra_completion_tried = false;
-    let mut ra_completion_worker: Option<
-        Receiver<Result<std::collections::HashMap<u64, crate::ra::CompletionEntry>, String>>,
-    > = None;
     // Badges das conquistas do jogo focado: o prefetch baixa os PNGs em
     // background e o frame registra as texturas direto do disco (umas
     // poucas por frame), então a lista preenche os badges conforme eles
     // chegam — para qualquer jogo, não só o primeiro aberto.
-    let mut badge_ids: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-    let mut badge_tried: HashSet<String> = HashSet::new();
     // Próxima varredura do disco atrás de badges que faltam: com a lista
     // aberta, o loop fazia um stat por badge ausente A CADA FRAME (60 Hz,
     // na thread de UI) enquanto o prefetch baixava — 4×/s basta para os
     // badges "aparecerem" conforme chegam.
-    let mut badge_scan_next = Instant::now();
     // Earned do servidor para os [x] da lista de conquistas (uma tentativa
     // por jogo por visita — o disco cacheia por game id): o worker une no
     // arquivo local `retroachievements/ra-earned/<hash>.json` e devolve o
     // set resultante.
-    let mut ra_earned_worker: Option<Receiver<(String, Option<crate::ra::EarnedMap>)>> = None;
-    let mut ra_earned_tried: HashSet<String> = HashSet::new();
     // The achievements view (plan revision: "mostrar a lista de conquistas
     // e pontuação total dentro da tv com botão de voltar, parecido com o
     // back cover") — open/closed, its scroll, its data (loaded once per
     // open), and the voltar button's screen-local rect. `ach_hash` guarda o
     // hash RA do jogo aberto, para o earned do servidor (que chega
     // identificado pelo mesmo hash) casar com a lista na tela.
-    let mut ach_view = false;
-    let mut ach_top: usize = 0;
-    let mut ach_data: Option<crate::ra::ShelfAchievements> = None;
-    let mut ach_hash: Option<String> = None;
-    let mut ach_voltar: (i32, i32, u32, u32) = (0, 0, 0, 0);
+    let mut ra = ShelfRa::new();
+    let mut ach = AchView::default();
+    let mut man = ShelfManual::default();
     cab.set_close_button(true);
 
     // Frames left in the "entering over the static" ease-in (§3.3), if any.
@@ -1399,79 +1934,13 @@ pub fn run(
                         zoom_close = None;
                     }
                 }
-            } else if manual.is_some() {
-                // O leitor de manual dono do tubo: ‹/› viram página (os
-                // rects vieram do frame anterior), voltar/Back fecha.
-                for nav in m.nav.iter() {
-                    if let Some(m) = manual.as_mut() {
-                        match nav {
-                            MenuNav::Left => m.page = m.page.saturating_sub(1).max(1),
-                            MenuNav::Right if m.page < m.pages => m.page += 1,
-                            MenuNav::Back => {
-                                manual = None;
-                                manual_tx = None;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                if manual.is_some() {
-                    if let Some((x, y)) = m.click {
-                        let (ox, oy) = cab.window_to_output(x, y);
-                        if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
-                            let (prev, next, voltar) = manual_rects;
-                            if in_rect(lx, ly, prev) {
-                                if let Some(mm) = manual.as_mut() {
-                                    mm.page = mm.page.saturating_sub(1).max(1);
-                                }
-                            } else if in_rect(lx, ly, next) {
-                                if let Some(mm) = manual.as_mut() {
-                                    if mm.page < mm.pages {
-                                        mm.page += 1;
-                                    }
-                                }
-                            } else if in_rect(lx, ly, voltar) {
-                                manual = None;
-                                manual_tx = None;
-                            }
-                        }
-                    }
-                }
-            } else if ach_view {
-                // The achievements list owns the tube while it's up: d-pad
-                // /wheel scroll, Back or "voltar" closes.
-                let (_, sh) = cab.shelf_screen_size();
-                let row_h = 22;
-                let visible = ((sh as i32 - MARGIN * 2 - HEADER_H - 60) / row_h).max(1) as usize;
-                let len = ach_data.as_ref().map_or(0, |d| d.achievements.len());
-                for nav in &m.nav {
-                    match nav {
-                        MenuNav::Up | MenuNav::PageUp => ach_top = ach_top.saturating_sub(1),
-                        MenuNav::Down | MenuNav::PageDown => {
-                            if ach_top + visible < len {
-                                ach_top += 1;
-                            }
-                        }
-                        MenuNav::Home => ach_top = 0,
-                        MenuNav::End => ach_top = len.saturating_sub(visible),
-                        MenuNav::Back => ach_view = false,
-                        _ => {}
-                    }
-                }
-                if let Some((x, y)) = m.click {
-                    let (ox, oy) = cab.window_to_output(x, y);
-                    if cab.hit_close_button(ox, oy) {
-                        return Ok(Pick::Quit);
-                    }
-                    if cab.hit_minimize_button(ox, oy) {
-                        cab.minimize();
-                        continue;
-                    }
-                    if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
-                        if in_rect(lx, ly, ach_voltar) {
-                            ach_view = false;
-                        }
-                    }
+            } else if man.reader.is_some() {
+                man.handle_input(cab, &m);
+            } else if ach.open {
+                match ach.handle_input(cab, &m) {
+                    AchInput::Quit => return Ok(Pick::Quit),
+                    AchInput::Minimized => continue,
+                    AchInput::Stay => {}
                 }
             } else {
                 for nav in m.nav {
@@ -1621,17 +2090,17 @@ pub fn run(
                                     view.get(sel)
                                 };
                                 if let Some(e) = picked {
-                                    ach_data = crate::ra::shelf_achievements(std::path::Path::new(
+                                    ach.data = crate::ra::shelf_achievements(std::path::Path::new(
                                         &e.rom.path,
                                     ));
-                                    if ach_data.is_some() {
-                                        ach_view = true;
-                                        ach_top = 0;
+                                    if ach.data.is_some() {
+                                        ach.open = true;
+                                        ach.top = 0;
                                     }
                                     // A lista aberta é deste jogo: o earned do
                                     // servidor (quando chegar) só vale para ela.
                                     if let Some((user, web_key, _connect)) = &opts.ra {
-                                        let hash = match ra_hashes.get(&e.rom.sha1) {
+                                        let hash = match ra.hashes.get(&e.rom.sha1) {
                                             Some(h) => Some(h.clone()),
                                             None => crate::ra::hash_rom(std::path::Path::new(
                                                 &e.rom.path,
@@ -1639,9 +2108,9 @@ pub fn run(
                                             .ok(),
                                         };
                                         if let Some(hash) = hash {
-                                            ach_hash = Some(hash.clone());
-                                            if ra_earned_tried.insert(hash.clone()) {
-                                                ra_earned_worker =
+                                            ach.hash = Some(hash.clone());
+                                            if ra.earned_tried.insert(hash.clone()) {
+                                                ra.earned_worker =
                                                     Some(crate::ra::fetch_game_earned_worker(
                                                         user, web_key, &hash,
                                                     ));
@@ -1728,7 +2197,7 @@ pub fn run(
                                 };
                                 if let Some(e) = picked {
                                     if let Some(path) =
-                                        manual_paths.get(&e.rom.sha1).cloned().flatten()
+                                        man.paths.get(&e.rom.sha1).cloned().flatten()
                                     {
                                         let thread_path = path.clone();
                                         let open_sha1 = e.rom.sha1.clone();
@@ -1771,17 +2240,14 @@ pub fn run(
                                                 }
                                             }
                                         });
-                                        manual = Some(ManualState {
+                                        man.reader = Some(ManualState {
                                             sha1: e.rom.sha1.clone(),
-                                            pages: manual_pages
-                                                .get(&e.rom.sha1)
-                                                .copied()
-                                                .unwrap_or(0),
+                                            pages: man.pages.get(&e.rom.sha1).copied().unwrap_or(0),
                                             page: 1,
                                             requested: HashSet::new(),
                                         });
-                                        manual_channels.push(ev_rx);
-                                        manual_tx = Some(req_tx);
+                                        man.channels.push(ev_rx);
+                                        man.tx = Some(req_tx);
                                     }
                                 }
                             }
@@ -1974,364 +2440,22 @@ pub fn run(
             art.request_focus(cab, e);
         }
 
-        // RA identification (plan fase 2): drain the in-flight reply, and
-        // kick the next one for the focused game when the account is on.
-        if let Some(rx) = &ra_worker {
-            match rx.try_recv() {
-                Ok(Ok(g)) => {
-                    ra_games.insert(ra_pending.clone(), g);
-                    ra_worker = None;
-                }
-                Ok(Err(e)) => {
-                    log::info!("ra identify {}: {e}", ra_pending);
-                    ra_games.insert(ra_pending.clone(), None);
-                    ra_worker = None;
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => ra_worker = None,
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-            }
-        }
-        if let Some(rx) = &ra_completion_worker {
-            match rx.try_recv() {
-                Ok(Ok(map)) => {
-                    log::info!("ra: progresso do perfil carregado ({} jogos)", map.len());
-                    ra_completion = Some(map);
-                    // Tallys já montados nasceram sem o servidor — refazer.
-                    ra_tally.clear();
-                    ra_completion_worker = None;
-                }
-                Ok(Err(e)) => {
-                    log::info!("ra completion: {e}");
-                    ra_completion_worker = None;
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => ra_completion_worker = None,
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-            }
-        }
-        if let (false, Some((user, web_key, _connect))) = (ra_completion_tried, opts.ra.clone()) {
-            ra_completion_tried = true;
-            let (tx, rx) = mpsc::channel();
-            std::thread::spawn(move || {
-                let _ = tx.send(crate::ra::fetch_completion(&user, &web_key));
-            });
-            ra_completion_worker = Some(rx);
-        }
-        // Earned do servidor chegando: o set já foi unido no disco — a lista
-        // aberta deste jogo ganha os [x] (e o "X/Y" do cabeçalho) na hora.
-        if let Some(rx) = &ra_earned_worker {
-            match rx.try_recv() {
-                Ok((hash, Some(ids))) => {
-                    if ach_hash.as_deref() == Some(hash.as_str()) {
-                        if let Some(list) = ach_data.as_mut() {
-                            list.earned = ids;
-                        }
-                    }
-                    ra_earned_worker = None;
-                }
-                Ok((hash, None)) => {
-                    log::info!("ra earned {hash}: sem ids do servidor");
-                    ra_earned_worker = None;
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => ra_earned_worker = None,
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-            }
-        }
-        // Badges do jogo aberto que já estão no disco viram texturas — umas
-        // poucas por frame para o primeiro carregamento não engasgar. O
-        // prefetch continua baixando em background: na medida que os PNGs
-        // aparecem, os badges entram na lista (de qualquer jogo aberto).
-        if ach_view && Instant::now() >= badge_scan_next {
-            badge_scan_next = Instant::now() + Duration::from_millis(250);
-            if let Some(list) = ach_data.as_ref() {
-                let mut novos = 0;
-                for a in &list.achievements {
-                    if novos >= 4 {
-                        // Ainda há badges no disco para registrar: a
-                        // próxima leva sai no frame seguinte.
-                        badge_scan_next = Instant::now();
-                        break;
-                    }
-                    if badge_ids.contains_key(&a.badge) {
-                        continue;
-                    }
-                    if let Some(path) = crate::ra::badge_path(&a.badge) {
-                        if let Ok(img) = image::open(&path).map(|i| i.to_rgba8()) {
-                            let id = badge_image_id(&a.badge);
-                            cab.set_image(id, img.width(), img.height(), img.as_raw());
-                            badge_ids.insert(a.badge.clone(), id);
-                            novos += 1;
-                        }
-                    }
-                }
-            }
-        }
-        if ra_worker.is_none() {
-            if let (Some((user, web_key, connect)), Some(e)) = (&opts.ra, focused.as_ref()) {
-                let sha1 = e.rom.sha1.clone();
-                if !ra_tried.contains(&sha1) {
-                    ra_tried.insert(sha1.clone());
-                    match crate::ra::hash_rom(std::path::Path::new(&e.rom.path)) {
-                        Err(err) => {
-                            log::info!("ra hash {}: {err}", e.rom.path);
-                            ra_games.insert(sha1, None);
-                        }
-                        Ok(hash) => {
-                            ra_hashes.insert(sha1.clone(), hash.clone());
-                            if let Some(g) = crate::ra::cached_game(&hash) {
-                                ra_games.insert(sha1, Some(g));
-                            } else if crate::ra::is_cached_unknown(&hash) {
-                                ra_games.insert(sha1, None);
-                            } else {
-                                let (tx, rx) = mpsc::channel();
-                                let (user, web_key, connect) =
-                                    (user.clone(), web_key.clone(), connect.clone());
-                                std::thread::spawn(move || {
-                                    let _ = tx.send(crate::ra::fetch_game(
-                                        &user, &web_key, &connect, &hash,
-                                    ));
-                                });
-                                ra_worker = Some(rx);
-                                ra_pending = sha1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Manual (plan revision): eventos do worker — contagem ao abrir e
-        // páginas renderizadas viram texturas; a página corrente (e a
-        // seguinte, de brincadeira) são pedidas assim que faltam.
-        let mut live_channels = Vec::with_capacity(manual_channels.len());
-        for rx in manual_channels.drain(..) {
-            match rx.try_recv() {
-                Ok(crate::manual::ManualEv::Ready { sha1, pages }) => {
-                    manual_pages.insert(sha1.clone(), pages);
-                    if let Some(m) = manual.as_mut() {
-                        if m.sha1 == sha1 {
-                            m.pages = pages;
-                        }
-                    }
-                    live_channels.push(rx);
-                }
-                Ok(crate::manual::ManualEv::Page {
-                    sha1,
-                    page,
-                    w,
-                    h,
-                    rgba,
-                }) => {
-                    // A textura é registrada SEMPRE (preview incluído) — o
-                    // registro anterior dependia do leitor estar aberto e
-                    // descartava a página do preview (plan revision: "a
-                    // primeira pgina nao aparece no painel").
-                    if w > 0 {
-                        cab.set_image(manual_page_id(&sha1, page), w, h, &rgba);
-                    }
-                    if let Some(m) = manual.as_mut() {
-                        if m.sha1 == sha1 {
-                            m.requested.insert(page);
-                        }
-                    }
-                    live_channels.push(rx);
-                }
-                // O worker morreu (fechou sem página nenhuma) — sem canal.
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {}
-                Err(std::sync::mpsc::TryRecvError::Empty) => live_channels.push(rx),
-            }
-        }
-        manual_channels = live_channels;
-        if let (Some(m), Some(tx)) = (manual.as_mut(), manual_tx.as_ref()) {
-            if m.pages > 0 && !m.requested.contains(&m.page) {
-                m.requested.insert(m.page);
-                let _ = tx.send(m.page);
-            }
-            let next_page = m.page + 1;
-            if next_page <= m.pages && !m.requested.contains(&next_page) {
-                m.requested.insert(next_page);
-                let _ = tx.send(next_page);
-            }
-        }
+        ra.poll(cab, &mut ach, opts.ra.as_ref(), focused);
+        man.poll(cab);
 
         // The flat side panel (plan revision — drawn by `Cabinet` itself,
         // outside the tube): whatever's focused right now, DAT extras and
         // all when the DAT had any ("se o DAT tiver informacoes do jogo,
         // preencher no painel").
         let shelf_panel = match focused {
-            Some(e) => {
-                let wid = wheel_id(&e.rom.sha1);
-                let cid = cartridge_id(&e.rom.sha1);
-                let bid = backcover_id(&e.rom.sha1);
-                let save_title = crate::runner::rom_title(Path::new(&e.rom.path));
-                let playtime =
-                    crate::runner::total_playtime_secs(&crate::dirs::saves_dir(), &save_title);
-                // The DAT's year, if it had one, moves into its own "release"
-                // slot (plan revision) instead of sitting in the generic
-                // info list alongside publisher/category/description.
-                // A tabela única embutida (crc → tudo): lançamento,
-                // editora, região e nota da IGDB — sem DAT, sem rede.
-                let infos = sixteen_domain::infos::lookup(&e.rom.crc32);
-                let mut info: Vec<(String, String)> = Vec::new();
-                if let Some(i) = &infos {
-                    // o lançamento vai pelo campo `release` do painel
-                    if let Some(editora) = &i.publisher {
-                        info.push((tr!("publisher", "editora").to_string(), editora.clone()));
-                    }
-                    if let Some(regiao) = &i.region {
-                        if regiao != "outra" {
-                            info.push((tr!("region", "região").to_string(), regiao.clone()));
-                        }
-                    }
-                    if let Some(critica) = &i.nota_critica {
-                        if !critica.is_empty() {
-                            info.push((
-                                tr!("rating", "nota (crítica)").to_string(),
-                                critica.clone(),
-                            ));
-                        }
-                    }
-                }
-                let release = infos.as_ref().and_then(|i| i.year.clone());
-                let mut award_img: Option<u64> = None;
-                if let Some(Some(_)) = ra_games.get(&e.rom.sha1) {
-                    // "30 de 58 (52%)" — o tally custa um hash de ROM inteiro,
-                    // então fica cacheado por visita (e refresco quando o
-                    // completion progress do servidor chega).
-                    let tally = *ra_tally.entry(e.rom.sha1.clone()).or_insert_with(|| {
-                        ra_hashes
-                            .get(&e.rom.sha1)
-                            .and_then(|h| crate::ra::tally_from_cache(h, ra_completion.as_ref()))
-                    });
-                    // A medalha de prêmio do RA desenhada ao lado do número
-                    // da linha de conquistas (pixel-art gerada por
-                    // `medal_rgba`, uma textura por variante).
-                    if let Some((earned, total, award)) = tally {
-                        let pct = (earned * 100 + total / 2).checked_div(total).unwrap_or(0);
-                        info.push((
-                            tr!("achievements", "conquistas").to_string(),
-                            tr!(
-                                format!("{earned} of {total} ({pct}%)"),
-                                format!("{earned} de {total} ({pct}%)")
-                            ),
-                        ));
-                        // "zerado (softcore)" / "mastered" — o prêmio em
-                        // palavras, junto das infos (plan revision).
-                        if let Some(a) = award {
-                            info.push(("status".to_string(), a.label().to_string()));
-                        }
-                        if let Some(medal) = award.map(|a| a.medal()) {
-                            let id = crate::ra::medal_image_id(medal);
-                            if !cab.has_image(id) {
-                                let (w, h, rgba) = crate::ra::medal_rgba(medal);
-                                cab.set_image(id, w, h, &rgba);
-                            }
-                            award_img = Some(id);
-                        }
-                    }
-                    // Os badges do set já baixando em background — a notificação
-                    // e a lista da estante os encontram em cache na hora.
-                    if badge_tried.insert(e.rom.sha1.clone()) {
-                        crate::ra::prefetch_badges(std::path::Path::new(&e.rom.path));
-                    }
-                }
-                info.extend(game_info_lines(e, playtime));
-                // O bloco HowLongToBeat no fim da aba — as 4 barras do card
-                // do site, tempos da tabela embutida por CRC32 (nada de
-                // rede); jogo fora da tabela não ganha bloco nenhum.
-                // A seção de nota da IGDB + o HowLongToBeat, ambos da
-                // tabela única — o HLTB fecha o painel.
-                let igdb = infos
-                    .as_ref()
-                    .and_then(|i| i.nota.clone())
-                    .filter(|nota| !nota.is_empty())
-                    .map(|nota| sixteen_platform::IgdbSection {
-                        icon: igdb_icon_registered(cab),
-                        nota: format!("{nota} / 100"),
-                    });
-                let hltb = infos
-                    .as_ref()
-                    .map(|i| hltb_bars(i, hltb_icon_registered(cab)));
-                let manual_path = manual_paths
-                    .entry(e.rom.sha1.clone())
-                    .or_insert_with(|| find_local_manual(&manual_dir, &e.rom.path))
-                    .clone();
-                // Preview: contagem + primeira página decodificadas uma vez
-                // por jogo — a aba manual as mostra como as artes mostram
-                // capa/cartucho (plan revision).
-                if let Some(preview_path) = &manual_path {
-                    if manual_preview_tried.insert(e.rom.sha1.clone()) {
-                        let (ev_tx, ev_rx) = mpsc::channel();
-                        let preview_path = preview_path.clone();
-                        let preview_sha1 = e.rom.sha1.clone();
-                        std::thread::spawn(move || {
-                            let pages = crate::manual::page_count(&preview_path).unwrap_or(0);
-                            let _ = ev_tx.send(crate::manual::ManualEv::Ready {
-                                sha1: preview_sha1.clone(),
-                                pages,
-                            });
-                            if let Ok(Some(img)) = crate::manual::render_page(&preview_path, 1, 512)
-                            {
-                                let _ = ev_tx.send(crate::manual::ManualEv::Page {
-                                    sha1: preview_sha1.clone(),
-                                    page: 1,
-                                    w: img.w,
-                                    h: img.h,
-                                    rgba: img.rgba,
-                                });
-                            }
-                        });
-                        manual_channels.push(ev_rx);
-                    }
-                }
-                let ra_state = ra_games.get(&e.rom.sha1);
-                ShelfPanelInfo {
-                    title: e.title().into_owned(),
-                    logo_img: cab.has_image(wid).then_some(wid),
-                    cartridge_img: cab.has_image(cid).then_some(cid),
-                    backcover_img: cab.has_image(bid).then_some(bid),
-                    release,
-                    info,
-                    section: panel_section,
-                    scroll: panel_scroll,
-                    favorite: Some(e.rom.favorite),
-                    // Identificado = botão desenhado; hash marcado "versão
-                    // não suportada" = botão desativado com o motivo
-                    // (plan revision).
-                    achievements: ra_state.is_some_and(|g| g.is_some()),
-                    achievements_reason: ra_state
-                        .and_then(|g| g.as_ref())
-                        .filter(|g| g.unsupported)
-                        .map(|_| tr!("unsupported version", "versão sem suporte").to_string()),
-                    manual_first_page: manual_path
-                        .is_some()
-                        .then(|| manual_page_id(&e.rom.sha1, 1)),
-                    award_img,
-                    igdb,
-                    hltb,
-                }
-            }
-            None => ShelfPanelInfo {
-                title: tr!("no games found", "nenhum jogo encontrado").to_string(),
-                logo_img: None,
-                cartridge_img: None,
-                backcover_img: None,
-                release: None,
-                info: Vec::new(),
-                section: PanelSection::Informacoes,
-                scroll: 0,
-                favorite: None,
-                achievements: false,
-                achievements_reason: None,
-                manual_first_page: None,
-                award_img: None,
-                igdb: None,
-                hltb: None,
-            },
+            Some(e) => focused_panel_info(cab, e, &mut ra, &mut man, panel_section, panel_scroll),
+            None => empty_panel_info(),
         };
         cab.set_shelf_panel(shelf_panel);
 
         // --- draw (into a screen-sized buffer, then warped through the tube) --
-        let page_ready = manual
+        let page_ready = man
+            .reader
             .as_ref()
             .is_some_and(|m| cab.has_image(manual_page_id(&m.sha1, m.page)));
         // O jogo sob o cursor do mouse — o botão de play desenha na
@@ -2351,16 +2475,16 @@ pub fn run(
             None
         };
         let render = |d: &mut Screen| {
-            if let Some(m) = &manual {
-                manual_rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
+            if let Some(m) = &man.reader {
+                man.rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
                 return;
             }
-            if ach_view {
+            if ach.open {
                 // The list owns the tube (plan revision: "mostrar a lista de
                 // conquistas e pontuação total dentro da tv com botão de
                 // voltar, parecido com o back cover"); the button rect comes
                 // back for the click hit-test.
-                ach_voltar = draw_achievements_view(d, ach_data.as_ref(), &badge_ids, ach_top);
+                ach.voltar = draw_achievements_view(d, ach.data.as_ref(), &ra.badge_ids, ach.top);
                 return;
             }
             let count_label = if filter_query.is_empty() {

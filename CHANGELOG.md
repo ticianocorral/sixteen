@@ -58,7 +58,13 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   "já tentei" de capa/logo/cartucho/contracapa num lugar só, com métodos
   (`request_covers`, `request_focus`, `request_zoom`); o zoom de 2048 px
   também vai pelo worker (abre na hora com a miniatura).
-- **Jogo: `FpsMeter` e `preview_modal`** extraídos do `run_game`.
+- **Estante (`shelf::run`, ~1.650 → ~1.100 linhas)**: o estado do RA, da
+  lista de conquistas e dos manuais virou `ShelfRa`, `AchView` e
+  `ShelfManual`, cada um com seu `poll`/`handle_input`; o painel do jogo
+  focado saiu para `focused_panel_info`.
+- **Jogo (`run_game`, ~1.300 → ~1.180 linhas)**: `FpsMeter`,
+  `preview_modal`, `queue_game_audio` (volume da TV) e `notify_unlock`
+  (aviso de conquista) extraídos.
 - **Clippy zerado** em todo o workspace (inclui os exemplos) e `cargo fmt`.
 
 ### Removido

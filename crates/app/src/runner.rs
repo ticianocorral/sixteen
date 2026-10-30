@@ -1212,6 +1212,81 @@ fn preview_modal(
     }
 }
 
+/// A fila de áudio do jogo, com o volume da TV (VOL-/VOL+ do queixo,
+/// 0..16, 8 = padrão). TV desligada com o jogo rodando: o jogo segue SEM
+/// som pelo alto-falante dela — a fila morre na hora (o corte, não o fade,
+/// é a mesma regra do hiss); ao religar, o áudio volta no tempo do jogo.
+fn queue_game_audio(
+    audio: &sixteen_platform::AudioOut,
+    cab: &Cabinet,
+    samples: &[i16],
+    vol_buf: &mut Vec<i16>,
+) {
+    if !cab.tv_on() {
+        audio.clear();
+        return;
+    }
+    let vol = cab.volume() as i32;
+    if vol == 16 {
+        audio.queue(samples);
+    } else if vol > 0 {
+        vol_buf.clear();
+        vol_buf.extend(samples.as_chunks::<2>().0.iter().flat_map(|p| {
+            let l = (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            let r = (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+            [l, r]
+        }));
+        audio.queue(vol_buf);
+    }
+    // vol == 0: mudo, nada entra na fila
+}
+
+/// Uma conquista desbloqueada na TV: o "plim", o badge (do cache, ou
+/// baixado na hora se o prefetch ainda não trouxe) e o aviso no queixo.
+fn notify_unlock(cab: &mut Cabinet, unlock: &crate::ra::Unlock) {
+    // O "plim" da conquista (plan revision: "coloque uma
+    // notificação sonora ao ganhar uma conquista") — sobre o
+    // áudio do jogo, pelo stream de foley.
+    crate::sfx::play(cab, crate::sfx::Sfx::Achievement);
+    // Badge: fetched/decoded once, cached to disk with the
+    // other RA caches. One blocking fetch per unlock is
+    // acceptable (a few hundred ms, once ever per game).
+    let badge_img = unlock.badge.clone();
+    if !badge_img.is_empty() {
+        match crate::ra::badge_path(&badge_img) {
+            Some(path) => {
+                if let Ok((w, h, rgba)) = decode_art(&path, 512) {
+                    cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
+                }
+            }
+            None => {
+                if let Some(path) = crate::ra::download_badge(&badge_img) {
+                    if let Ok((w, h, rgba)) = decode_art(&path, 512) {
+                        cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
+                    }
+                }
+            }
+        }
+    }
+    cab.push_osd(
+        &[
+            tr!("ACHIEVEMENT UNLOCKED", "CONQUISTA DESBLOQUEADA"),
+            &unlock.title,
+            &tr!(
+                format!("+{} points", unlock.points),
+                format!("+{} pontos", unlock.points)
+            ),
+            if unlock.hardcore {
+                tr!("hardcore mode", "modo hardcore")
+            } else {
+                tr!("softcore mode", "modo softcore")
+            },
+        ],
+        Some(osd_badge_id(&unlock.badge)),
+        OSD_UNLOCK_TTL,
+    );
+}
+
 /// Load the core + ROM and run until the player leaves, drawing into `cab` (the
 /// one persistent window). `plat` and `cab` both outlive the call so `sixteen`
 /// can reuse them for the next screen.
@@ -2242,33 +2317,7 @@ pub fn run_game(
                 note_request = Some(note_slot);
             }
             if audio.queued_frames() < audio_cap {
-                if !cab.tv_on() {
-                    // TV desligada com o jogo rodando (plan revision):
-                    // o jogo segue correndo SEM imagem — e sem som pelo
-                    // alto-falante dela. A fila morre na hora (o corte,
-                    // não o fade, é a mesma regra do poder do hiss); ao
-                    // religar, o áudio volta com o sinal, no tempo
-                    // correto do jogo.
-                    audio.clear();
-                } else {
-                    // O volume da TV (plan revision: o par VOL-/VOL+ do queixo)
-                    // escala as amostras do jogo — 0..16 com 8 como padrão.
-                    let vol = cab.volume() as i32;
-                    if vol == 16 {
-                        audio.queue(core.audio());
-                    } else if vol > 0 {
-                        vol_buf.clear();
-                        vol_buf.extend(core.audio().as_chunks::<2>().0.iter().flat_map(|p| {
-                            let l = (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)
-                                as i16;
-                            let r = (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32)
-                                as i16;
-                            [l, r]
-                        }));
-                        audio.queue(&vol_buf);
-                    }
-                    // vol == 0: mudo, nada entra na fila
-                }
+                queue_game_audio(&audio, cab, core.audio(), &mut vol_buf);
             }
 
             // Earned do servidor chegando: une no set da sessão (memória e
@@ -2301,51 +2350,11 @@ pub fn run_game(
                         unlock.title,
                         unlock.points
                     );
-                    // O "plim" da conquista (plan revision: "coloque uma
-                    // notificação sonora ao ganhar uma conquista") — sobre o
-                    // áudio do jogo, pelo stream de foley.
-                    crate::sfx::play(cab, crate::sfx::Sfx::Achievement);
                     ra_session
                         .as_ref()
                         .expect("checked above")
                         .submit_unlock(&unlock);
-                    // Badge: fetched/decoded once, cached to disk with the
-                    // other RA caches. One blocking fetch per unlock is
-                    // acceptable (a few hundred ms, once ever per game).
-                    let badge_img = unlock.badge.clone();
-                    if !badge_img.is_empty() {
-                        match crate::ra::badge_path(&badge_img) {
-                            Some(path) => {
-                                if let Ok((w, h, rgba)) = decode_art(&path, 512) {
-                                    cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
-                                }
-                            }
-                            None => {
-                                if let Some(path) = crate::ra::download_badge(&badge_img) {
-                                    if let Ok((w, h, rgba)) = decode_art(&path, 512) {
-                                        cab.set_image(osd_badge_id(&unlock.badge), w, h, &rgba);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    cab.push_osd(
-                        &[
-                            tr!("ACHIEVEMENT UNLOCKED", "CONQUISTA DESBLOQUEADA"),
-                            &unlock.title,
-                            &tr!(
-                                format!("+{} points", unlock.points),
-                                format!("+{} pontos", unlock.points)
-                            ),
-                            if unlock.hardcore {
-                                tr!("hardcore mode", "modo hardcore")
-                            } else {
-                                tr!("softcore mode", "modo softcore")
-                            },
-                        ],
-                        Some(osd_badge_id(&unlock.badge)),
-                        OSD_UNLOCK_TTL,
-                    );
+                    notify_unlock(cab, &unlock);
                 }
             }
 
