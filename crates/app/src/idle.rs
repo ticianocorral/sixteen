@@ -51,11 +51,6 @@ pub enum IdleExit {
     /// "Configurações" clicked — the only way into settings from here (no
     /// keyboard shortcut, mouse/gamepad only).
     OpenSettings,
-    /// "Livraria Retro" clicked (plan revision) — a revistoteca em PDF na
-    /// pasta `magazine`, leitura na TV. Funciona até sem core: ler revista
-    /// não depende do snes9x.
-    OpenLivraria,
-    OpenMuseu,
     /// "Dev" clicked — the dev-mode button that only exists once the Konami
     /// code has been entered on this screen (plan revision: "ultra secreto").
     OpenDev,
@@ -582,14 +577,11 @@ pub fn run(
                 }
                 _ => {}
             }
-            // TV desligada: a estante precisa do tubo aceso, mas a
-            // Livraria e as Configurações não dependem dela — esses dois
-            // respondem normalmente; clicar na estante acende o aviso no
+            // TV desligada: a estante precisa do tubo aceso, mas as
+            // Configurações não dependem dela — respondem normalmente; clicar na estante acende o aviso no
             // OSD do queixo.
             if !cab.tv_on() {
                 match cab.hit_panel_button(ox, oy) {
-                    Some(PanelButton::Livraria) => return Ok(IdleExit::OpenLivraria),
-                    Some(PanelButton::Museu) => return Ok(IdleExit::OpenMuseu),
                     Some(PanelButton::Settings) if !core_missing => {
                         return Ok(IdleExit::OpenSettings)
                     }
@@ -617,10 +609,6 @@ pub fn run(
                 // oferece o download do core no lugar.
                 Some(PanelButton::Insert) if !core_missing => return Ok(IdleExit::OpenShelf),
                 Some(PanelButton::Settings) if !core_missing => return Ok(IdleExit::OpenSettings),
-                // A Livraria independe do core (ler revista não baixa
-                // snes9x) — abre mesmo sem o console pronto.
-                Some(PanelButton::Livraria) => return Ok(IdleExit::OpenLivraria),
-                Some(PanelButton::Museu) => return Ok(IdleExit::OpenMuseu),
                 // O botão só existe com o devmode ligado (só o painel o
                 // desenha), mas o gate fica explícito: sem devmode, cliques
                 // fantasmas não abrem nada.

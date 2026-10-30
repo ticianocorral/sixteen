@@ -182,22 +182,36 @@ impl NtscFilter {
         src_pitch_bytes: usize,
     ) -> (&[u16], u32, u32) {
         let (w, h) = (src_w as usize, src_h as usize);
-        self.in_buf.resize(w * h, 0);
-        for row in 0..h {
-            let off = row * src_pitch_bytes;
-            for (i, dst) in self.in_buf[row * w..row * w + w].iter_mut().enumerate() {
-                let b = off + i * 2;
-                *dst = u16::from_le_bytes([src[b], src[b + 1]]);
+        // Caminho direto: em little-endian, com o buffer alinhado a 2 bytes
+        // e pitch par, o frame do core JÁ é um array de u16 — o blit lê dele
+        // com o pitch real, sem remontar ~57k pixels em `in_buf` por frame.
+        let direct = cfg!(target_endian = "little")
+            && src.as_ptr().align_offset(2) == 0
+            && src_pitch_bytes % 2 == 0
+            && src_pitch_bytes >= w * 2
+            && h > 0
+            && src.len() >= (h - 1) * src_pitch_bytes + w * 2;
+        let (in_ptr, in_row_width) = if direct {
+            (src.as_ptr() as *const u16, src_pitch_bytes / 2)
+        } else {
+            self.in_buf.resize(w * h, 0);
+            for row in 0..h {
+                let off = row * src_pitch_bytes;
+                for (i, dst) in self.in_buf[row * w..row * w + w].iter_mut().enumerate() {
+                    let b = off + i * 2;
+                    *dst = u16::from_le_bytes([src[b], src[b + 1]]);
+                }
             }
-        }
+            (self.in_buf.as_ptr(), w)
+        };
 
         let out_w = Self::output_width(src_w) as usize;
         self.out.resize(out_w * h, 0);
         unsafe {
             snes_ntsc_blit(
                 self.table.as_ptr() as *const c_void,
-                self.in_buf.as_ptr(),
-                src_w as c_long,
+                in_ptr,
+                in_row_width as c_long,
                 self.phase,
                 src_w as c_int,
                 src_h as c_int,
@@ -215,6 +229,26 @@ impl NtscFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_and_copied_paths_match() {
+        // Mesmo frame (com pitch maior que a linha) pelo caminho direto e
+        // pelo de cópia (buffer desalinhado de propósito): saída idêntica.
+        let (w, h, pitch) = (256usize, 8usize, 300usize * 2);
+        let mut buf = vec![0u8; pitch * h + 1];
+        for (i, b) in buf.iter_mut().enumerate() {
+            *b = (i * 31 % 251) as u8;
+        }
+        let mut a = NtscFilter::new(Preset::Rgb);
+        let mut b = NtscFilter::new(Preset::Rgb);
+        let aligned = if buf.as_ptr().align_offset(2) == 0 { 0 } else { 1 };
+        let out_a = a.process(&buf[aligned..], w as u32, h as u32, pitch).0.to_vec();
+        let mut shifted = vec![0u8; pitch * h + 1];
+        let off = 1 - aligned;
+        shifted[off..off + pitch * h].copy_from_slice(&buf[aligned..aligned + pitch * h]);
+        let out_b = b.process(&shifted[off..], w as u32, h as u32, pitch).0.to_vec();
+        assert_eq!(out_a, out_b);
+    }
 
     #[test]
     fn output_width_matches_upstream() {

@@ -1070,6 +1070,7 @@ pub fn run(
     // Never re-stat a game's art more than once per shelf visit — most games
     // won't have any, and disk isn't free even if it's cheap.
     let mut tried_cover: HashSet<String> = HashSet::new();
+    let art = ArtLoader::spawn();
     // Back cover enlarged (plan revision: "ao clicar no back cover
     // possibilitar mostrar em tamanho maior"): Some = the "voltar" button's
     // screen-local rect — the zoom replaces the tube's content until
@@ -1923,11 +1924,11 @@ pub fn run(
         // hitching on dozens of JPEG decodes in a single one. Each sha1 is
         // tried at most once per visit, whether or not a file turns up; a
         // tile whose budget ran out simply waits for the next frame.
-        let mut decode_budget = 1usize;
-        // Buscas no disco também têm teto por frame: o decode só desconta
-        // quando acha a arte, e uma página de tiles SEM capa local fazia
-        // todas as buscas (candidatos × extensões, cada um um stat) de uma
-        // vez ao abrir ou rolar a estante.
+        // O que o worker de artes já decodificou entra no cabinet; os
+        // tiles visíveis sem imagem só fazem o pedido (busca + decode fora
+        // da thread de UI). Pedidos com teto por frame: a fila anda na
+        // ordem da tela, os de cima primeiro.
+        art.drain(cab);
         let mut lookup_budget = 8usize;
         for (i, entry) in view.iter().enumerate() {
             if grid.cell_pos(i, top_row).is_none() {
@@ -1937,32 +1938,23 @@ pub fn run(
             if cab.has_image(id) {
                 continue;
             }
-            if decode_budget == 0 || lookup_budget == 0 {
+            if lookup_budget == 0 {
                 break;
             }
             if !tried_cover.insert(entry.rom.sha1.clone()) {
                 continue;
             }
             lookup_budget -= 1;
-            if let Some(path) = find_local_art(&cover_dir, &entry.rom.path) {
-                if let Ok((w, h, rgba)) = decode_art(&path) {
-                    cab.set_image(id, w, h, &rgba);
-                    decode_budget -= 1;
-                }
-            }
+            art.request(id, &cover_dir, &entry.rom.path);
         }
         // The favorites strip is outside the scroll window too — its own
-        // pass, same one-decode-per-frame cap.
-        let mut fav_budget = 1usize;
+        // pass.
         for (i, entry) in favorites
             .iter()
             .enumerate()
             .skip(fav_scroll)
             .take(strip_vis)
         {
-            if fav_budget == 0 {
-                break;
-            }
             let id = cover_id(&entry.rom.sha1);
             if cab.has_image(id) {
                 continue;
@@ -1970,27 +1962,18 @@ pub fn run(
             if !tried_cover.insert(entry.rom.sha1.clone()) {
                 continue;
             }
-            if let Some(path) = find_local_art(&cover_dir, &entry.rom.path) {
-                if let Ok((w, h, rgba)) = decode_art(&path) {
-                    cab.set_image(id, w, h, &rgba);
-                    fav_budget -= 1;
-                }
-            }
+            art.request(id, &cover_dir, &entry.rom.path);
             let _ = i;
         }
         // The recent strip sits outside the main grid's scroll window, so it
         // needs its own pass — a recently-played game might not be among the
-        // rows currently visible below. Same one-decode-per-frame cap.
-        let mut recent_budget = 1usize;
+        // rows currently visible below.
         for (i, entry) in recent
             .iter()
             .enumerate()
             .skip(recent_scroll)
             .take(strip_vis)
         {
-            if recent_budget == 0 {
-                break;
-            }
             let id = cover_id(&entry.rom.sha1);
             if cab.has_image(id) {
                 continue;
@@ -1998,12 +1981,7 @@ pub fn run(
             if !tried_cover.insert(entry.rom.sha1.clone()) {
                 continue;
             }
-            if let Some(path) = find_local_art(&cover_dir, &entry.rom.path) {
-                if let Ok((w, h, rgba)) = decode_art(&path) {
-                    cab.set_image(id, w, h, &rgba);
-                    recent_budget -= 1;
-                }
-            }
+            art.request(id, &cover_dir, &entry.rom.path);
             let _ = i;
         }
 
@@ -2042,37 +2020,21 @@ pub fn run(
             last_focus = focus_key;
         }
         if let Some(e) = focused {
-            // Same one-decode-per-frame cap the grid uses: focusing a game
-            // used to decode up to three JPEGs (logo + cartridge + back
-            // cover) in a single frame — a hitch on every D-pad move.
-            let mut focus_budget = 1usize;
+            // Logo, cartucho e contracapa do jogo focado: pedidos ao worker
+            // de artes (antes eram decodificados aqui, um por frame).
             let wid = wheel_id(&e.rom.sha1);
-            if focus_budget > 0 && !cab.has_image(wid) && tried_logo.insert(e.rom.sha1.clone()) {
-                if let Some(path) = find_local_art(&logo_dir, &e.rom.path) {
-                    if let Ok((w, h, rgba)) = decode_art(&path) {
-                        cab.set_image(wid, w, h, &rgba);
-                        focus_budget -= 1;
-                    }
-                }
+            if !cab.has_image(wid) && tried_logo.insert(e.rom.sha1.clone()) {
+                art.request(wid, &logo_dir, &e.rom.path);
             }
             let cid = cartridge_id(&e.rom.sha1);
-            if focus_budget > 0 && !cab.has_image(cid) && tried_cartridge.insert(e.rom.sha1.clone())
+            if !cab.has_image(cid) && tried_cartridge.insert(e.rom.sha1.clone())
             {
-                if let Some(path) = find_local_art(&cartridge_dir, &e.rom.path) {
-                    if let Ok((w, h, rgba)) = decode_art(&path) {
-                        cab.set_image(cid, w, h, &rgba);
-                        focus_budget -= 1;
-                    }
-                }
+                art.request(cid, &cartridge_dir, &e.rom.path);
             }
             let bid = backcover_id(&e.rom.sha1);
-            if focus_budget > 0 && !cab.has_image(bid) && tried_backcover.insert(e.rom.sha1.clone())
+            if !cab.has_image(bid) && tried_backcover.insert(e.rom.sha1.clone())
             {
-                if let Some(path) = find_local_art(&backcover_dir, &e.rom.path) {
-                    if let Ok((w, h, rgba)) = decode_art(&path) {
-                        cab.set_image(bid, w, h, &rgba);
-                    }
-                }
+                art.request(bid, &backcover_dir, &e.rom.path);
             }
         }
 
@@ -3013,6 +2975,50 @@ fn draw_scrollbar(d: &mut Screen, grid: &GridLayout, view_len: usize, top_row: u
 /// Decode a cover or logo PNG/JPEG to tightly-packed RGBA, downscaled for
 /// memory (covers feed 200x150 tiles, logos a ~340px panel slot — 512 covers
 /// both at >2x and keeps alpha for transparent logos).
+/// Decodificação das artes da estante fora da thread de UI: um JPEG de
+/// capa custa 10–40 ms, mais que o frame inteiro (16,6 ms) — decodificado
+/// no laço, cada capa nova engasgava a rolagem. O laço só pede (`request`)
+/// e, a cada frame, registra no cabinet o que já ficou pronto (`drain`).
+/// Busca no disco (`find_local_art`) também vai para cá. A thread termina
+/// sozinha quando o `ArtLoader` sai de escopo (o canal fecha).
+struct ArtLoader {
+    tx: mpsc::Sender<(u64, PathBuf, String)>,
+    rx: Receiver<(u64, Option<(u32, u32, Vec<u8>)>)>,
+}
+
+impl ArtLoader {
+    fn spawn() -> Self {
+        let (tx, jobs) = mpsc::channel::<(u64, PathBuf, String)>();
+        let (done, rx) = mpsc::channel();
+        let _ = std::thread::Builder::new()
+            .name("shelf-art".into())
+            .spawn(move || {
+                for (id, dir, rom_path) in jobs {
+                    let img = find_local_art(&dir, &rom_path).and_then(|p| decode_art(&p).ok());
+                    if done.send((id, img)).is_err() {
+                        break;
+                    }
+                }
+            });
+        Self { tx, rx }
+    }
+
+    /// Pede a arte de `rom_path` em `dir` para a imagem `id`.
+    fn request(&self, id: u64, dir: &Path, rom_path: &str) {
+        let _ = self.tx.send((id, dir.to_path_buf(), rom_path.to_string()));
+    }
+
+    /// Registra no cabinet o que já foi decodificado — no máximo 4 por
+    /// frame (o upload da textura também custa).
+    fn drain(&self, cab: &mut Cabinet) {
+        for (id, img) in self.rx.try_iter().take(4) {
+            if let Some((w, h, rgba)) = img {
+                cab.set_image(id, w, h, &rgba);
+            }
+        }
+    }
+}
+
 fn decode_art(path: &Path) -> Result<(u32, u32, Vec<u8>)> {
     decode_art_scaled(path, 512)
 }

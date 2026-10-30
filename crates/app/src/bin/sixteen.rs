@@ -35,7 +35,6 @@ use anyhow::{anyhow, Context, Result};
 use sixteen_app::config::Config;
 use sixteen_app::core_update;
 use sixteen_app::idle::{self, IdleExit};
-use sixteen_app::livraria::{self, LivKind, LivPick};
 use sixteen_app::runner::{run_game, GameExit, GameSpec};
 use sixteen_app::settings;
 use sixteen_app::shelf::{self, Pick, ShelfOpts};
@@ -332,26 +331,6 @@ fn main() -> Result<()> {
                 // A core download may have just finished.
                 core_path = args.core.clone().or_else(default_core_path);
                 cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
-                continue 'app;
-            }
-            IdleExit::OpenLivraria => {
-                // A Livraria Retro (plan revision: "adicionar um novo botão
-                // para uma nova funcionalidade") — volta ao idle no `Back`;
-                // fechou a janela lá dentro, encerra o app.
-                match livraria::run(&mut plat, &mut cab, LivKind::Revistas)? {
-                    LivPick::Quit => break 'app,
-                    LivPick::Back => {}
-                }
-                continue 'app;
-            }
-            IdleExit::OpenMuseu => {
-                // O MUSEU DO CONSOLE — a mesma tela da Livraria, apontada
-                // para a pasta `docs/console-docs` (manual, poster,
-                // garantia etc.).
-                match livraria::run(&mut plat, &mut cab, LivKind::Museu)? {
-                    LivPick::Quit => break 'app,
-                    LivPick::Back => {}
-                }
                 continue 'app;
             }
         }

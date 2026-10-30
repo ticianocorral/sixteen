@@ -41,11 +41,19 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   procurados no disco 4×/s, não a 60 Hz na thread de UI.
 - **Estante: busca de capas com teto por frame** — no máximo 8 buscas no
   disco por frame, mesmo quando a capa local não existe.
+- **Capas decodificadas em segundo plano** — busca e decode das artes da
+  estante (capa, logo, cartucho, contracapa) saem da thread de UI para um
+  worker: rolar a estante não engasga mais a cada capa nova.
+- **Fades sem recriar a malha do CRT** — a estante e as telas 2D surgindo
+  da estática reaproveitam a malha em cache e só reescrevem o alpha.
+- **Filtro NTSC lê o frame direto** — sem remontar ~57 mil pixels por
+  frame antes do blit.
 
-### Modificado
-- **Livraria Retro e Museu do Console ocultos** na tela inicial enquanto as
-  funcionalidades são repensadas — o código segue no app, só os botões
-  saíram do painel.
+### Removido
+- **Livraria Retro (revistas) e Museu do Console (manuais do console)** —
+  telas, botões e pastas `docs/magazines`/`docs/console-docs` saem do app
+  (os PDFs já baixados ficam no disco, intocados). O manual de cada jogo,
+  na estante, continua.
 
 ## [1.3.2] - 2026-10-13
 

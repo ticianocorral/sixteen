@@ -1733,11 +1733,8 @@ pub fn run_game(
                             // modal-only, never shown alongside the panel
                             // that's up now. `Dev` is idle-screen-only too
                             // (and its menu lives outside a game). Same for
-                            // `Insert`/`Livraria` — the idle screen owns
-                            // them.
+                            // `Insert` — the idle screen owns it.
                             PanelButton::Insert
-                            | PanelButton::Livraria
-                            | PanelButton::Museu
                             | PanelButton::Settings
                             | PanelButton::Dev
                             | PanelButton::CoreDownload

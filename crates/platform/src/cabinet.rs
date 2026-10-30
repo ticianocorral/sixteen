@@ -329,6 +329,10 @@ pub struct Cabinet {
     src: Option<SrcTexture>,
     /// Cached CRT mesh; rebuilt only when the game rect resizes.
     mesh: Option<CrtMesh>,
+    /// Cópia do `mesh` para os fades de sinal (estante/2D surgindo da
+    /// estática): só o alpha dos vértices é reescrito a cada frame, em vez
+    /// de reconstruir duas malhas (~1.100 vértices cada) por frame.
+    fade_mesh: Option<CrtMesh>,
     /// Cached cabinet mesh; rebuilt only when the window or screen rect changes.
     bezel: Option<BezelMesh>,
     /// Render target the selector draws its flat 2D into, then composited
@@ -630,16 +634,6 @@ const TV_CH3_FLASH: Duration = Duration::from_secs(3);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelButton {
     Insert,
-    /// O botão "Livraria Retro" da tela inicial (plan revision: "adicionar
-    /// um novo botão para uma nova funcionalidade - Livraria Retro") — a
-    /// revistoteca em PDF (pasta `magazine`), leitura na TV. Só no idle,
-    /// como a estante.
-    Livraria,
-    /// O botão "MUSEU DO CONSOLE" (plan revision: "abaixo do botão de
-    /// magazine, outro botão para os pdf das documentações do console —
-    /// manual, poster, garantia — o app é museu local da época também") —
-    /// a acervo de documentação em PDF (pasta `museu`). Só no idle.
-    Museu,
     Settings,
     /// The idle screen's dev-mode button (plan revision: "habilitar botão em
     /// cima da configuração") — only drawn while the app's dev mode is on,
@@ -1189,6 +1183,7 @@ impl Cabinet {
             canvas,
             src: None,
             mesh: None,
+            fade_mesh: None,
             bezel: None,
             screen_tex: None,
             noise_tex: None,
@@ -2319,6 +2314,28 @@ impl Cabinet {
         self.mesh = Some(build_crt_mesh(dst, 1.0));
     }
 
+    /// Garante o `mesh` da tela atual e um `fade_mesh` igual a ele com o
+    /// alpha pedido — reaproveitados entre os frames do fade.
+    fn ensure_fade_meshes(&mut self, alpha: f32) {
+        self.ensure_mesh(self.screen);
+        let base = self.mesh.as_ref().unwrap();
+        if !matches!(&self.fade_mesh, Some(m) if m.w == base.w && m.h == base.h) {
+            self.fade_mesh = Some(CrtMesh {
+                verts: base.verts.clone(),
+                indices: base.indices.clone(),
+                w: base.w,
+                h: base.h,
+            });
+        }
+        let alpha = alpha.clamp(0.0, 1.0);
+        let fade = self.fade_mesh.as_mut().unwrap();
+        if fade.verts.first().is_some_and(|v| v.color.a != alpha) {
+            for v in &mut fade.verts {
+                v.color.a = alpha;
+            }
+        }
+    }
+
     fn ensure_bezel(&mut self, out_w: u32, out_h: u32, screen: Rect) {
         let key = (out_w, out_h, screen.width(), screen.height());
         if matches!(&self.bezel, Some(b) if b.key == key) {
@@ -3194,8 +3211,9 @@ impl Cabinet {
         self.update_noise_tex(static_level);
         let canvas_rect = self.canvas_rect;
 
-        let mesh_static = build_crt_mesh(self.screen, 1.0);
-        let mesh_shelf = build_crt_mesh(self.screen, shelf_alpha.clamp(0.0, 1.0));
+        self.ensure_fade_meshes(shelf_alpha);
+        let mesh_static = self.mesh.take().unwrap();
+        let mesh_shelf = self.fade_mesh.take().unwrap();
 
         self.canvas
             .set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
@@ -3214,6 +3232,8 @@ impl Cabinet {
         let _ =
             self.canvas
                 .render_geometry(&mesh_shelf.verts, Some(&st.tex), &mesh_shelf.indices[..]);
+        self.mesh = Some(mesh_static);
+        self.fade_mesh = Some(mesh_shelf);
         self.screen_tex = Some(st);
 
         let bezel = self.bezel.take().unwrap();
@@ -3251,8 +3271,9 @@ impl Cabinet {
         let canvas_rect = self.canvas_rect;
         let panel = panel_rect(canvas_rect.width(), canvas_rect.height());
 
-        let mesh_static = build_crt_mesh(self.screen, 1.0);
-        let mesh_shelf = build_crt_mesh(self.screen, shelf_alpha.clamp(0.0, 1.0));
+        self.ensure_fade_meshes(shelf_alpha);
+        let mesh_static = self.mesh.take().unwrap();
+        let mesh_shelf = self.fade_mesh.take().unwrap();
 
         self.canvas
             .set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
@@ -3271,6 +3292,8 @@ impl Cabinet {
         let _ =
             self.canvas
                 .render_geometry(&mesh_shelf.verts, Some(&st.tex), &mesh_shelf.indices[..]);
+        self.mesh = Some(mesh_static);
+        self.fade_mesh = Some(mesh_shelf);
         self.screen_tex = Some(st);
 
         let bezel = self.bezel.take().unwrap();
@@ -5187,8 +5210,8 @@ fn draw_panel(
             true,
         );
         // A estante mora no tubo: com a TV desligada, o aviso fica logo
-        // abaixo do botão (a Livraria e as Configurações não dependem da
-        // TV — só a estante de games).
+        // abaixo do botão (as Configurações não dependem da TV — só a
+        // estante de games).
         let mut hint_bottom = insert_drawn.bottom();
         if !tv_on {
             let hint = tr!(
@@ -5207,9 +5230,6 @@ fn draw_panel(
             );
             hint_bottom = insert_drawn.bottom() + 4 + GLYPH_H as i32;
         }
-        // Livraria Retro e Museu do Console: ocultos nesta versão (as
-        // funcionalidades serão repensadas) — o código segue no app
-        // (`livraria.rs`), só os botões saíram do painel.
         cy = hint_bottom;
 
         let btn_h = (GLYPH_H + 12) as i32;
