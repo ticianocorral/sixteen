@@ -313,25 +313,10 @@ impl Config {
 }
 
 /// Grava o config com permissão 0600 no Unix — ele carrega os tokens do
-/// RetroAchievements, e o `fs::write` padrão deixaria o arquivo legível
-/// por outros usuários locais (0644 no umask comum).
+/// RetroAchievements — e de forma atômica (tmp + rename): um travamento no
+/// meio não deixa o cfg pela metade.
 pub(crate) fn write_config_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)?;
-        f.write_all(contents.as_bytes())
-    }
-    #[cfg(not(unix))]
-    {
-        std::fs::write(path, contents)
-    }
+    sixteen_domain::fsutil::write_atomic_private(path, contents)
 }
 
 #[cfg(test)]

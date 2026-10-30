@@ -60,7 +60,7 @@ pub fn test_login(user: &str, token: &str) -> Result<String, String> {
         ))
         .set("User-Agent", USER_AGENT)
         .call()
-        .map_err(|e| tr!(format!("network: {e}"), format!("rede: {e}")))?;
+        .map_err(net_err)?;
     let body: serde_json::Value = resp
         .into_json()
         .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
@@ -236,15 +236,15 @@ pub fn fetch_game(
         .to_string());
     }
     let resp = agent()
-        .post(&format!(
-            "{API_BASE}/dorequest.php?r=achievementsets&u={}&t={}&m={}",
-            encode(user),
-            encode(connect),
-            encode(hash)
-        ))
+        .post(&format!("{API_BASE}/dorequest.php"))
         .set("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| format!("rede: {e}"))?;
+        .send_form(&[
+            ("r", "achievementsets"),
+            ("u", user),
+            ("t", connect),
+            ("m", hash),
+        ])
+        .map_err(net_err)?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
@@ -280,6 +280,11 @@ pub fn fetch_game(
                 if let Ok(meta) = meta.into_json::<serde_json::Value>() {
                     let mut cached: serde_json::Value =
                         serde_json::from_str(&text).unwrap_or_else(|_| body.clone());
+                    // Indexar um Value que não é objeto (array/null de um
+                    // servidor com bug) dá panic — só mescla em objeto.
+                    if !cached.is_object() {
+                        cached = serde_json::json!({});
+                    }
                     cached["Released"] = meta.get("Released").cloned().unwrap_or_default();
                     cached["Publisher"] = meta.get("Publisher").cloned().unwrap_or_default();
                     cached["Developer"] = meta.get("Developer").cloned().unwrap_or_default();
@@ -298,7 +303,7 @@ fn write_cache(hash: &str, text: &str) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("cache: {e}"))?;
     }
-    std::fs::write(&path, text).map_err(|e| format!("cache: {e}"))
+    sixteen_domain::fsutil::write_atomic(&path, text).map_err(|e| format!("cache: {e}"))
 }
 
 // ---- fase 3: live session -------------------------------------------
@@ -385,17 +390,17 @@ pub fn award(
     hardcore: bool,
 ) -> Result<String, String> {
     let resp = agent()
-        .post(&format!(
-            "{API_BASE}/dorequest.php?r=awardachievement&u={}&t={}&a={}&h={}&m={}",
-            encode(user),
-            encode(token),
-            achievement_id,
-            if hardcore { "1" } else { "0" },
-            hash
-        ))
+        .post(&format!("{API_BASE}/dorequest.php"))
         .set("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| format!("rede: {e}"))?;
+        .send_form(&[
+            ("r", "awardachievement"),
+            ("u", user),
+            ("t", token),
+            ("a", &achievement_id.to_string()),
+            ("h", if hardcore { "1" } else { "0" }),
+            ("m", hash),
+        ])
+        .map_err(net_err)?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
@@ -410,19 +415,33 @@ pub fn award(
         .unwrap_or_else(|| "ok".into()))
 }
 
+/// A request failure as a message for the settings row / log — WITHOUT
+/// the URL: ureq's own `Display` prints the full request URL, and the web
+/// API routes carry the key in the query string. An HTTP error status
+/// keeps the server's `Error` text when the body has one (a wrong
+/// password comes back as 401 with JSON).
+fn net_err(e: ureq::Error) -> String {
+    match e {
+        ureq::Error::Status(code, resp) => resp
+            .into_json::<serde_json::Value>()
+            .ok()
+            .and_then(|b| b.get("Error").and_then(|v| v.as_str()).map(str::to_string))
+            .unwrap_or_else(|| format!("HTTP {code}")),
+        ureq::Error::Transport(t) => {
+            tr!(format!("network: {}", t.kind()), format!("rede: {}", t.kind()))
+        }
+    }
+}
+
 /// Exchange the account password for a long-lived Connect login token —
 /// what the logic (`achievementsets`) and submission (`awardachievement`)
 /// routes authenticate with. The password itself is never stored.
 pub fn connect_login(user: &str, password: &str) -> Result<String, String> {
     let resp = agent()
-        .post(&format!(
-            "{API_BASE}/dorequest.php?r=login2&u={}&p={}",
-            encode(user),
-            encode(password)
-        ))
+        .post(&format!("{API_BASE}/dorequest.php"))
         .set("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| tr!(format!("network: {e}"), format!("rede: {e}")))?;
+        .send_form(&[("r", "login2"), ("u", user), ("p", password)])
+        .map_err(net_err)?;
     let body: serde_json::Value = resp
         .into_json()
         .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
@@ -953,7 +972,7 @@ pub fn fetch_completion(
             ))
             .set("User-Agent", USER_AGENT)
             .call()
-            .map_err(|e| format!("rede: {e}"))?;
+            .map_err(net_err)?;
         let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
         let total = body.get("Total").and_then(|v| v.as_u64()).unwrap_or(0);
         let results = body
@@ -1105,7 +1124,7 @@ pub fn fetch_game_earned(user: &str, token: &str, game_id: u64) -> Result<Earned
         ))
         .set("User-Agent", USER_AGENT)
         .call()
-        .map_err(|e| format!("rede: {e}"))?;
+        .map_err(net_err)?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
     let earned = earned_map_from_json(&body);
     let path = earned_ids_path(game_id);

@@ -7,6 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use sixteen_domain::fsutil::write_atomic;
+
 use anyhow::{anyhow, Context, Result};
 use sixteen_emulation::{Button, Core, Frame as EmuFrame, PixelFormat as EmuFormat};
 use sixteen_ntsc::{NtscFilter, Preset};
@@ -141,7 +143,20 @@ pub(crate) fn sanitize_dir_name(title: &str) -> String {
                 c
             }
         })
-        .collect();
+        .collect::<String>();
+    // Pontos e espaços no fim somem (o Windows os descarta, e "x." viraria
+    // outra pasta que "x"); um nome feito só de pontos ("." / "..") apontaria
+    // para a pasta atual ou a de cima — vira "___" como o nome vazio. Teto
+    // de 200 bytes, abaixo do limite de nome de arquivo dos sistemas comuns.
+    let mut safe = safe.trim_end_matches(['.', ' ']).to_string();
+    if safe.len() > 200 {
+        let mut cut = 200;
+        while !safe.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        safe.truncate(cut);
+        safe = safe.trim_end_matches(['.', ' ']).to_string();
+    }
     if safe.is_empty() {
         "___".to_string()
     } else {
@@ -212,7 +227,7 @@ fn add_playtime(save_dir: &Path, title: &str, secs: u64) {
     }
     let total = total_playtime_secs(save_dir, title) + secs;
     let _ = fs::create_dir_all(game_dir(save_dir, title));
-    let _ = fs::write(playtime_path(save_dir, title), total.to_string());
+    let _ = write_atomic(&playtime_path(save_dir, title), total.to_string());
 }
 
 /// Rows for the "Salvar" modal (plan revision — replaces the old slot
@@ -381,7 +396,7 @@ fn command_rows(
 fn flush_sram(path: &Path, last: &mut Option<Vec<u8>>, cur: Option<Vec<u8>>) {
     if let Some(cur) = cur {
         if last.as_ref() != Some(&cur) {
-            match fs::write(path, &cur) {
+            match write_atomic(path, &cur) {
                 Ok(_) => log::info!("SRAM flushed -> {}", path.display()),
                 Err(e) => log::warn!("SRAM flush failed: {e}"),
             }
@@ -633,7 +648,7 @@ fn save_cheat_state(path: &Path, state: &[bool]) {
         .iter()
         .map(|&on| if on { "1\n" } else { "0\n" })
         .collect();
-    if let Err(e) = fs::write(path, text) {
+    if let Err(e) = write_atomic(path, text) {
         log::warn!("cheat state flush failed: {e}");
     }
 }
@@ -876,7 +891,7 @@ fn save_notes_meta(notes_dir: &Path, title: &str, meta: &NotesMeta) {
         return;
     }
     if let Ok(s) = serde_json::to_string_pretty(meta) {
-        if let Err(e) = fs::write(notes_meta_path(notes_dir, title), s) {
+        if let Err(e) = write_atomic(&notes_meta_path(notes_dir, title), s) {
             log::warn!("saving note slot metadata failed: {e}");
         }
     }
@@ -943,7 +958,7 @@ fn save_text_slot(notes_dir: &Path, title: &str, slot: u8, text: &str) -> Result
     let dir = note_dir(notes_dir, title);
     fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = note_text_slot_path(notes_dir, title, slot);
-    fs::write(&path, text).with_context(|| format!("saving text note {}", path.display()))
+    write_atomic(&path, text).with_context(|| format!("saving text note {}", path.display()))
 }
 
 /// Clear note-text `slot` — a missing file already means "empty", so this
@@ -1439,6 +1454,11 @@ pub fn run_game(
     let frame_time = Duration::from_secs_f64(1.0 / av.fps.max(1.0));
     let mut next = Instant::now();
     let mut frames: u32 = 0;
+    // Painel de desempenho do modo dev: fps medido em janelas de 1 s;
+    // temperatura/RAM lidas no máximo a cada 2 s (só com o painel ligado).
+    let mut fps_window_start = Instant::now();
+    let mut fps_window_frames: u32 = 0;
+    let mut sys_next = Instant::now();
     let mut last_dims = (0u32, 0u32);
     // Don't let the audio queue run more than ~0.15 s ahead (latency creep).
     let audio_cap = (av.sample_rate / 6.0) as usize;
@@ -2009,7 +2029,7 @@ pub fn run_game(
                     Modal::SaveSlot => {
                         let path = state_file(&spec.save_dir, &title, i as u8);
                         match core.save_state() {
-                            Some(s) => match fs::write(&path, &s) {
+                            Some(s) => match write_atomic(&path, &s) {
                                 Ok(_) => {
                                     log::info!("slot {i}: saved ({} KiB)", s.len() / 1024);
                                     flash.insert(PanelButton::SaveState, Instant::now());
@@ -2316,6 +2336,21 @@ pub fn run_game(
                 let aspect = core.av_info().aspect_ratio;
                 cab.set_session_time(live_session_time(powered_elapsed, powered_since));
                 cab.present_frame(&fref, aspect);
+                fps_window_frames += 1;
+                let window = fps_window_start.elapsed();
+                if window >= Duration::from_secs(1) {
+                    let fps = fps_window_frames as f64 / window.as_secs_f64();
+                    fps_window_start = Instant::now();
+                    fps_window_frames = 0;
+                    if cab.perf_overlay() && Instant::now() >= sys_next {
+                        sys_next = Instant::now() + Duration::from_secs(2);
+                        cab.set_perf_readout(
+                            fps.round() as u32,
+                            sixteen_platform::sysinfo::cpu_temp_celsius(),
+                            sixteen_platform::sysinfo::process_ram_mb(),
+                        );
+                    }
+                }
 
                 if let Some(slot) = note_request.take() {
                     match save_note_image(&spec.notes_dir, &title, slot, &frame) {
@@ -2395,6 +2430,17 @@ pub fn run_game(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sanitize_dir_name_never_escapes_the_parent() {
+        use super::sanitize_dir_name;
+        assert_eq!(sanitize_dir_name(".."), "___");
+        assert_eq!(sanitize_dir_name("."), "___");
+        assert_eq!(sanitize_dir_name(" ... "), "___");
+        assert_eq!(sanitize_dir_name("../etc"), ".._etc");
+        assert_eq!(sanitize_dir_name("Super Game (USA)."), "Super Game (USA)");
+        assert!(sanitize_dir_name(&"ã".repeat(300)).len() <= 200);
+    }
+
     use super::{
         add_playtime, cheat_state_path, delete_text_slot, frame_to_rgb8, game_dir,
         legacy_note_text_path, load_cheat_state, migrate_legacy_text_notes, note_dir,

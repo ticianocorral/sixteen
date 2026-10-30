@@ -1186,6 +1186,11 @@ pub fn run(
     // chegam — para qualquer jogo, não só o primeiro aberto.
     let mut badge_ids: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     let mut badge_tried: HashSet<String> = HashSet::new();
+    // Próxima varredura do disco atrás de badges que faltam: com a lista
+    // aberta, o loop fazia um stat por badge ausente A CADA FRAME (60 Hz,
+    // na thread de UI) enquanto o prefetch baixava — 4×/s basta para os
+    // badges "aparecerem" conforme chegam.
+    let mut badge_scan_next = Instant::now();
     // Earned do servidor para os [x] da lista de conquistas (uma tentativa
     // por jogo por visita — o disco cacheia por game id): o worker une no
     // arquivo local `retroachievements/ra-earned/<hash>.json` e devolve o
@@ -1919,6 +1924,11 @@ pub fn run(
         // tried at most once per visit, whether or not a file turns up; a
         // tile whose budget ran out simply waits for the next frame.
         let mut decode_budget = 1usize;
+        // Buscas no disco também têm teto por frame: o decode só desconta
+        // quando acha a arte, e uma página de tiles SEM capa local fazia
+        // todas as buscas (candidatos × extensões, cada um um stat) de uma
+        // vez ao abrir ou rolar a estante.
+        let mut lookup_budget = 8usize;
         for (i, entry) in view.iter().enumerate() {
             if grid.cell_pos(i, top_row).is_none() {
                 continue;
@@ -1927,12 +1937,13 @@ pub fn run(
             if cab.has_image(id) {
                 continue;
             }
-            if decode_budget == 0 {
+            if decode_budget == 0 || lookup_budget == 0 {
                 break;
             }
             if !tried_cover.insert(entry.rom.sha1.clone()) {
                 continue;
             }
+            lookup_budget -= 1;
             if let Some(path) = find_local_art(&cover_dir, &entry.rom.path) {
                 if let Ok((w, h, rgba)) = decode_art(&path) {
                     cab.set_image(id, w, h, &rgba);
@@ -2132,11 +2143,15 @@ pub fn run(
         // poucas por frame para o primeiro carregamento não engasgar. O
         // prefetch continua baixando em background: na medida que os PNGs
         // aparecem, os badges entram na lista (de qualquer jogo aberto).
-        if ach_view {
+        if ach_view && Instant::now() >= badge_scan_next {
+            badge_scan_next = Instant::now() + Duration::from_millis(250);
             if let Some(list) = ach_data.as_ref() {
                 let mut novos = 0;
                 for a in &list.achievements {
                     if novos >= 4 {
+                        // Ainda há badges no disco para registrar: a
+                        // próxima leva sai no frame seguinte.
+                        badge_scan_next = Instant::now();
                         break;
                     }
                     if badge_ids.contains_key(&a.badge) {

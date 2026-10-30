@@ -324,7 +324,7 @@ impl Catalog {
             path: self.store_path.display().to_string(),
             source,
         })?;
-        std::fs::write(&self.store_path, text).map_err(|source| CatalogError::Io {
+        crate::fsutil::write_atomic(&self.store_path, text).map_err(|source| CatalogError::Io {
             path: self.store_path.display().to_string(),
             source,
         })

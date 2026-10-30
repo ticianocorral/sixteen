@@ -224,7 +224,7 @@ impl HashCache {
 
     pub fn save(&self, path: &Path) {
         if let Ok(bytes) = serde_json::to_vec(self) {
-            let _ = fs::write(path, bytes);
+            let _ = crate::fsutil::write_atomic(path, bytes);
         }
     }
 

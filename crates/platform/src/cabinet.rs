@@ -428,6 +428,14 @@ pub struct Cabinet {
     /// logo acima do "Configurações". Session-only: nunca é persistido, o
     /// segredo não vaza para arquivo nenhum.
     dev_mode: bool,
+    /// O painel de desempenho do modo dev ("infos de desempenho" no menu
+    /// dev): "N FPS  CPU T  RAM M" no topo central da TV durante o jogo. Os
+    /// números chegam por `set_perf_readout` (runner, 1×/s); desligado,
+    /// nada é desenhado.
+    perf_overlay: bool,
+    perf_fps: u32,
+    perf_cpu: Option<u32>,
+    perf_ram_mb: Option<u32>,
     /// Linha de status do download do núcleo no painel da tela inicial
     /// (plan revision: "cliquei no icone verde de update do nucleo mas nao
     /// abriu nada") — o download é em segundo plano e o rótulo dele só
@@ -1205,6 +1213,10 @@ impl Cabinet {
             audio: audio.clone(),
             idle_core_prompt: None,
             dev_mode: false,
+            perf_overlay: std::env::var_os("SIXTEEN_PERF").is_some(),
+            perf_fps: 0,
+            perf_cpu: None,
+            perf_ram_mb: None,
             core_status: None,
             static_hiss: false,
             hiss: None,
@@ -1298,6 +1310,26 @@ impl Cabinet {
     /// já o desbloqueou (o botão em si o Cabinet desenha sozinho).
     pub fn dev_mode(&self) -> bool {
         self.dev_mode
+    }
+
+    /// Liga/desliga o painel de desempenho do modo dev (o menu dev alterna;
+    /// o estado mora aqui e sobrevive estante ↔ jogo).
+    pub fn set_perf_overlay(&mut self, on: bool) {
+        self.perf_overlay = on;
+    }
+
+    /// O painel de desempenho está ligado?
+    pub fn perf_overlay(&self) -> bool {
+        self.perf_overlay
+    }
+
+    /// Alimenta o painel: fps medido pelo runner (janela de 1 s) e as
+    /// leituras de sistema (°C, MB — `None` = indisponível, o segmento sai
+    /// da linha).
+    pub fn set_perf_readout(&mut self, fps: u32, cpu: Option<f32>, ram_mb: Option<f32>) {
+        self.perf_fps = fps;
+        self.perf_cpu = cpu.map(|c| c.round() as u32);
+        self.perf_ram_mb = ram_mb.map(|m| m.round() as u32);
     }
 
     /// A linha de status do download do núcleo no painel do idle ("baixando…
@@ -2097,6 +2129,14 @@ impl Cabinet {
             self.core_status.as_deref(),
             panel_tv_on,
         );
+        // Painel de desempenho do modo dev: NA MOLDURA, na faixa acima da
+        // tela, centralizado sobre a TV — por último, ainda dentro do
+        // viewport do gabinete.
+        if self.perf_overlay {
+            let line = perf_line(self.perf_fps, self.perf_cpu, self.perf_ram_mb);
+            let band = (canvas_rect.top(), self.screen.top() - canvas_rect.top());
+            draw_perf_overlay(&mut self.canvas, &mut self.font, self.screen, band, &line);
+        }
         self.canvas.set_viewport(None);
         self.present_and_time();
     }
@@ -2144,6 +2184,9 @@ impl Cabinet {
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
+        let perf = self
+            .perf_overlay
+            .then(|| perf_line(self.perf_fps, self.perf_cpu, self.perf_ram_mb));
         let dev_mode = self.dev_mode;
         let core_status = self.core_status.as_deref();
         let osd = self.osd_for_capture();
@@ -2222,6 +2265,10 @@ impl Cabinet {
                 core_status,
                 tv_on,
             );
+            if let Some(line) = &perf {
+                let band = (canvas_rect.top(), screen.top() - canvas_rect.top());
+                draw_perf_overlay(c, font, screen, band, line);
+            }
             c.set_viewport(None);
             saved = c
                 .read_pixels(None::<Rect>)
@@ -4902,6 +4949,50 @@ fn draw_panel_slot(
     canvas.set_clip_rect(None);
 }
 
+/// A linha do painel de desempenho — pura para o teste fixar o formato:
+/// ASCII de atlas (sem °/·), dois espaços entre segmentos e os segmentos
+/// cuja leitura falhou simplesmente omitidos.
+fn perf_line(fps: u32, cpu: Option<u32>, ram_mb: Option<u32>) -> String {
+    let mut parts = vec![format!("{fps} FPS")];
+    if let Some(c) = cpu {
+        parts.push(format!("CPU {c}C"));
+    }
+    if let Some(m) = ram_mb {
+        parts.push(format!("RAM {m} MB"));
+    }
+    parts.join("  ")
+}
+
+/// O painel de desempenho do modo dev — na faixa da moldura acima da tela:
+/// centralizado sobre a TV, fundo escuro translúcido para ler sobre a
+/// carcaça. `center` é o rect da tela (para o x); `band` é (topo, altura).
+fn draw_perf_overlay(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    center: Rect,
+    band: (i32, i32),
+    line: &str,
+) {
+    const PAD_X: i32 = 10;
+    const PAD_Y: i32 = 6;
+    if line.is_empty() {
+        return;
+    }
+    let text_w = line.chars().count() as i32 * GLYPH_W as i32;
+    let row = GLYPH_H as i32;
+    let x = center.left() + (center.width() as i32 - text_w) / 2;
+    let y = band.0 + ((band.1 - row) / 2).max(2);
+    canvas.set_blend_mode(BlendMode::Blend);
+    canvas.set_draw_color(Color::RGBA(0, 0, 0, 150));
+    let _ = canvas.fill_rect(Rect::new(
+        x - PAD_X,
+        y - PAD_Y,
+        (text_w + PAD_X * 2) as u32,
+        (row + PAD_Y * 2) as u32,
+    ));
+    draw_text_absolute(canvas, font, x, y, TextStyle::new(1, PANEL_TEXT), line, usize::MAX);
+}
+
 /// Scale + colour for one of the absolute-coordinate text helpers below —
 /// bundled so those functions stay under clippy's argument-count limit.
 #[derive(Clone, Copy)]
@@ -5116,36 +5207,15 @@ fn draw_panel(
             );
             hint_bottom = insert_drawn.bottom() + 4 + GLYPH_H as i32;
         }
-        // A Livraria Retro logo abaixo (plan revision: "adicionar um novo
-        // botão para uma nova funcionalidade - Livraria Retro") — a
-        // revistoteca em PDF (pasta `magazine`), leitura na TV. Mesma
-        // flutuação, mesma largura do vizinho da estante.
-        let liv_btn = Rect::new(btn.x(), hint_bottom + 18, btn_w, btn_h);
-        let livraria_drawn = draw_button(
-            canvas,
-            font,
-            liv_btn,
-            tr!("RETRO LIBRARY", "LIVRARIA RETRO"),
-            true,
-        );
-        // O MUSEU DO CONSOLE logo abaixo (manual, poster, garantia etc. —
-        // os PDFs da documentação da época, pasta `museu`). Mesma largura.
-        let mus_btn = Rect::new(btn.x(), livraria_drawn.bottom() + 18, btn_w, btn_h);
-        let museu_drawn = draw_button(
-            canvas,
-            font,
-            mus_btn,
-            tr!("CONSOLE MUSEUM", "MUSEU DO CONSOLE"),
-            true,
-        );
-        cy = museu_drawn.bottom();
+        // Livraria Retro e Museu do Console: ocultos nesta versão (as
+        // funcionalidades serão repensadas) — o código segue no app
+        // (`livraria.rs`), só os botões saíram do painel.
+        cy = hint_bottom;
 
         let btn_h = (GLYPH_H + 12) as i32;
         let settings = Rect::new(x, rect.bottom() - pad - btn_h, inner_w, btn_h as u32);
         let mut buttons = vec![
             (PanelButton::Insert, insert_drawn),
-            (PanelButton::Livraria, livraria_drawn),
-            (PanelButton::Museu, museu_drawn),
             (
                 PanelButton::Settings,
                 draw_button(
@@ -7633,6 +7703,17 @@ fn build_font_atlas(canvas: &mut WindowCanvas) -> Result<Texture, PlatformError>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn perf_line_omits_unavailable_segments_and_stays_ascii() {
+        use super::perf_line;
+        assert_eq!(
+            perf_line(34, Some(52), Some(84)),
+            "34 FPS  CPU 52C  RAM 84 MB"
+        );
+        assert_eq!(perf_line(60, None, None), "60 FPS");
+        assert_eq!(perf_line(60, Some(61), None), "60 FPS  CPU 61C");
+    }
+
     use super::{
         fit_aspect_in, panel_cartridge_rects, panel_slot_base, panel_slot_mouth, ra_badge_rows,
         screen_area, wrapped_height, CART_WIDTH_FRAC, GLYPH_H, OSD_GREEN, SEAT_HIDDEN_FRAC,

@@ -4,6 +4,7 @@
 mod audio;
 mod cabinet;
 mod input;
+pub mod sysinfo;
 pub mod tr;
 
 pub use audio::AudioOut;

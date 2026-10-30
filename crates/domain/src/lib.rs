@@ -2,6 +2,7 @@
 
 pub mod catalog;
 pub mod cheats;
+pub mod fsutil;
 pub mod infos;
 pub mod library;
 pub mod nointro;

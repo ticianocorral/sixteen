@@ -7,6 +7,46 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+### Adicionado
+- **Monitor de performance no modo dev** (igual ao do PolystnX) — botão
+  "infos de desempenho" no menu dev (Konami na tela inicial; Confirm/Cima/
+  Baixo no gamepad) liga uma linha "N FPS  CPU T  RAM M MB" no topo da TV
+  durante o jogo. Leituras de sistema best-effort (macOS: só fps e RAM;
+  Linux: temperatura via hwmon/thermal). `SIXTEEN_PERF=1` liga já na
+  largada.
+
+### Segurança
+- **Senha e token do RetroAchievements saem da URL** — login, conquistas e
+  envio de desbloqueio (rotas Connect) mandam os parâmetros no corpo do
+  POST, e os erros de rede nunca mais mostram a URL (que carrega a chave
+  nas rotas da API web): só o tipo da falha ou o `Error` do servidor.
+- **sixteen.cfg sempre 0600** — a permissão era aplicada só na criação; um
+  cfg antigo (0644) agora é fechado no próximo salvamento.
+
+- **Saves não se perdem mais num travamento** — SRAM, savestates, notas,
+  tempo de jogo, library.json, catálogo, cfg e cache do RA são gravados
+  de forma atômica (arquivo temporário + `sync` + `rename`); antes o
+  `fs::write` truncava o arquivo e uma queda no meio deixava o save
+  cortado ou zerado.
+- **Nome de pasta "." ou ".." recusado** — títulos e nomes do DAT viram
+  "___" em vez de apontar para a pasta de cima; pontos/espaços finais
+  somem e o nome tem teto de 200 bytes.
+- **Cache do RA sem panic** com resposta que não é objeto JSON.
+- **"Instalar assets de exemplo" não sobrescreve** arquivos já existentes.
+
+### Desempenho
+- **Lista de conquistas sem stat por frame** — os badges que faltam são
+  procurados no disco 4×/s, não a 60 Hz na thread de UI.
+- **Estante: busca de capas com teto por frame** — no máximo 8 buscas no
+  disco por frame, mesmo quando a capa local não existe.
+
+### Modificado
+- **Livraria Retro e Museu do Console ocultos** na tela inicial enquanto as
+  funcionalidades são repensadas — o código segue no app, só os botões
+  saíram do painel.
+
 ## [1.3.2] - 2026-10-13
 
 ### Corrigido
