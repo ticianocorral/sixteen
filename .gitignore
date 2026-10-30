@@ -9,6 +9,9 @@
 /saves/
 /system/
 *.sfc
+# A ROM sintética do pacote de exemplo (gerada por scripts/gen_example_assets.py)
+# é embutida no binário por include_bytes! — precisa estar no repositório.
+!crates/app/assets/example/roms/*.sfc
 *.smc
 *.fig
 *.swc
