@@ -7,6 +7,14 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.4.1] - 2026-10-29
+
+### Corrigido
+- **Build da release** — a ROM sintética do pacote de exemplo (embutida
+  pelo menu dev) estava fora do repositório por causa do `*.sfc` no
+  `.gitignore`: compilava só na máquina de dev, e o CI e os pacotes da
+  1.4.0 quebravam. Mesmo conteúdo da 1.4.0, agora com os pacotes.
+
 ## [1.4.0] - 2026-10-29
 
 ### Adicionado
