@@ -40,6 +40,8 @@ const MARGIN: i32 = 28;
 /// box — both sit above the favorites/grid, inside the tube like the rest
 /// of the shelf's own content.
 const HEADER_H: i32 = 28;
+/// Margem interna do móvel: as capas das pontas não encostam nos montantes.
+const SHELF_INSET: i32 = 14;
 /// Thin strip reserved at the grid's right edge for the scroll indicator
 /// (plan revision: "mostrar rolagem na tv para visualizar os jogos") —
 /// scrolling itself already worked (wheel/d-pad/page keys); this just makes
@@ -1065,6 +1067,8 @@ impl GridLayout {
                 MARGIN,
             )
         } else {
+            // Respiro entre as capas das pontas e os montantes do móvel.
+            let grid_w = grid_w.saturating_sub(SHELF_INSET as u32 * 2);
             let gap = GAP as i32;
             let cols = ((grid_w as i32 + gap) / (TILE_W as i32 + gap)).max(3);
             // Encolhe o tile até a fileira caber `cols` colunas com gap.
@@ -1092,7 +1096,7 @@ impl GridLayout {
             let cell_h = item_h + gap;
             // Sobrou largura? A grade fica centrada na área dela.
             let used = cols * cell_w - gap;
-            let x0 = MARGIN + (grid_w as i32 - used) / 2;
+            let x0 = MARGIN + SHELF_INSET + (grid_w as i32 - used) / 2;
             (cell_w, cell_h, item_w, item_h, cols as usize, x0)
         };
         // A última fileira não precisa do vão de baixo (a prateleira dela
