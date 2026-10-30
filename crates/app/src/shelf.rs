@@ -37,7 +37,7 @@ const TILE_H: u32 = 195;
 const GAP: u32 = 18;
 const MARGIN: i32 = 28;
 /// Room reserved at the header row for the "N games" label and the filter
-/// box — both sit above the grid/recent row, inside the tube like the rest
+/// box — both sit above the favorites/grid, inside the tube like the rest
 /// of the shelf's own content.
 const HEADER_H: i32 = 28;
 /// Thin strip reserved at the grid's right edge for the scroll indicator
@@ -53,42 +53,30 @@ const SCROLLBAR_RESERVE: u32 = 16;
 const LIST_ROW_H: u32 = 22;
 const LIST_GAP: u32 = 6;
 
-/// A "jogados recentemente" strip above the main grid/list (plan revision) —
-/// the last played games, always in a single row. Both strips scroll
-/// horizontally now (see `STRIP_CAP`), so no fixed five-item cap anymore.
-const RECENT_TILE_W: u32 = 160;
-const RECENT_TILE_H: u32 = 120;
-const RECENT_GAP: u32 = 14;
-const RECENT_LABEL_H: i32 = 24;
-
-/// The main grid/list's own section heading (plan revision: "colocar um
-/// titulo (Todos os jogos)") — mirrors the "jogados recentemente" label
-/// above the recent strip, so both sections read the same way.
-const ALL_GAMES_LABEL_H: i32 = 24;
-/// O rótulo da seção principal — função porque `tr!` não cabe em `const`.
-fn all_games_title() -> &'static str {
-    tr!("all games", "todos os jogos")
-}
-
-/// A "favoritos" strip above the recent one (plan revision: "adicionar
-/// marcador de favorito nos jogos; mostrar em uma categoria acima dos
-/// ultimos jogados") — same tile geometry as the recent strip, one row.
-/// Both strips scroll horizontally (plan revision: "inserir rolagem
-/// horizontal em favoritos e jogados recentemente"): more markers than fit
-/// stay one cursor-move away instead of being cut off by a hard cap. The
-/// label height mirrors the other two sections'.
+/// A faixa de favoritos acima da grade (plan revision: "adicionar marcador
+/// de favorito nos jogos; mostrar em uma categoria acima") — uma fileira só,
+/// com rolagem horizontal: mais favoritos do que cabem ficam a um movimento
+/// do cursor em vez de cortados. ("Jogados recentemente" saiu: o Histórico,
+/// no cabeçalho, já lista os últimos jogados.)
+const STRIP_TILE_W: u32 = 160;
+const STRIP_TILE_H: u32 = 120;
+const STRIP_GAP: u32 = 14;
 const FAV_LABEL_H: i32 = 24;
 /// O rótulo da faixa de favoritos — função porque `tr!` não cabe em `const`.
 fn fav_title() -> &'static str {
     tr!("favorites", "favoritos")
 }
-/// Hard caps well past what fits on screen at once — the strips scroll, but
-/// a run of thousands of played games shouldn't grow them without bound.
+/// Teto bem acima do que cabe na tela de uma vez — a faixa rola, mas
+/// milhares de favoritos não devem crescê-la sem limite.
 const STRIP_CAP: usize = 60;
-/// The recent strip shows at most this many games (plan revision: "jogados
-/// recentemente mostrar apenas no maximo 8 jogos") — favorites keep the
-/// wider `STRIP_CAP`.
-const RECENT_CAP: usize = 8;
+
+/// O título da listagem geral (plan revision: "colocar um titulo (Todos os
+/// jogos)"), na mesma altura do rótulo dos favoritos.
+const ALL_GAMES_LABEL_H: i32 = 36;
+/// O rótulo da seção principal — função porque `tr!` não cabe em `const`.
+fn all_games_title() -> &'static str {
+    tr!("all games", "todos os jogos")
+}
 
 /// The title filter box (plan revision: "colocar filtro para facilitar o
 /// encontro dos games na lista") — the shelf's own one deliberate keyboard
@@ -108,7 +96,6 @@ const HISTORY_BTN_W: u32 = 110;
 const REFRESH_BTN_W: u32 = 110;
 
 const BG: (u8, u8, u8) = (18, 18, 20);
-const TILE_BG: (u8, u8, u8, u8) = (34, 34, 40, 255);
 const HILITE: (u8, u8, u8, u8) = (240, 200, 80, 255);
 const TEXT: (u8, u8, u8) = (232, 232, 232);
 const DIM: (u8, u8, u8) = (150, 150, 158);
@@ -340,8 +327,8 @@ fn badge_image_id(name: &str) -> u64 {
 /// logo... colocar o back cover tambem") — same derivation as
 /// `cartridge_id`, a different fixed salt so it can't collide with any of
 /// the other three.
-/// The strips' scroll affordance (plan revision: "inserir rolagem
-/// horizontal em favoritos e jogados recentemente"; depois "nao consigo
+/// The favorites strip's scroll affordance (plan revision: "inserir
+/// rolagem horizontal em favoritos"; depois "nao consigo
 /// clicar nas setas") — real buttons in the strip's header row, right
 /// side, same outline style as the header's "histórico" button: "<" slides
 /// the strip back a tile, ">" forward, each click one step. Drawn whenever
@@ -353,7 +340,7 @@ type StripArrows = ((i32, i32, u32, u32), (i32, i32, u32, u32));
 pub fn strip_arrow_rects(scr_w: u32, y0: i32) -> StripArrows {
     let bw = 36u32;
     let bh = 22u32;
-    let by = y0 - RECENT_LABEL_H + 1;
+    let by = y0 - FAV_LABEL_H + 1;
     let right = (scr_w as i32 - MARGIN - bw as i32, by, bw, bh);
     let left = (right.0 - 8 - bw as i32, by, bw, bh);
     (left, right)
@@ -515,6 +502,68 @@ fn pick_play(
     }
 }
 
+/// O MÓVEL em volta das capas: o painel de fundo (madeira escura com veios
+/// verticais, escurecendo para os cantos como o fundo de um armário),
+/// os dois montantes laterais e a travessa do topo — a grade vira o
+/// interior de uma estante, em vez de capas soltas no escuro. `top` é onde
+/// a travessa assenta (logo abaixo do cabeçalho).
+fn draw_cabinet(d: &mut Screen, scr_w: u32, scr_h: u32, top: i32) {
+    const POST: i32 = 12;
+    let x0 = MARGIN - POST - 4;
+    let x1 = scr_w as i32 - MARGIN + 4;
+    let bottom = scr_h as i32;
+    let inner_w = (x1 - x0 - POST * 2).max(1) as u32;
+    let inner_h = (bottom - top).max(1) as u32;
+    let ix = x0 + POST;
+
+    // Painel de fundo: tom base + veios verticais em faixas de tons vizinhos.
+    d.fill(ix, top, inner_w, inner_h, (20, 16, 14, 255));
+    let mut gx = ix;
+    let mut k = 0u32;
+    while gx < x1 - POST {
+        let tone = [(21, 17, 15), (18, 15, 13), (23, 19, 16), (20, 16, 14)][(k % 4) as usize];
+        let wv = 9 + (k * 7 % 13) as i32;
+        d.fill(
+            gx,
+            top,
+            wv.min(x1 - POST - gx) as u32,
+            inner_h,
+            (tone.0, tone.1, tone.2, 255),
+        );
+        gx += wv;
+        k += 1;
+    }
+    // Vinheta: o fundo escurece para as laterais e para baixo.
+    for i in 0..10 {
+        let a = (60 - i * 6) as u8;
+        d.fill(ix + i * 3, top, 3, inner_h, (0, 0, 0, a));
+        d.fill(x1 - POST - (i + 1) * 3, top, 3, inner_h, (0, 0, 0, a));
+    }
+    // Sombra da travessa no fundo, logo abaixo dela.
+    for i in 0..8 {
+        d.fill(
+            ix,
+            top + 10 + i * 2,
+            inner_w,
+            2,
+            (0, 0, 0, (90 - i * 11) as u8),
+        );
+    }
+
+    // Montantes laterais: face, quina iluminada e fio de sombra interno.
+    for (px, light_left) in [(x0, true), (x1 - POST, false)] {
+        d.fill(px, top - 10, POST as u32, inner_h + 10, (52, 38, 29, 255));
+        let edge = if light_left { px } else { px + POST - 2 };
+        d.fill(edge, top - 10, 2, inner_h + 10, (84, 64, 50, 255));
+        let inner = if light_left { px + POST - 1 } else { px };
+        d.fill(inner, top, 1, inner_h, (26, 18, 12, 255));
+    }
+    // Travessa do topo.
+    d.fill(x0, top - 10, (x1 - x0) as u32, 10, (56, 41, 31, 255));
+    d.fill(x0, top - 10, (x1 - x0) as u32, 2, (90, 70, 55, 255));
+    d.fill(x0, top - 1, (x1 - x0) as u32, 1, (32, 22, 15, 255));
+}
+
 /// Whether `entry`'s title matches a filter query — empty matches everything,
 /// otherwise a case-insensitive substring test (plan revision: "colocar
 /// filtro para facilitar o encontro dos games na lista").
@@ -523,29 +572,33 @@ fn pick_play(
 /// the per-game sidecar `runner::total_playtime_secs` already writes), no
 /// DAT/local art needed, so a plain title-only game still gets a panel with
 /// something in it besides two buttons. Appended after any No-Intro extras.
-/// (A "jogado" row lived here once — the last-played date is already the
-/// recent strip's whole job, and the row was what overflowed into the
-/// panel's buttons.)
+/// (A "jogado" row lived here once — the last-played date is the
+/// Histórico's job, and the row was what overflowed into the panel's
+/// buttons.)
 /// A prateleira de madeira sob uma fileira de caixas (a estante de
 /// verdade, do mock `estante_mock` para o app): fita LED no lábio superior
 /// com brilho escorrendo na parede (atrás das capas — as caixas desenhadas
 /// por cima recortam o brilho e ficam retroiluminadas), três pranchas de
 /// tons vizinhos com veios e juntas, boca escura e mão francesa
 /// (quarto-de-círculo) sob as duas pontas — curta, para não invadir a copy
-/// da fileira de baixo. Mora no vão de `GAP`/`RECENT_GAP` entre fileiras —
+/// da fileira de baixo. Mora no vão de `GAP`/`STRIP_GAP` entre fileiras —
 /// nenhuma geometria de clique muda.
 fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
-    // Fita LED: brilho decrescente na parede acima do tampo + linha quente
-    // no lábio (o tampo em si recebe a lavagem de luz na fileira de cima).
-    d.fill(x, y - 3, w, 1, (54, 44, 32, 255));
-    d.fill(x, y - 2, w, 1, (104, 82, 54, 255));
-    d.fill(x, y - 1, w, 1, (198, 158, 92, 255));
+    // O tampo visto de cima, entrando para o fundo: uma faixa mais clara
+    // acima do lábio, com a quina do fundo escura — a prateleira ganha
+    // profundidade e as capas pousam EM CIMA dela.
+    const DEPTH: i32 = 9;
+    d.fill(x, y - DEPTH, w, DEPTH as u32, (70, 53, 41, 255));
+    d.fill(x, y - DEPTH, w, 1, (28, 19, 13, 255));
+    d.fill(x, y - DEPTH + 1, w, 2, (56, 42, 33, 255));
+    // A quina da frente do tampo pegando a luz.
+    d.fill(x, y - 1, w, 1, (112, 90, 72, 255));
 
     // O tampo: três pranchas de tons vizinhos (madeira de verdade nunca é
     // uma cor só), lábio lavado pela fita, veios e juntas, boca escura.
     let face_h = (h - 6).max(1);
     let prancha = (w as i32 / 3).max(1);
-    for (p, tom) in [(0, (104, 69, 42)), (1, (100, 66, 40)), (2, (108, 72, 45))] {
+    for (p, tom) in [(0, (62, 47, 36)), (1, (59, 45, 34)), (2, (65, 49, 38))] {
         let px = x + p * prancha;
         let pw = if p == 2 {
             w as i32 - 2 * prancha
@@ -560,11 +613,11 @@ fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
             (tom.0, tom.1, tom.2, 255),
         );
     }
-    d.fill(x, y, w, 2, (172, 128, 76, 255));
+    d.fill(x, y, w, 2, (96, 76, 60, 255));
     let veios = [
-        (5u32, 8i32, (88, 57, 34u8)),
-        (7, 30, (92, 61, 37u8)),
-        (9, 14, (86, 55, 33u8)),
+        (5u32, 8i32, (52, 39, 30u8)),
+        (7, 30, (55, 41, 32u8)),
+        (9, 14, (50, 38, 29u8)),
     ];
     for (dy, ox, c) in veios {
         if h > dy as i32 + 6 {
@@ -578,9 +631,9 @@ fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
         }
     }
     for p in [1, 2] {
-        d.fill(x + p * prancha, y + 2, 1, face_h as u32, (64, 42, 26, 255));
+        d.fill(x + p * prancha, y + 2, 1, face_h as u32, (40, 28, 20, 255));
     }
-    d.fill(x, y + h - 4, w, 4, (58, 38, 24, 255));
+    d.fill(x, y + h - 4, w, 4, (36, 26, 19, 255));
 
     // Sombra do tampo na parede, embaixo.
     for (i, c) in [(13u8, 11u8, 10u8), (16u8, 14u8, 12u8), (19u8, 17u8, 15u8)]
@@ -602,52 +655,199 @@ fn draw_shelf_board(d: &mut Screen, x: i32, w: u32, y: i32, h: i32) {
     let r: i32 = 8;
     for i in 0..r {
         let dx = (((r * r - i * i) as f32).sqrt().round() as i32).max(1);
-        d.fill(x + 2, y + h + i, dx as u32, 1, (80, 52, 34, 255));
+        d.fill(x + 2, y + h + i, dx as u32, 1, (52, 38, 29, 255));
         d.fill(
             x + w as i32 - 2 - dx,
             y + h + i,
             dx as u32,
             1,
-            (80, 52, 34, 255),
+            (52, 38, 29, 255),
         );
     }
 }
 
-/// A caixa em pé na prateleira: sombra firme na madeira (as caixas
-/// chapadas precisam de assentamento), a face lateral escura na direita e
-/// o fio de luz na quina esquerda — o tile lê como caixa, não como cartão. Desenha POR CIMA da arte (a lateral
-/// escurece a borda da capa).
-fn draw_box_dressing(d: &mut Screen, x: i32, y: i32, w: u32, h: u32) {
-    d.fill(x - 4, y + h as i32, w + 12, 5, (26, 17, 11, 255));
-    d.fill(x + w as i32 - 5, y + 2, 5, h - 4, (20, 16, 14, 255));
-    d.fill(x, y + 2, 1, h - 4, (86, 84, 82, 255));
+/// Como uma capa aparece na prateleira: selecionada pelo cursor (d-pad
+/// ou clique), sob o mouse e/ou marcada como favorita.
+#[derive(Clone, Copy)]
+struct CoverLook {
+    /// Dentro do móvel (a listagem geral): luz de vitrine, sombra no fundo
+    /// e o tom abaixo fora da seleção. As faixas de cima ficam fora dele.
+    on_shelf: bool,
+    selected: bool,
+    hovered: bool,
+    favorite: bool,
 }
 
-/// O suporte da capa vazada — um pequeno encaixe central de acrílico, o
-/// mesmo prong dos expositores de CD: uma linguinha no meio da base que
-/// segura a caixa de pé. Bem sutil de propósito — barra nenhuma embaixo, o
-/// mínimo de peça para a capa não flutuar.
-fn draw_expositor(d: &mut Screen, x: i32, y: i32, w: u32, h: u32) {
+/// A cor do filete de seleção no tampo — a luz quente da vitrine.
+const SELECT_GLOW: (u8, u8, u8) = (246, 236, 214);
+
+/// Uma capa EM PÉ no slot `(x, y, w, h)`, apoiada no tampo da prateleira
+/// (a base do slot). Vale igual para capa chapada (2D) e caixa 3D vazada:
+/// as duas encaixam pela ALTURA do conteúdo (as margens transparentes do
+/// render 3D não contam) e pousam na madeira, centradas no slot.
+///
+/// - 2D: vira caixa — lateral escura à direita, fio de luz na quina e no
+///   topo, sombra de contato na madeira.
+/// - 3D: a arte já tem volume; só a sombra de contato.
+/// - Selecionada: sobe alguns pixels, com um halo violeta na parede atrás
+///   e um filete aceso no tampo — o cursor do gamepad, igual nos dois
+///   tipos de capa.
+/// - Sem arte: uma caixa genérica com o título, para a falta de capa
+///   parecer de propósito.
+fn draw_cover(d: &mut Screen, id: u64, title: &str, slot: (i32, i32, u32, u32), look: CoverLook) {
+    let (x, y, w, h) = slot;
+    let lift = if look.selected { 6 } else { 0 };
     let base = y + h as i32;
-    let cx = x + w as i32 / 2;
-    let prong = (w as i32 / 5).clamp(18, 36);
-    // sombrinha de contato no tampo, logo atrás do encaixe
+    let vazada = d.image_vazado(id);
+    let (sx, sy, sw, sh) = (x + 2, y - lift, w.saturating_sub(4), h.saturating_sub(4));
+
+    // Onde a capa vai cair: pela altura do conteúdo, pousada na base,
+    // centrada — calculado antes, para o halo ficar ATRÁS dela.
+    let fit = d.image_content_size(id).map(|(iw, ih)| {
+        let scale = (sw as f32 / iw as f32).min(sh as f32 / ih as f32);
+        let (dw, dh) = (
+            ((iw as f32 * scale).round() as u32).max(1),
+            ((ih as f32 * scale).round() as u32).max(1),
+        );
+        (
+            sx + (sw as i32 - dw as i32) / 2,
+            sy + sh as i32 - dh as i32,
+            dw,
+            dh,
+        )
+    });
+    let (cx, cy, cw, ch) = fit.unwrap_or_else(|| generic_box_rect((sx, sy, sw, sh)));
+
+    // A luz da vitrine sobre o slot — mais forte na capa selecionada: o
+    // cursor é LUZ, como numa estante de verdade.
+    if look.on_shelf {
+        // A sombra da capa no fundo do móvel: deslocada para cima e para a
+        // direita, difusa — é o que descola a capa da parede.
+        for (off, a) in [(9, 40u8), (6, 60), (3, 70)] {
+            d.fill(
+                cx + off,
+                cy - off / 2,
+                cw,
+                ch.saturating_sub(4),
+                (0, 0, 0, a),
+            );
+        }
+    }
+
+    // Sombra de contato na madeira (mais difusa com a capa erguida).
+    let shadow_a = if look.selected { 70 } else { 120 };
+    d.fill(cx + 2, base, cw.saturating_sub(4), 3, (10, 6, 4, shadow_a));
+    d.fill(cx - 2, base + 3, cw + 6, 2, (10, 6, 4, shadow_a / 2));
+
+    if fit.is_some() {
+        d.image_fit_content_bottom(id, sx, sy, sw, sh);
+        if !vazada {
+            // Volume de caixa: lateral, quina e topo.
+            d.fill(
+                cx + cw as i32,
+                cy + 3,
+                4,
+                ch.saturating_sub(3),
+                (14, 12, 12, 230),
+            );
+            d.fill(cx, cy, 1, ch, (255, 255, 255, 40));
+            d.fill(cx, cy, cw, 1, (255, 255, 255, 50));
+        }
+    } else {
+        draw_generic_box(d, title, (cx, cy, cw, ch));
+    }
+
+    if look.on_shelf {
+        draw_stand(d, (cx, cy, cw, ch), base);
+    }
+
+    if look.selected {
+        // O filete aceso no tampo, sob a capa, e um fio de luz no topo dela.
+        d.fill(
+            cx - 4,
+            base + 1,
+            cw + 8,
+            2,
+            (SELECT_GLOW.0, SELECT_GLOW.1, SELECT_GLOW.2, 255),
+        );
+        // Contorno de luz quente colado na capa, com um brilho em volta.
+        for (pad, a) in [(4, 40u8), (2, 90)] {
+            d.outline(
+                cx - pad,
+                cy - pad,
+                cw + pad as u32 * 2,
+                ch + pad as u32 * 2,
+                2,
+                (SELECT_GLOW.0, SELECT_GLOW.1, SELECT_GLOW.2, a),
+            );
+        }
+        d.fill(cx, cy, cw, 2, (255, 250, 240, 150));
+    } else if look.on_shelf {
+        // Fora da luz: um tom abaixo, para a selecionada saltar.
+        d.fill(cx, cy, cw, ch, (0, 0, 0, 70));
+    }
+    if look.favorite {
+        d.star(cx + cw as i32 - 12, cy + 12, 8, (214, 40, 40));
+    }
+    if look.hovered {
+        draw_play_icon(d, cx + cw as i32 - 24, cy + ch as i32 - 24);
+    }
+}
+
+/// O suporte de acrílico que segura a capa em pé — o expositor de loja:
+/// uma base chata transparente no tampo, um pouco mais estreita que a
+/// capa, e a aba da frente subindo alguns pixels por cima do pé da capa
+/// (é ela que segura). Transparente de verdade: a capa e a madeira
+/// aparecem através, só as quinas pegam luz.
+fn draw_stand(d: &mut Screen, cover: (i32, i32, u32, u32), base: i32) {
+    let (cx, _cy, cw, ch) = cover;
+    let sw = ((cw as f32 * 0.62) as u32).clamp(28, cw.saturating_sub(8).max(28));
+    let sx = cx + (cw as i32 - sw as i32) / 2;
+    let lip = (ch / 14).clamp(4, 9) as i32;
+    // A base no tampo: placa fina com a quina da frente acesa.
+    d.fill(sx - 3, base - 1, sw + 6, 4, (210, 222, 232, 56));
+    d.fill(sx - 3, base + 2, sw + 6, 1, (225, 235, 245, 120));
+    // A aba da frente, por cima do pé da capa.
+    d.fill(sx, base - lip, sw, lip as u32, (214, 226, 236, 70));
+    d.fill(sx, base - lip, sw, 1, (244, 248, 252, 230));
+    d.fill(sx, base - lip, 1, lip as u32, (240, 246, 252, 110));
     d.fill(
-        cx - prong / 2 - 2,
-        base + 3,
-        (prong + 4) as u32,
-        2,
-        (26, 17, 11, 255),
-    );
-    // o encaixe: sobe 4px na frente da base da capa e pousa 2px no tampo
-    d.fill(cx - prong / 2, base - 4, prong as u32, 6, (36, 34, 38, 255));
-    // o filete de acrílico: o topo do encaixe pegando a luz
-    d.fill(
-        cx - prong / 2,
-        base - 4,
-        prong as u32,
+        sx + sw as i32 - 1,
+        base - lip,
         1,
-        (185, 195, 205, 255),
+        lip as u32,
+        (240, 246, 252, 110),
+    );
+}
+
+/// O retângulo da caixa genérica dentro do slot: em pé, proporção de
+/// caixa de cartucho em retrato, pousada na base.
+fn generic_box_rect(slot: (i32, i32, u32, u32)) -> (i32, i32, u32, u32) {
+    let (x, y, w, h) = slot;
+    let bw = ((h as f32 * 0.72) as u32).min(w);
+    (x + (w as i32 - bw as i32) / 2, y, bw, h)
+}
+
+/// A capa que falta: caixa escura com lombada, faixa de rodapé e o título
+/// escrito — para a falta de arte parecer de propósito.
+fn draw_generic_box(d: &mut Screen, title: &str, rect: (i32, i32, u32, u32)) {
+    let (bx, by, bw, bh) = rect;
+    d.fill(bx, by, bw, bh, (38, 36, 48, 255));
+    d.fill(bx, by, 6, bh, (24, 22, 32, 255));
+    d.fill(
+        bx + 6,
+        by + bh as i32 - 18,
+        bw.saturating_sub(6),
+        18,
+        (60, 56, 76, 255),
+    );
+    d.text_wrapped(
+        bx + 12,
+        by + 12,
+        bw.saturating_sub(20),
+        1,
+        TEXT,
+        &title.to_uppercase(),
     );
 }
 
@@ -845,8 +1045,8 @@ struct GridLayout {
 }
 
 impl GridLayout {
-    /// `top_y` is where the grid itself starts, below the header row and any
-    /// "jogados recentemente" strip above it (plan revision — the panel used
+    /// `top_y` is where the grid itself starts, below the header row and the
+    /// favorites strip above it (plan revision — the panel used
     /// to eat into this width; now the grid gets the whole shelf screen).
     ///
     /// Steam Deck (e qualquer tela onde 260px de tile rendem só 2 colunas):
@@ -879,7 +1079,15 @@ impl GridLayout {
             if item_h > two_rows_h {
                 item_h = two_rows_h;
             }
-            let item_w = item_h * TILE_W as i32 / TILE_H as i32;
+            // Fileiras que cabem inteiras na altura — e o tile cresce para
+            // ocupá-la toda, em vez de sobrar um vão vazio embaixo da última.
+            let rows = ((avail_h + gap) / (item_h + gap)).max(1);
+            item_h = ((avail_h + gap) / rows - gap).max(item_h);
+            let mut item_w = item_h * TILE_W as i32 / TILE_H as i32;
+            // Mais alto ficou mais largo: as colunas ainda cabem?
+            if cols * (item_w + gap) - gap > grid_w as i32 {
+                item_w = (grid_w as i32 - gap * (cols - 1)) / cols;
+            }
             let cell_w = item_w + gap;
             let cell_h = item_h + gap;
             // Sobrou largura? A grade fica centrada na área dela.
@@ -887,7 +1095,11 @@ impl GridLayout {
             let x0 = MARGIN + (grid_w as i32 - used) / 2;
             (cell_w, cell_h, item_w, item_h, cols as usize, x0)
         };
-        let vis_rows = ((scr_h as i32 - top_y - MARGIN) / cell_h).max(1) as usize;
+        // A última fileira não precisa do vão de baixo (a prateleira dela
+        // mora nele, mas cabe na margem) — sem o `+ gap`, uma fileira
+        // inteira que cabia ficava de fora.
+        let tail_gap = if list_mode { 0 } else { GAP as i32 };
+        let vis_rows = ((scr_h as i32 - top_y - MARGIN + tail_gap) / cell_h).max(1) as usize;
         Self {
             x0,
             y0: top_y,
@@ -938,21 +1150,21 @@ impl GridLayout {
     }
 }
 
-/// Geometry shared by the "favoritos" and "jogados recentemente" strips —
+/// Geometry of the "favoritos" strip —
 /// always a single row, horizontally scrollable (unlike `GridLayout`): the
 /// caller windows it with its own scroll offset.
-struct RecentLayout {
+struct StripLayout {
     x0: i32,
     y0: i32,
     cell_w: i32,
 }
 
-impl RecentLayout {
+impl StripLayout {
     fn new(y0: i32) -> Self {
         Self {
             x0: MARGIN,
             y0,
-            cell_w: (RECENT_TILE_W + RECENT_GAP) as i32,
+            cell_w: (STRIP_TILE_W + STRIP_GAP) as i32,
         }
     }
 
@@ -962,10 +1174,7 @@ impl RecentLayout {
 
     fn hit(&self, x: i32, y: i32, count: usize) -> Option<usize> {
         let (dx, dy) = (x - self.x0, y - self.y0);
-        if dx < 0
-            || dy < 0
-            || dy >= RECENT_TILE_H as i32
-            || dx % self.cell_w >= RECENT_TILE_W as i32
+        if dx < 0 || dy < 0 || dy >= STRIP_TILE_H as i32 || dx % self.cell_w >= STRIP_TILE_W as i32
         {
             return None;
         }
@@ -1047,6 +1256,165 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
         };
         cab.frame_shelf(BG, render);
         std::thread::sleep(frame);
+    }
+}
+
+/// Onde o cursor da estante está: a grade (`sel`, rolada até `top_row`)
+/// ou a faixa de favoritos acima dela, com seu cursor e sua rolagem
+/// horizontal (o índice do primeiro tile visível). Mais a rolagem e a aba
+/// do painel lateral.
+struct ShelfNav {
+    sel: usize,
+    top_row: usize,
+    in_fav: bool,
+    fav_idx: usize,
+    fav_scroll: usize,
+    /// Zerada quando o jogo focado muda (via `last_focus`);
+    /// `draw_shelf_panel` limita ao que o conteúdo precisa.
+    panel_scroll: usize,
+    /// A aba ativa do painel — persiste entre jogos de propósito.
+    panel_section: PanelSection,
+    last_focus: Option<(u8, usize)>,
+}
+
+impl Default for ShelfNav {
+    fn default() -> Self {
+        Self {
+            sel: 0,
+            top_row: 0,
+            in_fav: false,
+            fav_idx: 0,
+            fav_scroll: 0,
+            panel_scroll: 0,
+            // "na estante sempre abrir informações como padrão"
+            panel_section: PanelSection::Informacoes,
+            last_focus: None,
+        }
+    }
+}
+
+impl ShelfNav {
+    /// O jogo sob o cursor: na faixa de favoritos ou na grade.
+    fn focused<'a>(
+        &self,
+        view: &'a [CatalogEntry],
+        favorites: &'a [CatalogEntry],
+    ) -> Option<&'a CatalogEntry> {
+        if self.in_fav {
+            favorites.get(self.fav_idx)
+        } else {
+            view.get(self.sel)
+        }
+    }
+
+    /// Zona (0 = favoritos, 2 = grade) e índice do cursor — quando muda, o
+    /// painel volta ao topo.
+    fn focus_key(&self) -> (u8, usize) {
+        if self.in_fav {
+            (0, self.fav_idx)
+        } else {
+            (2, self.sel)
+        }
+    }
+
+    /// Move o cursor com o d-pad/teclado: setas dentro da zona, Cima/Baixo
+    /// passando entre a grade e os favoritos, PageUp/PageDown por tela da
+    /// grade, Home/End para o começo e o fim. `(cols, vis_rows)` da grade.
+    fn step(
+        &mut self,
+        nav: MenuNav,
+        lens: ShelfLens,
+        (cols, vis_rows): (usize, usize),
+        show_fav: bool,
+    ) {
+        match nav {
+            MenuNav::Left => {
+                if self.in_fav {
+                    self.fav_idx = self.fav_idx.saturating_sub(1);
+                } else {
+                    self.sel = self.sel.saturating_sub(1);
+                }
+            }
+            MenuNav::Right => {
+                if self.in_fav {
+                    if self.fav_idx + 1 < lens.favorites {
+                        self.fav_idx += 1;
+                    }
+                } else if self.sel + 1 < lens.grid {
+                    self.sel += 1;
+                }
+            }
+            MenuNav::Up => {
+                if self.in_fav {
+                    // Já na faixa de cima.
+                } else if show_fav && self.sel < cols {
+                    self.in_fav = true;
+                    self.fav_idx = self.sel.min(lens.favorites.saturating_sub(1));
+                } else {
+                    self.sel = self.sel.saturating_sub(cols);
+                }
+            }
+            MenuNav::Down => {
+                if self.in_fav {
+                    self.in_fav = false;
+                    self.sel = self.fav_idx.min(lens.grid.saturating_sub(1));
+                } else if self.sel + cols < lens.grid {
+                    self.sel += cols;
+                }
+            }
+            MenuNav::PageUp => {
+                if !self.in_fav {
+                    self.sel = self.sel.saturating_sub(cols * vis_rows);
+                }
+            }
+            MenuNav::PageDown => {
+                if !self.in_fav {
+                    self.sel = (self.sel + cols * vis_rows).min(lens.grid.saturating_sub(1))
+                }
+            }
+            MenuNav::Home => {
+                if show_fav {
+                    self.in_fav = true;
+                    self.fav_idx = 0;
+                } else {
+                    self.sel = 0;
+                }
+            }
+            MenuNav::End => {
+                self.in_fav = false;
+                self.sel = lens.grid.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Quantos jogos há em cada zona da estante.
+#[derive(Clone, Copy)]
+struct ShelfLens {
+    grid: usize,
+    favorites: usize,
+}
+
+/// O filtro por título: `query` é o aplicado; `draft`/`editing` só vivem
+/// enquanto se digita. As listas são refeitas só quando `query` muda
+/// (`applied` guarda a última aplicada) — reordenar ~700 entradas a 60 fps
+/// era o maior custo por frame da estante.
+struct ShelfFilter {
+    query: String,
+    draft: String,
+    editing: bool,
+    applied: Option<String>,
+}
+
+impl ShelfFilter {
+    fn new(query: String) -> Self {
+        Self {
+            query,
+            draft: String::new(),
+            editing: false,
+            applied: None,
+        }
     }
 }
 
@@ -1255,6 +1623,37 @@ struct AchView {
 }
 
 impl AchView {
+    /// Abre a lista de conquistas de `e` e, com a conta configurada, pede o
+    /// earned do servidor (uma vez por jogo por visita) — ele só vale para
+    /// esta lista, casada pelo hash RA.
+    fn open_for(
+        &mut self,
+        e: &CatalogEntry,
+        ra: &mut ShelfRa,
+        account: Option<&(String, String, String)>,
+    ) {
+        self.data = crate::ra::shelf_achievements(std::path::Path::new(&e.rom.path));
+        if self.data.is_some() {
+            self.open = true;
+            self.top = 0;
+        }
+        // A lista aberta é deste jogo: o earned do
+        // servidor (quando chegar) só vale para ela.
+        if let Some((user, web_key, _connect)) = account {
+            let hash = match ra.hashes.get(&e.rom.sha1) {
+                Some(h) => Some(h.clone()),
+                None => crate::ra::hash_rom(std::path::Path::new(&e.rom.path)).ok(),
+            };
+            if let Some(hash) = hash {
+                self.hash = Some(hash.clone());
+                if ra.earned_tried.insert(hash.clone()) {
+                    ra.earned_worker =
+                        Some(crate::ra::fetch_game_earned_worker(user, web_key, &hash));
+                }
+            }
+        }
+    }
+
     /// A lista dona do tubo: d-pad/roda rolam, Back ou "voltar" fecha.
     fn handle_input(&mut self, cab: &mut Cabinet, m: &MenuInput) -> AchInput {
         let (_, sh) = cab.shelf_screen_size();
@@ -1645,47 +2044,8 @@ pub fn run(
     // "colocar zoom igual ao backcover no cartucho" — agora os dois).
     let mut zoom_close: Option<u64> = None;
     let mut zoom_rect: (i32, i32, u32, u32) = (0, 0, 1, 1);
-    // O manual em PDF aberto na TV (plan revision) — worker decodifica as
-    // páginas sob demanda; o estado guarda o pedido em voo para não
-    // repetir. `manual_rects` são os botões do frame anterior.
-    // Vários workers podem estar vivos (preview da 1ª página por jogo +
-    // o leitor aberto); todos falam ManualEv.
-    // Contagem de páginas por jogo (do preview) — o leitor nasce com ela.
-    // O PDF do jogo focused, resolvido uma vez por jogo (fs por frame não).
-
-    let mut sel: usize = 0;
-    let mut top_row: usize = 0;
-    // The "jogados recentemente" strip has its own cursor (plan revision) —
-    // independent of `sel`, the main grid/list's own.
-    let mut in_recent = false;
-    let mut recent_idx: usize = 0;
-    // The "favoritos" strip above it has its own cursor too — same shape,
-    // one more zone the d-pad can land on.
-    let mut in_fav = false;
-    let mut fav_idx: usize = 0;
-    // Each strip's own horizontal scroll — the index of its first visible
-    // tile, kept clamped to the cursor by the per-frame pass below.
-    let mut fav_scroll: usize = 0;
-    let mut recent_scroll: usize = 0;
-    // The panel's own scroll position (plan revision: "criar rolagem no
-    // painel quando necessario") — reset whenever the focused game changes,
-    // via `last_focus` below; `draw_shelf_panel` clamps it to whatever the
-    // currently-focused game's content actually needs, so letting it run
-    // free on repeated "v Baixo" clicks past the end is harmless.
-    let mut panel_scroll: usize = 0;
-    // A aba ativa do painel (plan revision: "mostrar um info de cada vez
-    // mesmo em resolução grande, mudar ao clicar") — persiste entre jogos
-    // de propósito: quem organizou por informações continua nelas. A inicial
-    // é "informações" (plan revision: "na estante sempre abrir informações
-    // como padrao").
-    let mut panel_section = PanelSection::Informacoes;
-    let mut last_focus: Option<(u8, usize)> = None;
-    // The title filter (plan revision) — `filter_query` is what's actually
-    // applied; `filter_draft`/`editing_filter` are live only while typing,
-    // same split the pause book's free-text note uses.
-    let mut filter_query = opts.preset_filter.clone().unwrap_or_default();
-    let mut filter_draft = String::new();
-    let mut editing_filter = false;
+    let mut cur = ShelfNav::default();
+    let mut filt = ShelfFilter::new(opts.preset_filter.clone().unwrap_or_default());
     let frame = Duration::from_millis(16);
     let mut next = Instant::now() + frame;
     let mut frame_no = 0u64;
@@ -1694,43 +2054,8 @@ pub fn run(
     // allocations at 60fps was the shelf's biggest per-frame cost. While the
     // player is still TYPING, `filter_draft` moves but `filter_query` doesn't,
     // so typing doesn't rebuild either.
-    let mut applied_filter: Option<String> = None;
     let mut view: Vec<CatalogEntry> = Vec::new();
-    let mut recent: Vec<CatalogEntry> = Vec::new();
     let mut favorites: Vec<CatalogEntry> = Vec::new();
-    // RA identification (plan fase 2): one result per game (None = the
-    // server doesn't know it / no set), one hash+fetch in flight at a
-    // time, each game tried at most once per visit — the disk cache makes
-    // later visits instant.
-    // The panel's "X de Y (Z%)" line (plan revision) — the tally per game,
-    // cached per visit: it costs a full ROM hash, so it's computed once when
-    // the game first reaches the panel and refreshed when the completion
-    // progress lands.
-    // Lançamento/editora que o RA tem e o DAT/TOSEC não, mesmo cache de
-    // um-cálculo-por-foco (leitura do JSON da identificação).
-    // sha1 → hash RA, guardado pela própria identificação para o painel não
-    // refazer o hash da ROM a cada frame.
-    // Completion progress (o substituto do GetUserUnlocks, morto na API
-    // atual): uma chamada por visita traz os counts de todo o perfil — a
-    // fonte das conquistas ganhas fora deste app.
-    // Badges das conquistas do jogo focado: o prefetch baixa os PNGs em
-    // background e o frame registra as texturas direto do disco (umas
-    // poucas por frame), então a lista preenche os badges conforme eles
-    // chegam — para qualquer jogo, não só o primeiro aberto.
-    // Próxima varredura do disco atrás de badges que faltam: com a lista
-    // aberta, o loop fazia um stat por badge ausente A CADA FRAME (60 Hz,
-    // na thread de UI) enquanto o prefetch baixava — 4×/s basta para os
-    // badges "aparecerem" conforme chegam.
-    // Earned do servidor para os [x] da lista de conquistas (uma tentativa
-    // por jogo por visita — o disco cacheia por game id): o worker une no
-    // arquivo local `retroachievements/ra-earned/<hash>.json` e devolve o
-    // set resultante.
-    // The achievements view (plan revision: "mostrar a lista de conquistas
-    // e pontuação total dentro da tv com botão de voltar, parecido com o
-    // back cover") — open/closed, its scroll, its data (loaded once per
-    // open), and the voltar button's screen-local rect. `ach_hash` guarda o
-    // hash RA do jogo aberto, para o earned do servidor (que chega
-    // identificado pelo mesmo hash) casar com a lista na tela.
     let mut ra = ShelfRa::new();
     let mut ach = AchView::default();
     let mut man = ShelfManual::default();
@@ -1746,41 +2071,22 @@ pub fn run(
             return Ok(Pick::Quit);
         }
 
-        // The general listing is always alphabetical (plan revision) — the
-        // recent strip above it already covers "what did I just play",
-        // freeing this one up to just be a plain, predictable A-Z browse.
-        if applied_filter.as_deref() != Some(filter_query.as_str()) {
-            let query_lc = filter_query.to_lowercase();
+        // The general listing is always alphabetical (plan revision) — "o
+        // que joguei por último" mora no Histórico, então esta é só uma
+        // navegação A-Z previsível.
+        if filt.applied.as_deref() != Some(filt.query.as_str()) {
+            let query_lc = filt.query.to_lowercase();
             view = all
                 .iter()
                 .filter(|e| e.title().to_lowercase().contains(&query_lc))
                 .cloned()
                 .collect();
             view.sort_by_key(|e| e.title().to_lowercase());
-            // The recent strip only makes sense browsing the unfiltered
-            // shelf — once a search narrows things, the whole point is
-            // finding a specific game, not re-surfacing what was just
-            // played.
-            // Most recently played first, descending (plan revision:
-            // "organizar jogados recentemente pelo ordem de ultimo jogado
-            // decrescente") — already was, kept explicit.
-            recent = if filter_query.is_empty() {
-                let mut r: Vec<CatalogEntry> = all
-                    .iter()
-                    .filter(|e| e.rom.last_played_at.is_some())
-                    .cloned()
-                    .collect();
-                r.sort_by_key(|e| std::cmp::Reverse(e.rom.last_played_at.unwrap_or(0)));
-                r.truncate(RECENT_CAP);
-                r
-            } else {
-                Vec::new()
-            };
-            // Favorites sit above the recent strip (plan revision) — same
-            // "only while browsing the unfiltered shelf" rule, alphabetical
+            // Favorites sit above the grid (plan revision) — only while
+            // browsing the unfiltered shelf, alphabetical
             // (plan revision: "organizar favoritos em ordem alfabetica"),
             // so the row reads like a curated mini-shelf.
-            favorites = if filter_query.is_empty() {
+            favorites = if filt.query.is_empty() {
                 let mut f: Vec<CatalogEntry> =
                     all.iter().filter(|e| e.rom.favorite).cloned().collect();
                 f.sort_by_key(|e| e.title().to_lowercase());
@@ -1789,38 +2095,27 @@ pub fn run(
             } else {
                 Vec::new()
             };
-            applied_filter = Some(filter_query.clone());
+            filt.applied = Some(filt.query.clone());
         }
-        if sel >= view.len() {
-            sel = view.len().saturating_sub(1);
+        if cur.sel >= view.len() {
+            cur.sel = view.len().saturating_sub(1);
         }
         let (scr_w, scr_h) = cab.shelf_screen_size();
         // How many strip tiles fit between the margins — the window the
         // strips' scroll offsets keep the cursor inside.
         let strip_vis = (((scr_w as i32 - MARGIN * 2) as u32)
-            .saturating_div(RECENT_TILE_W + RECENT_GAP))
+            .saturating_div(STRIP_TILE_W + STRIP_GAP))
         .max(1) as usize;
-        let show_recent = !recent.is_empty();
-        if recent_idx >= recent.len() {
-            recent_idx = recent.len().saturating_sub(1);
-        }
-        if !show_recent {
-            in_recent = false;
-        }
-        recent_scroll = recent_scroll.min(recent_idx);
-        if recent_idx >= recent_scroll + strip_vis {
-            recent_scroll = recent_idx + 1 - strip_vis;
-        }
         let show_fav = !favorites.is_empty();
-        if fav_idx >= favorites.len() {
-            fav_idx = favorites.len().saturating_sub(1);
+        if cur.fav_idx >= favorites.len() {
+            cur.fav_idx = favorites.len().saturating_sub(1);
         }
         if !show_fav {
-            in_fav = false;
+            cur.in_fav = false;
         }
-        fav_scroll = fav_scroll.min(fav_idx);
-        if fav_idx >= fav_scroll + strip_vis {
-            fav_scroll = fav_idx + 1 - strip_vis;
+        cur.fav_scroll = cur.fav_scroll.min(cur.fav_idx);
+        if cur.fav_idx >= cur.fav_scroll + strip_vis {
+            cur.fav_scroll = cur.fav_idx + 1 - strip_vis;
         }
 
         // No cover art loaded anywhere in view yet: a text list (multicart
@@ -1828,44 +2123,14 @@ pub fn run(
         // broken (plan §3.1).
         let list_mode = !view.iter().any(|e| cab.has_image(cover_id(&e.rom.sha1)));
         let fav_block_h = if show_fav {
-            FAV_LABEL_H + RECENT_TILE_H as i32 + GAP as i32
+            FAV_LABEL_H + STRIP_TILE_H as i32 + GAP as i32
         } else {
             0
         };
-        // Steam Deck (e qualquer tela baixa): as duas faixas + a grade não
-        // cabem — ao favoritar, os tiles da grade viravam selos (125×94) e a
-        // estante "desconfigurava". Favoritos tem prioridade: se com as duas
-        // faixas os tiles da grade ficarem abaixo de ~150 de altura, a faixa
-        // de jogados recentemente cede a vez (some desta tela até a janela
-        // crescer ou um favorito ser removido).
-        let mut show_recent = show_recent;
-        if show_fav && show_recent {
-            let top_com_todas = MARGIN
-                + HEADER_H
-                + fav_block_h
-                + RECENT_LABEL_H
-                + RECENT_TILE_H as i32
-                + GAP as i32
-                + ALL_GAMES_LABEL_H;
-            let avail = scr_h as i32 - top_com_todas - MARGIN;
-            let two_rows = (avail / 2 - GAP as i32).max(36);
-            if two_rows < 150 {
-                show_recent = false;
-            }
-        }
-        let recent_block_h = if show_recent {
-            RECENT_LABEL_H + RECENT_TILE_H as i32 + GAP as i32
-        } else {
-            0
-        };
-        if !show_recent {
-            in_recent = false;
-        }
-        let all_games_label_y = MARGIN + HEADER_H + fav_block_h + recent_block_h;
+        let all_games_label_y = MARGIN + HEADER_H + fav_block_h;
         let grid_top_y = all_games_label_y + ALL_GAMES_LABEL_H;
         let grid = GridLayout::new(scr_w, scr_h, list_mode, grid_top_y);
-        let recent_layout = RecentLayout::new(MARGIN + HEADER_H + fav_block_h + RECENT_LABEL_H);
-        let fav_layout = RecentLayout::new(MARGIN + HEADER_H + FAV_LABEL_H);
+        let fav_layout = StripLayout::new(MARGIN + HEADER_H + FAV_LABEL_H);
         let filter_rect = filter_box_rect(scr_w);
         let history_rect = history_button_rect(scr_w);
         let refresh_rect = refresh_button_rect(scr_w);
@@ -1874,40 +2139,40 @@ pub fn run(
         // O cursor em coordenadas de janela — o hover do botão de play lê
         // a cada frame; durante a edição do filtro não há hover.
         let mut pointer = None;
-        if editing_filter {
+        if filt.editing {
             let te = plat.poll_text_entry();
             if te.quit {
                 return Ok(Pick::Quit);
             }
             if te.backspace {
-                filter_draft.pop();
+                filt.draft.pop();
             }
             for c in te.typed.chars() {
-                if filter_draft.chars().count() < FILTER_LIMIT {
-                    filter_draft.push(c);
+                if filt.draft.chars().count() < FILTER_LIMIT {
+                    filt.draft.push(c);
                 }
             }
             // ⌘V/⌘C (Ctrl no resto) — mesmo esquema de clipboard dos outros
             // campos de texto.
             if let Some(paste) = &te.paste {
                 for c in paste.chars() {
-                    if filter_draft.chars().count() < FILTER_LIMIT {
-                        filter_draft.push(c);
+                    if filt.draft.chars().count() < FILTER_LIMIT {
+                        filt.draft.push(c);
                     }
                 }
             }
             if te.copy {
-                plat.set_clipboard_text(&filter_draft);
+                plat.set_clipboard_text(&filt.draft);
             }
             if te.commit {
-                filter_query = filter_draft.trim().to_string();
-                editing_filter = false;
+                filt.query = filt.draft.trim().to_string();
+                filt.editing = false;
                 plat.stop_text_input(cab);
-                sel = 0;
-                top_row = 0;
-                in_recent = false;
+                cur.sel = 0;
+                cur.top_row = 0;
+                cur.in_fav = false;
             } else if te.cancel {
-                editing_filter = false;
+                filt.editing = false;
                 plat.stop_text_input(cab);
             }
         } else {
@@ -1945,93 +2210,9 @@ pub fn run(
             } else {
                 for nav in m.nav {
                     match nav {
-                        MenuNav::Left => {
-                            if in_recent {
-                                recent_idx = recent_idx.saturating_sub(1);
-                            } else {
-                                sel = sel.saturating_sub(1);
-                            }
-                        }
-                        MenuNav::Right => {
-                            if in_recent {
-                                if recent_idx + 1 < recent.len() {
-                                    recent_idx += 1;
-                                }
-                            } else if sel + 1 < view.len() {
-                                sel += 1;
-                            }
-                        }
-                        MenuNav::Up => {
-                            if in_fav {
-                                // Already on the topmost strip.
-                            } else if in_recent {
-                                if show_fav {
-                                    in_recent = false;
-                                    in_fav = true;
-                                    fav_idx = recent_idx.min(favorites.len().saturating_sub(1));
-                                }
-                            } else if show_fav && sel < grid.cols {
-                                in_fav = true;
-                                fav_idx = sel.min(favorites.len().saturating_sub(1));
-                            } else if show_recent && sel < grid.cols {
-                                in_recent = true;
-                                recent_idx = sel.min(recent.len().saturating_sub(1));
-                            } else {
-                                sel = sel.saturating_sub(grid.cols);
-                            }
-                        }
-                        MenuNav::Down => {
-                            if in_fav {
-                                in_fav = false;
-                                if show_recent {
-                                    in_recent = true;
-                                    recent_idx = fav_idx.min(recent.len().saturating_sub(1));
-                                } else {
-                                    sel = fav_idx.min(view.len().saturating_sub(1));
-                                }
-                            } else if in_recent {
-                                in_recent = false;
-                                sel = recent_idx.min(view.len().saturating_sub(1));
-                            } else if sel + grid.cols < view.len() {
-                                sel += grid.cols;
-                            }
-                        }
-                        MenuNav::PageUp => {
-                            if !in_recent {
-                                sel = sel.saturating_sub(grid.cols * grid.vis_rows);
-                            }
-                        }
-                        MenuNav::PageDown => {
-                            if !in_recent {
-                                sel = (sel + grid.cols * grid.vis_rows)
-                                    .min(view.len().saturating_sub(1))
-                            }
-                        }
-                        MenuNav::Home => {
-                            if show_fav {
-                                in_fav = true;
-                                fav_idx = 0;
-                            } else if show_recent {
-                                in_recent = true;
-                                recent_idx = 0;
-                            } else {
-                                sel = 0;
-                            }
-                        }
-                        MenuNav::End => {
-                            in_recent = false;
-                            in_fav = false;
-                            sel = view.len().saturating_sub(1);
-                        }
                         MenuNav::Back => return Ok(Pick::Back),
                         MenuNav::Confirm => {
-                            let picked = if in_fav {
-                                favorites.get(fav_idx)
-                            } else if in_recent {
-                                recent.get(recent_idx)
-                            } else {
-                                view.get(sel)
-                            };
+                            let picked = cur.focused(&view, &favorites);
                             if let Some(e) = picked {
                                 return Ok(pick_play(
                                     catalog,
@@ -2041,6 +2222,15 @@ pub fn run(
                                 ));
                             }
                         }
+                        other => cur.step(
+                            other,
+                            ShelfLens {
+                                grid: view.len(),
+                                favorites: favorites.len(),
+                            },
+                            (grid.cols, grid.vis_rows),
+                            show_fav,
+                        ),
                     }
                 }
 
@@ -2050,12 +2240,12 @@ pub fn run(
                     let (ox, oy) = cab.window_to_output(x, y);
                     if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
                         if in_rect(lx, ly, filter_rect) {
-                            editing_filter = true;
-                            filter_draft = filter_query.clone();
+                            filt.editing = true;
+                            filt.draft = filt.query.clone();
                             if let Some(paste) = plat.paste_from_clipboard() {
                                 for c in paste.chars() {
-                                    if filter_draft.chars().count() < FILTER_LIMIT {
-                                        filter_draft.push(c);
+                                    if filt.draft.chars().count() < FILTER_LIMIT {
+                                        filt.draft.push(c);
                                     }
                                 }
                             }
@@ -2082,41 +2272,8 @@ pub fn run(
                             ShelfButton::Back => return Ok(Pick::Back),
                             ShelfButton::Settings => return Ok(Pick::Settings),
                             ShelfButton::ShelfAchievements => {
-                                let picked = if in_fav {
-                                    favorites.get(fav_idx)
-                                } else if in_recent {
-                                    recent.get(recent_idx)
-                                } else {
-                                    view.get(sel)
-                                };
-                                if let Some(e) = picked {
-                                    ach.data = crate::ra::shelf_achievements(std::path::Path::new(
-                                        &e.rom.path,
-                                    ));
-                                    if ach.data.is_some() {
-                                        ach.open = true;
-                                        ach.top = 0;
-                                    }
-                                    // A lista aberta é deste jogo: o earned do
-                                    // servidor (quando chegar) só vale para ela.
-                                    if let Some((user, web_key, _connect)) = &opts.ra {
-                                        let hash = match ra.hashes.get(&e.rom.sha1) {
-                                            Some(h) => Some(h.clone()),
-                                            None => crate::ra::hash_rom(std::path::Path::new(
-                                                &e.rom.path,
-                                            ))
-                                            .ok(),
-                                        };
-                                        if let Some(hash) = hash {
-                                            ach.hash = Some(hash.clone());
-                                            if ra.earned_tried.insert(hash.clone()) {
-                                                ra.earned_worker =
-                                                    Some(crate::ra::fetch_game_earned_worker(
-                                                        user, web_key, &hash,
-                                                    ));
-                                            }
-                                        }
-                                    }
+                                if let Some(e) = cur.focused(&view, &favorites) {
+                                    ach.open_for(e, &mut ra, opts.ra.as_ref());
                                 }
                             }
                             ShelfButton::Refresh => {}
@@ -2131,11 +2288,11 @@ pub fn run(
                                 // visível; clicar de novo em "informações"
                                 // avança campo a campo (a única aba que
                                 // transborda).
-                                if panel_section != section {
-                                    panel_section = section;
-                                    panel_scroll = 0;
+                                if cur.panel_section != section {
+                                    cur.panel_section = section;
+                                    cur.panel_scroll = 0;
                                 } else if section == PanelSection::Informacoes {
-                                    panel_scroll += 1;
+                                    cur.panel_scroll += 1;
                                 }
                             }
                             ShelfButton::ToggleFavorite => {
@@ -2143,13 +2300,7 @@ pub fn run(
                                 // sidecar, then update this visit's own
                                 // copy of the catalog and rebuild the
                                 // strips — no re-scan involved.
-                                let picked = if in_fav {
-                                    favorites.get(fav_idx)
-                                } else if in_recent {
-                                    recent.get(recent_idx)
-                                } else {
-                                    view.get(sel)
-                                };
+                                let picked = cur.focused(&view, &favorites);
                                 if let Some(e) = picked {
                                     let sha1 = e.rom.sha1.clone();
                                     let fav = !e.rom.favorite;
@@ -2159,7 +2310,7 @@ pub fn run(
                                         {
                                             row.rom.favorite = fav;
                                         }
-                                        applied_filter = None;
+                                        filt.applied = None;
                                     }
                                 }
                             }
@@ -2167,13 +2318,7 @@ pub fn run(
                                 // Open the enlarged view: re-decode the file at
                                 // full resolution for a crisp enlargement (the
                                 // panel texture is thumbnailed to 512).
-                                let picked = if in_fav {
-                                    favorites.get(fav_idx)
-                                } else if in_recent {
-                                    recent.get(recent_idx)
-                                } else {
-                                    view.get(sel)
-                                };
+                                let picked = cur.focused(&view, &favorites);
                                 if let Some(e) = picked {
                                     let bid = backcover_id(&e.rom.sha1);
                                     if cab.has_image(bid) {
@@ -2188,13 +2333,7 @@ pub fn run(
                             ShelfButton::Manual => {
                                 // Abrir o leitor na TV (plan revision):
                                 // worker decodifica páginas sob demanda.
-                                let picked = if in_fav {
-                                    favorites.get(fav_idx)
-                                } else if in_recent {
-                                    recent.get(recent_idx)
-                                } else {
-                                    view.get(sel)
-                                };
+                                let picked = cur.focused(&view, &favorites);
                                 if let Some(e) = picked {
                                     if let Some(path) =
                                         man.paths.get(&e.rom.sha1).cloned().flatten()
@@ -2255,13 +2394,7 @@ pub fn run(
                                 // Zoom do cartucho, igual ao do back cover
                                 // (plan revision): re-decodifica a arte em
                                 // resolução cheia e abre ampliado no tubo.
-                                let picked = if in_fav {
-                                    favorites.get(fav_idx)
-                                } else if in_recent {
-                                    recent.get(recent_idx)
-                                } else {
-                                    view.get(sel)
-                                };
+                                let picked = cur.focused(&view, &favorites);
                                 if let Some(e) = picked {
                                     let cid = cartridge_id(&e.rom.sha1);
                                     if cab.has_image(cid) {
@@ -2276,51 +2409,37 @@ pub fn run(
                         }
                     } else if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
                         if in_rect(lx, ly, filter_rect) {
-                            editing_filter = true;
-                            filter_draft = filter_query.clone();
+                            filt.editing = true;
+                            filt.draft = filt.query.clone();
                             plat.start_text_input(cab);
                         } else if in_rect(lx, ly, history_rect) {
                             return Ok(Pick::History);
                         } else if in_rect(lx, ly, refresh_rect) {
                             return Ok(Pick::Refresh);
                         } else if in_rect(lx, ly, strip_arrow_rects(scr_w, fav_layout.y0).0)
-                            && fav_scroll > 0
+                            && cur.fav_scroll > 0
                         {
-                            fav_scroll -= 1;
-                            if fav_idx > fav_scroll + strip_vis - 1 {
-                                fav_idx = fav_scroll + strip_vis - 1;
+                            cur.fav_scroll -= 1;
+                            if cur.fav_idx > cur.fav_scroll + strip_vis - 1 {
+                                cur.fav_idx = cur.fav_scroll + strip_vis - 1;
                             }
                         } else if in_rect(lx, ly, strip_arrow_rects(scr_w, fav_layout.y0).1)
-                            && fav_scroll + strip_vis < favorites.len()
+                            && cur.fav_scroll + strip_vis < favorites.len()
                         {
-                            fav_scroll += 1;
-                            if fav_idx < fav_scroll {
-                                fav_idx = fav_scroll;
-                            }
-                        } else if in_rect(lx, ly, strip_arrow_rects(scr_w, recent_layout.y0).0)
-                            && recent_scroll > 0
-                        {
-                            recent_scroll -= 1;
-                            if recent_idx > recent_scroll + strip_vis - 1 {
-                                recent_idx = recent_scroll + strip_vis - 1;
-                            }
-                        } else if in_rect(lx, ly, strip_arrow_rects(scr_w, recent_layout.y0).1)
-                            && recent_scroll + strip_vis < recent.len()
-                        {
-                            recent_scroll += 1;
-                            if recent_idx < recent_scroll {
-                                recent_idx = recent_scroll;
+                            cur.fav_scroll += 1;
+                            if cur.fav_idx < cur.fav_scroll {
+                                cur.fav_idx = cur.fav_scroll;
                             }
                         } else if let Some(i) = show_fav
                             .then(|| {
                                 fav_layout
                                     .hit(lx, ly, strip_vis)
-                                    .map(|i| i + fav_scroll)
+                                    .map(|i| i + cur.fav_scroll)
                                     .filter(|i| *i < favorites.len())
                             })
                             .flatten()
                         {
-                            if in_fav && i == fav_idx {
+                            if cur.in_fav && i == cur.fav_idx {
                                 if let Some(e) = favorites.get(i) {
                                     return Ok(pick_play(
                                         catalog,
@@ -2330,35 +2449,11 @@ pub fn run(
                                     ));
                                 }
                             } else {
-                                in_recent = false;
-                                in_fav = true;
-                                fav_idx = i;
+                                cur.in_fav = true;
+                                cur.fav_idx = i;
                             }
-                        } else if let Some(i) = show_recent
-                            .then(|| {
-                                recent_layout
-                                    .hit(lx, ly, strip_vis)
-                                    .map(|i| i + recent_scroll)
-                                    .filter(|i| *i < recent.len())
-                            })
-                            .flatten()
-                        {
-                            if in_recent && i == recent_idx {
-                                if let Some(e) = recent.get(i) {
-                                    return Ok(pick_play(
-                                        catalog,
-                                        &art.logo_dir,
-                                        &art.cartridge_dir,
-                                        e,
-                                    ));
-                                }
-                            } else {
-                                in_fav = false;
-                                in_recent = true;
-                                recent_idx = i;
-                            }
-                        } else if let Some(i) = grid.tile_at(lx, ly, top_row, view.len()) {
-                            if !in_recent && i == sel {
+                        } else if let Some(i) = grid.tile_at(lx, ly, cur.top_row, view.len()) {
+                            if !cur.in_fav && i == cur.sel {
                                 if let Some(e) = view.get(i) {
                                     return Ok(pick_play(
                                         catalog,
@@ -2368,9 +2463,8 @@ pub fn run(
                                     ));
                                 }
                             } else {
-                                in_recent = false;
-                                in_fav = false;
-                                sel = i;
+                                cur.in_fav = false;
+                                cur.sel = i;
                             }
                         }
                     }
@@ -2379,62 +2473,36 @@ pub fn run(
         }
 
         // Keep selection visible.
-        let sel_row = sel.checked_div(grid.cols).unwrap_or(0);
-        if sel_row < top_row {
-            top_row = sel_row;
-        } else if sel_row >= top_row + grid.vis_rows {
-            top_row = sel_row + 1 - grid.vis_rows;
+        let sel_row = cur.sel.checked_div(grid.cols).unwrap_or(0);
+        if sel_row < cur.top_row {
+            cur.top_row = sel_row;
+        } else if sel_row >= cur.top_row + grid.vis_rows {
+            cur.top_row = sel_row + 1 - grid.vis_rows;
         }
 
         // Artes do que está à vista: o que o worker já decodificou entra
         // no cabinet; tiles sem imagem fazem o pedido — a grade com teto de
         // 8 pedidos por frame (a fila anda na ordem da tela), as faixas de
-        // favoritos e recentes logo atrás.
+        // favoritos logo atrás.
         art.drain(cab);
         let grid_tiles = view
             .iter()
             .enumerate()
-            .filter(|(i, _)| grid.cell_pos(*i, top_row).is_some())
+            .filter(|(i, _)| grid.cell_pos(*i, cur.top_row).is_some())
             .map(|(_, e)| e);
         art.request_covers(cab, grid_tiles, 8);
-        let favs_shown = favorites.iter().skip(fav_scroll).take(strip_vis);
+        let favs_shown = favorites.iter().skip(cur.fav_scroll).take(strip_vis);
         art.request_covers(cab, favs_shown, usize::MAX);
-        let recent_shown = recent.iter().skip(recent_scroll).take(strip_vis);
-        art.request_covers(cab, recent_shown, usize::MAX);
 
-        let focused: Option<&CatalogEntry> = if in_fav {
-            favorites.get(fav_idx)
-        } else if in_recent {
-            recent.get(recent_idx)
-        } else {
-            view.get(sel)
-        };
+        let focused = cur.focused(&view, &favorites);
         // A new game focused starts its panel scrolled to the top again —
         // otherwise switching from a long-content game to a short one could
         // leave the scroll position pointing past the end of the new one
         // until `draw_shelf_panel`'s own clamp kicks in.
-        let zone = |in_fav: bool, in_recent: bool| {
-            if in_fav {
-                0u8
-            } else if in_recent {
-                1
-            } else {
-                2
-            }
-        };
-        let focus_key = focused.is_some().then_some((
-            zone(in_fav, in_recent),
-            if in_fav {
-                fav_idx
-            } else if in_recent {
-                recent_idx
-            } else {
-                sel
-            },
-        ));
-        if focus_key != last_focus {
-            panel_scroll = 0;
-            last_focus = focus_key;
+        let focus_key = focused.is_some().then(|| cur.focus_key());
+        if focus_key != cur.last_focus {
+            cur.panel_scroll = 0;
+            cur.last_focus = focus_key;
         }
         if let Some(e) = focused {
             art.request_focus(cab, e);
@@ -2448,7 +2516,14 @@ pub fn run(
         // all when the DAT had any ("se o DAT tiver informacoes do jogo,
         // preencher no painel").
         let shelf_panel = match focused {
-            Some(e) => focused_panel_info(cab, e, &mut ra, &mut man, panel_section, panel_scroll),
+            Some(e) => focused_panel_info(
+                cab,
+                e,
+                &mut ra,
+                &mut man,
+                cur.panel_section,
+                cur.panel_scroll,
+            ),
             None => empty_panel_info(),
         };
         cab.set_shelf_panel(shelf_panel);
@@ -2463,14 +2538,9 @@ pub fn run(
         let pointer = pointer
             .map(|(wx, wy)| cab.window_to_output(wx, wy))
             .and_then(|(ox, oy)| cab.hit_screen_point(ox, oy));
-        let hover_grid = pointer.and_then(|(lx, ly)| grid.tile_at(lx, ly, top_row, view.len()));
+        let hover_grid = pointer.and_then(|(lx, ly)| grid.tile_at(lx, ly, cur.top_row, view.len()));
         let hover_fav = if show_fav {
             pointer.and_then(|(lx, ly)| fav_layout.hit(lx, ly, favorites.len()))
-        } else {
-            None
-        };
-        let hover_recent = if show_recent {
-            pointer.and_then(|(lx, ly)| recent_layout.hit(lx, ly, recent.len()))
         } else {
             None
         };
@@ -2487,133 +2557,62 @@ pub fn run(
                 ach.voltar = draw_achievements_view(d, ach.data.as_ref(), &ra.badge_ids, ach.top);
                 return;
             }
-            let count_label = if filter_query.is_empty() {
-                format!("{} games", view.len())
+            let count_label = if filt.query.is_empty() {
+                tr!(
+                    format!("{} games", view.len()),
+                    format!("{} jogos", view.len())
+                )
             } else {
                 tr!(
                     format!("{} of {} games", view.len(), all.len()),
-                    format!("{} de {} games", view.len(), all.len())
+                    format!("{} de {} jogos", view.len(), all.len())
                 )
             };
             d.text(MARGIN, MARGIN - 12, 2, DIM, &count_label);
-            draw_filter_box(d, filter_rect, &filter_query, &filter_draft, editing_filter);
+            draw_filter_box(d, filter_rect, &filt.query, &filt.draft, filt.editing);
             draw_history_button(d, history_rect);
             draw_refresh_button(d, refresh_rect);
-
-            // The marker itself (plan revision: "adicionar marcador de
-            // favorito nos jogos"; depois "o icone de favorito coloca uma
-            // estrela vermelha") — a red star in the tile's top-right
-            // corner, on every strip and the grid alike.
-            const FAV_RED: (u8, u8, u8) = (214, 40, 40);
-            let draw_fav_dot = |d: &mut Screen, x: i32, y: i32, tile_w: u32| {
-                d.star(x + tile_w as i32 - 16, y + 12, 9, FAV_RED);
-            };
 
             if show_fav {
                 d.text(MARGIN, MARGIN + HEADER_H, 1, DIM, fav_title());
                 for (i, entry) in favorites
                     .iter()
                     .enumerate()
-                    .skip(fav_scroll)
+                    .skip(cur.fav_scroll)
                     .take(strip_vis)
                 {
                     // Window-relative position — the strip slides left as it
                     // scrolls, not the absolute slot that would leave a
                     // blank gap at the start.
-                    let (x, y) = fav_layout.item_pos(i - fav_scroll);
-                    let id = cover_id(&entry.rom.sha1);
-                    // Faixa sem prateleira: tile plano de volta — a capa
-                    // vazada (render 3D) compõe direto no fundo, sem tile
-                    // cinza nem lateral; as demais ficam no tile de sempre.
-                    let vazada = d.image_vazado(id);
-                    if !vazada {
-                        d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
-                    }
-                    if d.has_image(id) {
-                        d.image_fit(id, x + 4, y + 4, RECENT_TILE_W - 8, RECENT_TILE_H - 8);
-                    } else {
-                        d.text_wrapped(
-                            x + 6,
-                            y + 8,
-                            RECENT_TILE_W - 12,
-                            1,
-                            DIM,
-                            &entry.title().to_uppercase(),
-                        );
-                    }
-                    draw_fav_dot(d, x, y, RECENT_TILE_W);
-                    if hover_fav == Some(i) {
-                        draw_play_icon(
-                            d,
-                            x + RECENT_TILE_W as i32 - 26,
-                            y + RECENT_TILE_H as i32 - 26,
-                        );
-                    }
+                    let (x, y) = fav_layout.item_pos(i - cur.fav_scroll);
+                    draw_cover(
+                        d,
+                        cover_id(&entry.rom.sha1),
+                        &entry.title(),
+                        (x, y, STRIP_TILE_W, STRIP_TILE_H),
+                        CoverLook {
+                            on_shelf: false,
+                            selected: cur.in_fav && i == cur.fav_idx,
+                            hovered: hover_fav == Some(i),
+                            favorite: true,
+                        },
+                    );
                 }
                 draw_strip_arrows(
                     d,
                     scr_w,
                     fav_layout.y0,
-                    fav_scroll,
+                    cur.fav_scroll,
                     favorites.len(),
                     strip_vis,
                 );
             }
 
-            if show_recent {
-                d.text(
-                    MARGIN,
-                    MARGIN + HEADER_H + fav_block_h,
-                    1,
-                    DIM,
-                    tr!("recently played", "jogados recentemente"),
-                );
-                for (i, entry) in recent
-                    .iter()
-                    .enumerate()
-                    .skip(recent_scroll)
-                    .take(strip_vis)
-                {
-                    let (x, y) = recent_layout.item_pos(i - recent_scroll);
-                    let id = cover_id(&entry.rom.sha1);
-                    // Faixa sem prateleira: tile plano de volta — a capa
-                    // vazada (render 3D) compõe direto no fundo, sem tile
-                    // cinza nem lateral; as demais ficam no tile de sempre.
-                    let vazada = d.image_vazado(id);
-                    if !vazada {
-                        d.fill(x, y, RECENT_TILE_W, RECENT_TILE_H, TILE_BG);
-                    }
-                    if d.has_image(id) {
-                        d.image_fit(id, x + 4, y + 4, RECENT_TILE_W - 8, RECENT_TILE_H - 8);
-                    } else {
-                        d.text_wrapped(
-                            x + 6,
-                            y + 8,
-                            RECENT_TILE_W - 12,
-                            1,
-                            DIM,
-                            &entry.title().to_uppercase(),
-                        );
-                    }
-                    draw_fav_dot(d, x, y, RECENT_TILE_W);
-                    if hover_recent == Some(i) {
-                        draw_play_icon(
-                            d,
-                            x + RECENT_TILE_W as i32 - 26,
-                            y + RECENT_TILE_H as i32 - 26,
-                        );
-                    }
-                }
-                draw_strip_arrows(
-                    d,
-                    scr_w,
-                    recent_layout.y0,
-                    recent_scroll,
-                    recent.len(),
-                    strip_vis,
-                );
+            if !grid.list_mode {
+                // O móvel começa na listagem geral — os favoritos ficam
+                // fora dele, soltos acima.
+                draw_cabinet(d, scr_w, scr_h, grid.y0 + 1);
             }
-
             d.text(MARGIN, all_games_label_y, 1, DIM, all_games_title());
 
             if grid.list_mode {
@@ -2621,10 +2620,10 @@ pub fn run(
                 // inverted bar — no tile, no art, nothing pretending there's
                 // a cover coming.
                 for (i, entry) in view.iter().enumerate() {
-                    let Some((x, y)) = grid.cell_pos(i, top_row) else {
+                    let Some((x, y)) = grid.cell_pos(i, cur.top_row) else {
                         continue;
                     };
-                    let selected = !in_recent && i == sel;
+                    let selected = !cur.in_fav && i == cur.sel;
                     if selected {
                         d.fill(x, y, grid.item_w as u32, grid.item_h as u32, HILITE);
                     }
@@ -2641,51 +2640,25 @@ pub fn run(
                     draw_shelf_board(d, MARGIN, scr_w - MARGIN as u32 * 2, y, 14);
                 }
                 for (i, entry) in view.iter().enumerate() {
-                    let Some((x, y)) = grid.cell_pos(i, top_row) else {
+                    let Some((x, y)) = grid.cell_pos(i, cur.top_row) else {
                         continue;
                     };
-                    let id = cover_id(&entry.rom.sha1);
-                    let vazada = d.image_vazado(id);
-                    if !vazada {
-                        d.fill(x, y, grid.item_w as u32, grid.item_h as u32, TILE_BG);
-                    }
-                    if d.has_image(id) {
-                        if vazada {
-                            d.image_fit_bottom(id, x, y, grid.item_w as u32, grid.item_h as u32);
-                        } else {
-                            d.image_fit(
-                                id,
-                                x + 4,
-                                y + 4,
-                                grid.item_w as u32 - 8,
-                                grid.item_h as u32 - 8,
-                            );
-                        }
-                    } else {
-                        d.text_wrapped(
-                            x + 8,
-                            y + 10,
-                            TILE_W - 16,
-                            1,
-                            DIM,
-                            &entry.title().to_uppercase(),
-                        );
-                    }
-                    if !vazada {
-                        draw_box_dressing(d, x, y, grid.item_w as u32, grid.item_h as u32);
-                    } else {
-                        draw_expositor(d, x, y, grid.item_w as u32, grid.item_h as u32);
-                    }
-                    if entry.rom.favorite {
-                        draw_fav_dot(d, x, y, grid.item_w as u32);
-                    }
-                    if hover_grid == Some(i) {
-                        draw_play_icon(d, x + grid.item_w - 26, y + grid.item_h - 26);
-                    }
+                    draw_cover(
+                        d,
+                        cover_id(&entry.rom.sha1),
+                        &entry.title(),
+                        (x, y, grid.item_w as u32, grid.item_h as u32),
+                        CoverLook {
+                            on_shelf: true,
+                            selected: !cur.in_fav && i == cur.sel,
+                            hovered: hover_grid == Some(i),
+                            favorite: entry.rom.favorite,
+                        },
+                    );
                 }
             }
 
-            draw_scrollbar(d, &grid, view.len(), top_row, scr_w);
+            draw_scrollbar(d, &grid, view.len(), cur.top_row, scr_w);
         };
 
         if let (Some(path), true) = (&opts.shot, opts.max_frames == Some(frame_no)) {
@@ -3015,7 +2988,7 @@ fn draw_scrollbar(d: &mut Screen, grid: &GridLayout, view_len: usize, top_row: u
         track_y,
         SCROLLBAR_W,
         track_h as u32,
-        (60, 60, 68, 255),
+        (48, 44, 42, 255),
     );
 
     let thumb_h = ((grid.vis_rows as f32 / total_rows as f32) * track_h as f32)
@@ -3028,7 +3001,7 @@ fn draw_scrollbar(d: &mut Screen, grid: &GridLayout, view_len: usize, top_row: u
         0.0
     };
     let thumb_y = track_y + (scroll_frac * (track_h - thumb_h as i32).max(0) as f32) as i32;
-    d.fill(track_x, thumb_y, SCROLLBAR_W, thumb_h, HILITE);
+    d.fill(track_x, thumb_y, SCROLLBAR_W, thumb_h, (200, 194, 186, 255));
 }
 
 /// Decode a cover or logo PNG/JPEG to tightly-packed RGBA, downscaled for

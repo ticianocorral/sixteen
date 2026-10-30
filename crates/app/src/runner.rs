@@ -530,13 +530,41 @@ fn power_on_burst(plat: &Platform, cab: &mut Cabinet) {
     }
 }
 
-/// The session clock's live value (plan revision: "considerar o tempo que o
-/// jogo esta rodando, com o power ligado") — `elapsed` is what's already
-/// banked from earlier power-on stretches this session, `since` is when the
-/// current one began (`None` while powered off, in which case the clock is
-/// just frozen at `elapsed`).
-fn live_session_time(elapsed: Duration, since: Option<Instant>) -> Duration {
-    elapsed + since.map(|t| t.elapsed()).unwrap_or_default()
+/// O relógio da sessão ("no tempo da sessão considerar o tempo que o jogo
+/// está rodando, com o power ligado"): conta só com o console ligado, não o
+/// tempo desde que o cartucho entrou. `banked` guarda os trechos ligados já
+/// encerrados; `since` é quando o trecho atual começou (`None` desligado).
+/// O total da sessão também entra no tempo de jogo de todos os tempos.
+struct SessionClock {
+    banked: Duration,
+    since: Option<Instant>,
+}
+
+impl SessionClock {
+    fn new(powered: bool) -> Self {
+        Self {
+            banked: Duration::ZERO,
+            since: powered.then(Instant::now),
+        }
+    }
+
+    /// Ligou: começa um trecho.
+    fn start(&mut self) {
+        self.since = Some(Instant::now());
+    }
+
+    /// Desligou: fecha o trecho em curso e devolve o total da sessão.
+    fn stop(&mut self) -> Duration {
+        if let Some(t) = self.since.take() {
+            self.banked += t.elapsed();
+        }
+        self.banked
+    }
+
+    /// O total da sessão agora, contando o trecho em curso.
+    fn now(&self) -> Duration {
+        self.banked + self.since.map(|t| t.elapsed()).unwrap_or_default()
+    }
 }
 
 /// Ejetar with the console still on: the lock resists — a short mechanical
@@ -1615,15 +1643,7 @@ pub fn run_game(
     // to send it in headless mode.
     let mut powered = spec.shot.is_some();
     cab.set_powered(powered);
-    // The session clock (plan revision: "no tempo da sessao considerar o
-    // tempo que o jogo esta rodando, com o power ligado") counts only while
-    // powered on, not wall-clock since the cartridge went in — `powered_
-    // elapsed` banks whatever was accrued across earlier power-on stretches
-    // this session, `powered_since` is when the current stretch began (`None`
-    // while off). Also the running total this session contributes to the
-    // game's all-time playtime (`total_playtime_secs`) once it ends.
-    let mut powered_elapsed = Duration::ZERO;
-    let mut powered_since = powered.then(Instant::now);
+    let mut session = SessionClock::new(powered);
     let mut static_level = OFF_STATIC_LEVEL;
     // Drives the one deliberate keyboard-typing exception (plan revision) —
     // the free-text note, a slot's caption, or a just-captured print's name
@@ -1901,10 +1921,7 @@ pub fn run_game(
                         // signal-off ritual. A second click while already off
                         // does nothing on purpose — it's Ligar (below) now.
                         flush_sram(&sram_path, &mut last_sram, core.sram());
-                        if let Some(t) = powered_since.take() {
-                            powered_elapsed += t.elapsed();
-                        }
-                        cab.set_session_time(powered_elapsed);
+                        cab.set_session_time(session.stop());
                         static_level = power_off_burst(plat, cab);
                         powered = false;
                         cab.set_powered(false);
@@ -1917,7 +1934,7 @@ pub fn run_game(
                         // the channel when you tune it (plan revision).
                         power_on_burst(plat, cab);
                         powered = true;
-                        powered_since = Some(Instant::now());
+                        session.start();
                         cab.set_powered(true);
                         cab.flash_ch3(CH3_FLASH);
                         // Console power-on re-arms the RA hit counts (plan
@@ -2299,7 +2316,7 @@ pub fn run_game(
         cab.set_reset_pressed(reset_pressed(&flash));
 
         if !powered {
-            cab.set_session_time(live_session_time(powered_elapsed, powered_since));
+            cab.set_session_time(session.now());
             cab.present_static(OFF_STATIC_LEVEL);
             pace_frame(&mut next, frame_time);
             continue;
@@ -2393,7 +2410,7 @@ pub fn run_game(
                     }
                 };
                 let aspect = core.av_info().aspect_ratio;
-                cab.set_session_time(live_session_time(powered_elapsed, powered_since));
+                cab.set_session_time(session.now());
                 cab.present_frame(&fref, aspect);
                 fps_meter.frame(cab);
 
@@ -2459,12 +2476,9 @@ pub fn run_game(
     // Final SRAM flush on the way out (either exit path).
     flush_sram(&sram_path, &mut last_sram, core.sram());
 
-    // Bank whatever powered-on stretch was still running (exiting while on,
-    // e.g. window closed mid-session) and add it to the all-time total.
-    if let Some(t) = powered_since.take() {
-        powered_elapsed += t.elapsed();
-    }
-    add_playtime(&spec.save_dir, &title, powered_elapsed.as_secs());
+    // Fecha o trecho ligado que ainda corria (saiu com o console ligado,
+    // ex.: janela fechada) e soma ao total de todos os tempos.
+    add_playtime(&spec.save_dir, &title, session.stop().as_secs());
 
     if let Some(ra) = &mut ra_session {
         ra.save_progress();

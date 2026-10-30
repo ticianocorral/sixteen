@@ -67,7 +67,31 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   (aviso de conquista) extraídos.
 - **Clippy zerado** em todo o workspace (inclui os exemplos) e `cargo fmt`.
 
+### Modificado
+- **Estante redesenhada para capas 2D e 3D** — toda capa fica EM PÉ na
+  prateleira, encaixada pela altura do conteúdo (as margens
+  transparentes da caixa 3D não contam mais) e pousada na madeira; sem
+  tile cinza nem faixas em volta de capa retrato. Capa 2D ganha volume de
+  caixa (lateral, quina e topo); a 3D só a sombra de contato.
+- **Cursor visível no gamepad** — a capa selecionada sobe, com contorno e
+  halo violeta e um filete aceso no tampo (antes a grade não mostrava
+  seleção nenhuma).
+- **Grade ocupa a altura toda** — as fileiras crescem para preencher a
+  TV (sobrava uma fileira inteira de vão vazio embaixo).
+- **A estante é um móvel** — painel de fundo em madeira escura com veios,
+  montantes laterais, travessa no topo, tampo com profundidade e a
+  sombra das capas na parede; cada capa fica num suporte de acrílico
+  transparente (base no tampo e aba na frente). A seleção: a
+  capa escolhida acende (contorno e filete quentes) e as outras ficam um
+  tom abaixo. O móvel começa na listagem geral; os favoritos ficam soltos
+  acima dele.
+- Jogo sem capa vira uma caixa escura com o título.
+- Contagem em português: "12 jogos".
+
 ### Removido
+- **Faixa "jogados recentemente" da estante** — o Histórico, no
+  cabeçalho, já lista os últimos jogados. De quebra, Esquerda/Direita na
+  faixa de favoritos voltam a andar nela (antes moviam o cursor da grade).
 - **Livraria Retro (revistas) e Museu do Console (manuais do console)** —
   telas, botões e pastas `docs/magazines`/`docs/console-docs` saem do app
   (os PDFs já baixados ficam no disco, intocados). O manual de cada jogo,

@@ -3956,6 +3956,45 @@ impl Screen<'_> {
     /// Como [`Screen::image_fit`], com a arte ancorada na BASE do rect —
     /// para capa vazada (render 3D em ângulo, fundo transparente): a caixa
     /// pousa com a base na prateleira em vez de flutuar centrada.
+    /// O tamanho do conteúdo da imagem `id` (sem as margens transparentes
+    /// da arte vazada) — a estante calcula o retângulo da capa antes de
+    /// desenhá-la, para o halo de seleção abraçar a capa.
+    pub fn image_content_size(&self, id: u64) -> Option<(u32, u32)> {
+        self.images
+            .get(&id)
+            .map(|i| (i.content.2.max(1), i.content.3.max(1)))
+    }
+
+    /// Como [`Screen::image_fit_bottom`], mas recortando as margens
+    /// transparentes da arte (o `content` da textura): a caixa 3D vazada
+    /// ocupa a mesma altura que uma capa chapada, em vez de encolher pelo
+    /// canvas vazio em volta. Devolve o retângulo efetivamente desenhado
+    /// (`None` se a imagem não existe) — a estante veste a capa por ele.
+    pub fn image_fit_content_bottom(
+        &mut self,
+        id: u64,
+        x: i32,
+        y: i32,
+        bw: u32,
+        bh: u32,
+    ) -> Option<Rect> {
+        let img = self.images.get(&id)?;
+        let (cx, cy, cw, ch) = img.content;
+        let (iw, ih) = (cw.max(1) as f32, ch.max(1) as f32);
+        let scale = (bw as f32 / iw).min(bh as f32 / ih);
+        let dw = ((iw * scale).round() as i32).max(1);
+        let dh = ((ih * scale).round() as i32).max(1);
+        let dst = Rect::new(
+            x + (bw as i32 - dw) / 2,
+            y + bh as i32 - dh,
+            dw as u32,
+            dh as u32,
+        );
+        let src = Rect::new(cx as i32, cy as i32, cw.max(1), ch.max(1));
+        let _ = self.canvas.copy(&img.tex, src, dst);
+        Some(dst)
+    }
+
     pub fn image_fit_bottom(&mut self, id: u64, x: i32, y: i32, bw: u32, bh: u32) {
         let Some(img) = self.images.get(&id) else {
             return;
