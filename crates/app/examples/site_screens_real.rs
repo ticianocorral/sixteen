@@ -89,6 +89,7 @@ fn main() -> anyhow::Result<()> {
         debug_shot_pause: false,
         debug_shot_modal: None,
         debug_cart_anim: None,
+        debug_blow: None,
     };
 
     let mut anim = base.clone_shallow();
@@ -206,6 +207,7 @@ impl GameSpecExt for GameSpec {
             debug_shot_pause: self.debug_shot_pause,
             debug_shot_modal: self.debug_shot_modal.clone(),
             debug_cart_anim: self.debug_cart_anim.clone(),
+            debug_blow: self.debug_blow.clone(),
         }
     }
 }

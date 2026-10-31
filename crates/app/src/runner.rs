@@ -98,9 +98,12 @@ pub struct GameSpec {
     /// cartucho em `dir` (o gif do site é gerado com isto) e sai, sem
     /// live loop.
     pub debug_cart_anim: Option<std::path::PathBuf>,
+    /// `emu-run --debug-blow DIR`: as telas de mau contato e a cena do
+    /// sopro em BMPs (headless), no lugar do jogo.
+    pub debug_blow: Option<std::path::PathBuf>,
 }
 
-const PAD: [(Button, sixteen_platform::PadButton); 12] = {
+pub(crate) const PAD: [(Button, sixteen_platform::PadButton); 12] = {
     use sixteen_platform::PadButton as P;
     [
         (Button::B, P::B),
@@ -565,6 +568,16 @@ impl SessionClock {
     fn now(&self) -> Duration {
         self.banked + self.since.map(|t| t.elapsed()).unwrap_or_default()
     }
+}
+
+/// Sai de uma falha de mau contato: reset no core e a SRAM do disco de
+/// volta — o que a abertura travada tenha escrito nunca vira save.
+fn restore_after_fault(core: &mut Core, sram: Option<&[u8]>, last: &mut Option<Vec<u8>>) {
+    core.reset();
+    if let Some(bytes) = sram {
+        core.load_sram(bytes);
+    }
+    *last = core.sram();
 }
 
 /// Ejetar with the console still on: the lock resists — a short mechanical
@@ -1246,7 +1259,7 @@ fn preview_modal(
 /// é a mesma regra do hiss); ao religar, o áudio volta no tempo do jogo.
 /// No canal 4 o som vem como a imagem: abafado, com chiado e o zumbido do
 /// vertical ([`RfAudio`](sixteen_platform::RfAudio)).
-fn queue_game_audio(
+pub(crate) fn queue_game_audio(
     audio: &sixteen_platform::AudioOut,
     cab: &Cabinet,
     samples: &[i16],
@@ -1610,6 +1623,10 @@ pub fn run_game(
             .map_err(|e| anyhow!(e.to_string()))?;
         return Ok(GameExit::Quit);
     }
+    if let Some(dir) = &spec.debug_blow {
+        crate::contato::debug_shots(cab, &mut ntsc, &rom_bytes, &title, dir)?;
+        return Ok(GameExit::Quit);
+    }
 
     // --- audio -----------------------------------------------------------
     let audio = plat
@@ -1653,6 +1670,13 @@ pub fn run_game(
     let mut powered = spec.shot.is_some();
     cab.set_powered(powered);
     let mut session = SessionClock::new(powered);
+    // Mau contato do cartucho (opcional): o encaixe é sorteado agora; um
+    // encaixe ruim faz o próximo Power cair numa `FaultRun` em vez do jogo.
+    // Durante a falha `powered` segue falso (nada de save, notas, RA ou
+    // tempo de jogo) — só o painel mostra o console ligado.
+    let mut contact = crate::contato::Contact::inserted(cfg.bad_contact, spec.shot.is_none());
+    let mut fault: Option<crate::contato::FaultRun> = None;
+    let sram_at_insert = fs::read(&sram_path).ok();
     let mut static_level = OFF_STATIC_LEVEL;
     // Drives the one deliberate keyboard-typing exception (plan revision) —
     // the free-text note, a slot's caption, or a just-captured print's name
@@ -1926,6 +1950,18 @@ pub fn run_game(
             .collect();
         for ev in events {
             match ev {
+                UiEvent::Quit if fault.is_some() => {
+                    // Desligar na falha: o core volta ao encaixe (a falha
+                    // pode ter rodado a abertura) e ligar de novo às vezes
+                    // resolve sozinho.
+                    static_level = power_off_burst(plat, cab);
+                    fault = None;
+                    restore_after_fault(&mut core, sram_at_insert.as_deref(), &mut last_sram);
+                    audio.clear();
+                    contact.power_cycled();
+                    cab.set_powered(false);
+                    log::info!("power off on a bad contact");
+                }
                 UiEvent::Quit => {
                     if powered {
                         // Desligar (plan §3.3): flush the cart, then the
@@ -1944,6 +1980,13 @@ pub fn run_game(
                         // few seconds over the picture, the way a TV shows
                         // the channel when you tune it (plan revision).
                         power_on_burst(plat, cab);
+                        if let Some(kind) = contact.power_on() {
+                            log::info!("mau contato: {kind:?}");
+                            fault = Some(crate::contato::FaultRun::new(kind));
+                            cab.set_powered(true);
+                            cab.flash_ch3(CH3_FLASH);
+                            continue;
+                        }
                         powered = true;
                         session.start();
                         cab.set_powered(true);
@@ -1958,8 +2001,38 @@ pub fn run_game(
                     }
                 }
                 UiEvent::Eject => {
-                    if powered {
+                    if powered || fault.is_some() {
                         eject_clunk(plat); // lock resists while it's still on
+                    } else if contact.needs_ritual() {
+                        // Falhou desde o encaixe: o cartucho sai e vai para a
+                        // frente da TV, para soprar.
+                        audio.clear();
+                        if has_cartridge_art {
+                            cartridge_eject_animation(plat, cab);
+                        }
+                        match crate::contato::blow_ritual(
+                            plat,
+                            cab,
+                            &mut input,
+                            &cfg.keymap,
+                            &title,
+                        ) {
+                            crate::contato::RitualExit::Reinsert { clean, fog } => {
+                                contact.reinserted(clean, fog);
+                                cab.set_cartridge_motion(None);
+                                if has_cartridge_art {
+                                    cartridge_insert_animation(plat, cab);
+                                }
+                                log::info!("reinserted after blowing (clean {clean:.2})");
+                            }
+                            crate::contato::RitualExit::Shelf => {
+                                if let Some(ra) = &mut ra_session {
+                                    ra.save_progress();
+                                }
+                                break 'run GameExit::Ejected { static_level };
+                            }
+                            crate::contato::RitualExit::Quit => break 'run GameExit::Quit,
+                        }
                     } else {
                         if let Some(ra) = &mut ra_session {
                             ra.save_progress();
@@ -2326,6 +2399,21 @@ pub fn run_game(
         }
         cab.set_reset_pressed(reset_pressed(&flash));
 
+        if let Some(f) = &mut fault {
+            f.frame(
+                &mut core,
+                &mut ntsc,
+                cab,
+                &audio,
+                audio_cap,
+                &rom_bytes,
+                &mut vol_buf,
+                &mut rf_audio,
+            );
+            pace_frame(&mut next, frame_time);
+            continue;
+        }
+
         if !powered {
             cab.set_session_time(session.now());
             cab.present_static(OFF_STATIC_LEVEL);
@@ -2488,6 +2576,11 @@ pub fn run_game(
         pace_frame(&mut next, frame_time);
     };
 
+    // Saiu no meio de uma falha (janela fechada): o core volta ao encaixe
+    // antes do flush, para a abertura que rodou nunca chegar ao save.
+    if fault.is_some() {
+        restore_after_fault(&mut core, sram_at_insert.as_deref(), &mut last_sram);
+    }
     // Final SRAM flush on the way out (either exit path).
     flush_sram(&sram_path, &mut last_sram, core.sram());
 

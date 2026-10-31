@@ -256,6 +256,34 @@ diferentes, dá para remapear em **Configurações → controles**.
 
 Dá para conectar até **2 controles** — o teclado é sempre o jogador 1.
 
+### Mau contato: soprar o cartucho
+
+Opcional e desligado por padrão — ligue em **Configurações → jogo → Mau
+contato do cartucho** (*raro* ≈ 1 encaixe em 15, *anos 90* ≈ 1 em 5).
+
+Com ele ligado, às vezes o cartucho entra mal encaixado e o primeiro
+**POWER** não sobe o jogo: tela preta com zumbido, lixo de tiles colorido,
+a abertura travando com um "bzzzt" em loop, ou as cores trocadas. Para
+resolver, faça o ritual:
+
+1. Desligue no **POWER** e clique em **EJETAR**.
+2. O cartucho sai do slot e vem para a frente da TV, com os contatos
+   virados para você.
+3. **Segure o clique** (ou **Y**/**B** no controle) para soprar: a poeira
+   sai e os pinos passam de foscos a dourados. Fique de olho na barra de
+   **fôlego** — soprar até o fim deixa você sem ar e **embaça os pinos**,
+   e pino embaçado encaixa pior. Sopros curtos funcionam melhor.
+4. Clique em **Inserir de novo** (ou **A**/**Start**) e ligue.
+
+Desligar e ligar de novo, sem ejetar, às vezes também resolve. Se
+preferir desistir, **Guardar na estante** (ou **Select**) tira o cartucho
+como o EJETAR de sempre.
+
+Para não irritar: só o primeiro POWER depois de inserir pode falhar (retomar
+com POWER nunca falha), nunca há mais de **duas falhas seguidas**, e o seu
+save não é tocado — durante a falha o jogo não conta tempo, não salva e
+não ganha conquistas.
+
 ---
 
 ## 8. Salvando seu progresso
@@ -388,10 +416,10 @@ Abra pelo botão **"Configurações"** (na tela inicial ou na estante). Há
 cinco seções na coluna; tudo é salvo na hora.
 
 ### jogo
-- **Run-ahead** — um recurso avançado que reduz a demora entre você
-  apertar e o jogo reagir ("latência de entrada"). Valores maiores = menos
-  atraso, mas pede mais do computador. Se algum jogo apresentar
-  instabilidade, volte para 0 ou 1. Fica desligado no modo hardcore.
+- **Controles** — abre o remapeamento de teclado e controle.
+- **Mau contato do cartucho** — *desligado* (padrão), *raro* ou *anos 90*:
+  a chance de o primeiro POWER não subir o jogo até você soprar o cartucho
+  (veja [Mau contato](#mau-contato-soprar-o-cartucho)).
 
 ### vídeo
 - **Tela cheia** — liga/desliga o modo tela cheia (padrão: ligada).

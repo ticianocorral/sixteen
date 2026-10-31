@@ -16,6 +16,7 @@
 
 pub mod config;
 pub mod console_art;
+mod contato;
 pub mod core_update;
 pub mod dat_update;
 pub mod devmenu;

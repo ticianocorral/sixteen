@@ -39,6 +39,11 @@ pub struct Config {
     /// (padrão) ou o expositor de metal da locadora. Linha "Estante" na
     /// seção de vídeo das configurações.
     pub shelf_theme: ShelfTheme,
+    /// Mau contato do cartucho (soprar o cartucho): com que frequência o
+    /// primeiro Power depois de inserir não sobe o jogo — tela preta, lixo
+    /// de tiles ou imagem travada — até ejetar, soprar e inserir de novo.
+    /// Desligado por padrão. Linha na seção "jogo" das configurações.
+    pub bad_contact: BadContact,
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
     /// fase 1) — the username and the web-API token the user generates on
     /// retroachievements.org (Settings → Web API). Both empty (the default)
@@ -154,6 +159,57 @@ impl ShelfTheme {
     }
 }
 
+/// Com que frequência o cartucho dá mau contato no primeiro Power —
+/// gravado como a palavra no `sixteen.cfg` (`bad_contact = "off"` /
+/// `"rare"` / `"90s"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BadContact {
+    /// Nunca falha (padrão).
+    #[default]
+    Off,
+    /// Mais ou menos 1 encaixe em 15.
+    Rare,
+    /// Mais ou menos 1 encaixe em 5 — os anos 90 de verdade.
+    Nineties,
+}
+
+impl BadContact {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BadContact::Off => "off",
+            BadContact::Rare => "rare",
+            BadContact::Nineties => "90s",
+        }
+    }
+
+    /// Click / left-right on the settings row: desligado → raro → anos 90.
+    pub fn cycle(self) -> Self {
+        match self {
+            BadContact::Off => BadContact::Rare,
+            BadContact::Rare => BadContact::Nineties,
+            BadContact::Nineties => BadContact::Off,
+        }
+    }
+
+    /// A chance de um encaixe recém-feito dar mau contato.
+    pub fn chance(self) -> f32 {
+        match self {
+            BadContact::Off => 0.0,
+            BadContact::Rare => 1.0 / 15.0,
+            BadContact::Nineties => 1.0 / 5.0,
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "off" | "" => Some(BadContact::Off),
+            "rare" | "raro" => Some(BadContact::Rare),
+            "90s" | "nineties" | "anos90" => Some(BadContact::Nineties),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Deserialize, Default)]
 struct Raw {
     #[serde(default)]
@@ -166,6 +222,8 @@ struct Raw {
     hiss_on_static: Option<bool>,
     #[serde(default)]
     shelf_theme: Option<String>,
+    #[serde(default)]
+    bad_contact: Option<String>,
     #[serde(default)]
     ra_user: Option<String>,
     #[serde(default)]
@@ -199,6 +257,7 @@ impl Config {
             check_updates_on_start: true,
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
+            bad_contact: BadContact::Off,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -262,6 +321,15 @@ impl Config {
                 ),
             }
         }
+        if let Some(b) = raw.bad_contact {
+            match BadContact::parse(&b) {
+                Some(v) => self.bad_contact = v,
+                None => log::warn!(
+                    "[config] bad_contact = {b:?}: not a level (want off|rare|90s), keeping {}",
+                    self.bad_contact.as_str()
+                ),
+            }
+        }
         if let Some(u) = raw.ra_user {
             self.ra_user = u;
         }
@@ -322,6 +390,7 @@ impl Config {
              # check_updates_on_start: look for a newer release/snes9x core at launch.\n\
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
              # shelf_theme: the shelf furniture — wood (default) or metal (rental-store rack).\n\
+             # bad_contact: cartridge bad contact on first power-on — off (default), rare or 90s.\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
@@ -336,9 +405,10 @@ impl Config {
             self.check_updates_on_start
         ));
         s.push_str(&format!("hiss_on_static = {}\n", self.hiss_on_static));
+        s.push_str(&format!("shelf_theme = {:?}\n", self.shelf_theme.as_str()));
         s.push_str(&format!(
-            "shelf_theme = {:?}\n\n",
-            self.shelf_theme.as_str()
+            "bad_contact = {:?}\n\n",
+            self.bad_contact.as_str()
         ));
         s.push_str("# RetroAchievements\n");
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
@@ -391,6 +461,7 @@ mod tests {
             check_updates_on_start: true,
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
+            bad_contact: BadContact::Off,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -486,6 +557,24 @@ mod tests {
         let mut round = defaults();
         round.apply(raw).unwrap();
         assert_eq!(round.shelf_theme, ShelfTheme::Metal);
+    }
+
+    #[test]
+    fn bad_contact_round_trips_and_rejects_junk() {
+        let mut cfg = defaults();
+        assert_eq!(cfg.bad_contact, BadContact::Off);
+        assert_eq!(BadContact::Off.chance(), 0.0);
+        cfg.apply(toml::from_str("bad_contact = \"90s\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.bad_contact, BadContact::Nineties);
+        cfg.apply(toml::from_str("bad_contact = \"sempre\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.bad_contact, BadContact::Nineties);
+        let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
+        let mut round = defaults();
+        round.apply(raw).unwrap();
+        assert_eq!(round.bad_contact, BadContact::Nineties);
+        assert_eq!(BadContact::Nineties.cycle(), BadContact::Off);
     }
 
     #[test]

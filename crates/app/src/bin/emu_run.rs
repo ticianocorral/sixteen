@@ -42,6 +42,8 @@ struct Args {
     /// of gameplay (dev/testing) — "save", "load", "print", or "cheats".
     debug_shot_modal: Option<String>,
     debug_cart_anim: Option<std::path::PathBuf>,
+    /// Headless: as telas de mau contato e a cena do sopro, em BMPs.
+    debug_blow: Option<std::path::PathBuf>,
 }
 
 fn parse_args() -> Result<Args> {
@@ -60,6 +62,7 @@ fn parse_args() -> Result<Args> {
     let mut debug_shot_pause = false;
     let mut debug_shot_modal = None;
     let mut debug_cart_anim = None;
+    let mut debug_blow = None;
 
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -135,6 +138,13 @@ fn parse_args() -> Result<Args> {
                         .into(),
                 );
             }
+            "--debug-blow" => {
+                debug_blow = Some(
+                    it.next()
+                        .ok_or_else(|| anyhow!("--debug-blow needs a path"))?
+                        .into(),
+                );
+            }
             "--notes-dir" => {
                 notes_dir = Some(
                     it.next()
@@ -179,6 +189,7 @@ fn parse_args() -> Result<Args> {
         debug_shot_pause,
         debug_shot_modal,
         debug_cart_anim,
+        debug_blow,
     })
 }
 
@@ -249,6 +260,7 @@ fn main() -> Result<()> {
         debug_shot_pause: args.debug_shot_pause,
         debug_shot_modal: args.debug_shot_modal,
         debug_cart_anim: args.debug_cart_anim,
+        debug_blow: args.debug_blow,
     };
     // Standalone: "back" and "close" both just end the process.
     run_game(&mut platform, &mut cabinet, &spec, &cfg)?;

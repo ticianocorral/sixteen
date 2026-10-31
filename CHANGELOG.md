@@ -7,6 +7,22 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+### Adicionado
+- **Mau contato: soprar o cartucho** (opcional, desligado por padrão) — em
+  Configurações → jogo → Mau contato do cartucho (*raro* ≈ 1 em 15, *anos
+  90* ≈ 1 em 5; `bad_contact = "off" | "rare" | "90s"` no `sixteen.cfg`).
+  Um encaixe ruim faz o primeiro POWER cair numa falha — tela preta com
+  zumbido, lixo de tiles feito dos bytes da própria ROM, abertura travada
+  com o som em loop ou paleta trocada. Desligar, ejetar e o cartucho vem
+  para a frente da TV com os contatos virados: segurar o clique (ou Y/B)
+  sopra a poeira e doura os pinos, com barra de fôlego (soprar demais
+  embaça os pinos). Nunca mais de duas falhas seguidas, retomar com POWER
+  nunca falha e a SRAM do disco volta ao core ao sair da falha — o save
+  nunca é tocado. `SIXTEEN_MAU_CONTATO=1` força o primeiro encaixe ruim
+  (testes); `emu-run --debug-blow DIR` captura as telas em BMP.
+
 ## [1.5.0] - 2026-10-30
 
 ### Adicionado

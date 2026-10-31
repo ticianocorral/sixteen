@@ -22,6 +22,7 @@ use sdl3::{AudioSubsystem, VideoSubsystem};
 use crate::tr;
 use crate::{audio::AudioOut, PlatformError};
 
+mod blow;
 mod chin;
 mod chrome;
 mod controls;
@@ -32,8 +33,10 @@ mod pause;
 mod rf;
 mod text;
 
+pub use blow::{BlowButton, BlowScene, Dust};
 pub use rf::RfAudio;
 
+use blow::*;
 use chin::*;
 use chrome::*;
 use controls::*;
@@ -478,6 +481,9 @@ pub struct Cabinet {
     /// abrir os fluxos de atualização (plan revision: "ao clicar no icone
     /// verde de atualizar, atualizar").
     update_arrows: (Option<Rect>, Option<Rect>),
+    /// Os botões da cena do sopro (inserir de novo / guardar) — preenchidos
+    /// por `present_blow`, vazios fora dela.
+    blow_buttons: Vec<(BlowButton, Rect)>,
     /// The chin's OSD queue (plan: `docs/plano-retroachievements.md`,
     /// fase 4) — "CONQUISTA DESBLOQUEADA" blocks drawn right-aligned in the
     /// chin, front entry only, expiring by time; the next one slides in
@@ -1327,6 +1333,7 @@ impl Cabinet {
             nameplate: BRAND.to_string(),
             nameplate_updates: (false, false),
             update_arrows: (None, None),
+            blow_buttons: Vec::new(),
             osd_queue: VecDeque::new(),
             ra_status: None,
             close_button: Rect::new(0, 0, 0, 0),
@@ -3000,6 +3007,26 @@ impl Cabinet {
     /// afterglow. A neve em si (a textura, o CH 3, o hiss) é intocada —
     /// estas fases são só uma máscara vertical + brilho por cima dela.
     pub fn present_static(&mut self, level: f32) {
+        self.present_static_with(level, None);
+    }
+
+    /// The blow-on-the-cartridge scene (`BlowScene`) over the signal-off
+    /// snow: the cartridge out of the slot, in front of the tube, contacts
+    /// facing the player. The scene's buttons are hit-tested by
+    /// [`Cabinet::hit_blow_button`].
+    pub fn present_blow(&mut self, level: f32, scene: &BlowScene) {
+        self.present_static_with(level, Some(scene));
+    }
+
+    /// Which button of the last `present_blow` frame is under the point.
+    pub fn hit_blow_button(&self, out_x: i32, out_y: i32) -> Option<BlowButton> {
+        self.blow_buttons
+            .iter()
+            .find(|(_, r)| r.contains_point((out_x, out_y)))
+            .map(|(b, _)| *b)
+    }
+
+    fn present_static_with(&mut self, level: f32, blow: Option<&BlowScene>) {
         // A fase do tubo avança por frame e sabe o que este frame desenha;
         // a neve: desligada, nível zero (nada para a textura — o vidro morto
         // é desenhado por cima); em transição, o normal (a máscara do vidro
@@ -3099,6 +3126,19 @@ impl Cabinet {
         if self.tv_on() {
             self.draw_ra_badge();
         }
+        // O cartucho do sopro por cima de tudo: ele sai do painel e vem
+        // para a frente do tubo.
+        self.blow_buttons = match blow {
+            Some(scene) => draw_blow_scene(
+                &mut self.canvas,
+                &mut self.font,
+                &self.images,
+                self.screen,
+                panel,
+                scene,
+            ),
+            None => Vec::new(),
+        };
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
@@ -3111,6 +3151,26 @@ impl Cabinet {
     pub fn capture_static_bmp(
         &mut self,
         level: f32,
+        path: &std::path::Path,
+    ) -> Result<(), PlatformError> {
+        self.capture_static_bmp_with(level, None, path)
+    }
+
+    /// [`Cabinet::present_blow`]'s headless twin — a frame of the blow
+    /// scene saved as a BMP.
+    pub fn capture_blow_bmp(
+        &mut self,
+        level: f32,
+        scene: &BlowScene,
+        path: &std::path::Path,
+    ) -> Result<(), PlatformError> {
+        self.capture_static_bmp_with(level, Some(scene), path)
+    }
+
+    fn capture_static_bmp_with(
+        &mut self,
+        level: f32,
+        blow: Option<&BlowScene>,
         path: &std::path::Path,
     ) -> Result<(), PlatformError> {
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
@@ -3195,6 +3255,9 @@ impl Cabinet {
                 core_status,
                 tv_on,
             );
+            if let Some(scene) = blow {
+                draw_blow_scene(c, font, images, screen, panel, scene);
+            }
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
             c.set_viewport(None);

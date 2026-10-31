@@ -66,7 +66,7 @@ const RA_ROW_SENHA: usize = 2;
 
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
-        SEC_JOGO => 1,
+        SEC_JOGO => 2,
         // tela cheia / chiado / estante
         SEC_VIDEO => 3,
         // núcleo / checar updates / idioma / renomear ROMs
@@ -484,6 +484,8 @@ fn activate_row(
             if i == 0 {
                 *sec = SEC_CONTROLES;
                 *sel = 0;
+            } else {
+                cfg.bad_contact = cfg.bad_contact.cycle();
             }
         }
         SEC_VIDEO => match i {
@@ -556,6 +558,9 @@ fn start_login_test(
 /// flip. Rows without a horizontal feel ignore them.
 fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _right: bool) {
     match (sec, sel) {
+        (SEC_JOGO, 1) => {
+            cfg.bad_contact = cfg.bad_contact.cycle();
+        }
         (SEC_VIDEO, 0) => {
             cfg.fullscreen = !cfg.fullscreen;
             cab.toggle_fullscreen();
@@ -593,6 +598,16 @@ fn lang_value_name(lang: crate::config::LangOpt) -> &'static str {
     match lang {
         crate::config::LangOpt::En => tr!("English", "Inglês"),
         crate::config::LangOpt::Pt => "Português (Brasil)",
+    }
+}
+
+/// The bad-contact row's value — how often the first Power after inserting
+/// a cartridge fails until you blow on it.
+fn bad_contact_name(level: crate::config::BadContact) -> &'static str {
+    match level {
+        crate::config::BadContact::Off => tr!("off", "desligado"),
+        crate::config::BadContact::Rare => tr!("rare", "raro"),
+        crate::config::BadContact::Nineties => tr!("like the 90s", "anos 90"),
     }
 }
 
@@ -749,11 +764,23 @@ fn bind_pad_row(plat: &mut Platform, cfg: &mut Config, row: usize, btn: GamepadB
     plat.set_pad_map(cfg.padmap.clone());
 }
 
-fn draw_jogo(d: &mut Screen, _cfg: &Config, sel: usize) {
+fn draw_jogo(d: &mut Screen, cfg: &Config, sel: usize) {
     let x = MARGIN;
     d.text(x, MARGIN, 2, TEXT, tr!("game", "jogo"));
     let mut y = LIST_TOP;
-    let rows = [tr!("Controls", "Controles").to_string()];
+    let rows = [
+        tr!("Controls", "Controles").to_string(),
+        tr!(
+            format!(
+                "Cartridge bad contact: {}",
+                bad_contact_name(cfg.bad_contact)
+            ),
+            format!(
+                "Mau contato do cartucho: {}",
+                bad_contact_name(cfg.bad_contact)
+            ),
+        ),
+    ];
     for (i, row) in rows.iter().enumerate() {
         draw_row(d, x, y, row, i == sel);
         y += ROW_H;

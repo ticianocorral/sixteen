@@ -9,10 +9,10 @@ pub mod tr;
 
 pub use audio::AudioOut;
 pub use cabinet::{
-    prepare_art, Cabinet, FrameRef, HltbBar, HltbBars, IgdbSection, PanelButton, PanelSection,
-    PixelFormat, PreparedArt, RaStatus, RfAudio, Screen, SettingsButton, SettingsPanelInfo,
-    ShelfButton, ShelfPanelInfo, TvControl, TvPower, UpdateArrow, BRAND, DEMO_BADGE_IMG,
-    RA_LOGO_IMG,
+    prepare_art, BlowButton, BlowScene, Cabinet, Dust, FrameRef, HltbBar, HltbBars, IgdbSection,
+    PanelButton, PanelSection, PixelFormat, PreparedArt, RaStatus, RfAudio, Screen, SettingsButton,
+    SettingsPanelInfo, ShelfButton, ShelfPanelInfo, TvControl, TvPower, UpdateArrow, BRAND,
+    DEMO_BADGE_IMG, RA_LOGO_IMG,
 };
 pub use input::{Input, KeyMap, PadButton, PadMap, UiEvent, MAX_PORTS};
 // The SDL gamepad button enum, for callers that hold a captured press
@@ -671,6 +671,14 @@ impl Platform {
         self.menu_pointer = Some((ms.x() as i32, ms.y() as i32));
         out.pointer = self.debug_pointer.or(self.menu_pointer);
         out
+    }
+
+    /// O botão esquerdo do mouse está apertado agora (estado contínuo, não
+    /// evento) — o "segure para soprar" do cartucho, e onde ele está, em
+    /// coordenadas de janela.
+    pub fn left_mouse_held(&self) -> Option<(i32, i32)> {
+        let ms = self.event_pump.mouse_state();
+        ms.left().then(|| (ms.x() as i32, ms.y() as i32))
     }
 
     /// Testing hook: força a posição do cursor que o [`MenuInput`] reporta
