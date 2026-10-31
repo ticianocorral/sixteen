@@ -194,7 +194,7 @@ pub(super) fn draw_blow_scene(
 
     // O cartucho em 3D de verdade, em milímetros: a frente W×H no plano
     // z=0 e o corpo indo para trás até z=-D (um cartucho de SNES tem uns
-    // 12 × 2 cm de borda). Ele gira de lado e tomba — a borda de baixo
+    // 12 × 1,7 cm de borda). Ele gira de lado e tomba — a borda de baixo
     // vem para quem joga, o lado esquerdo mais perto — em perspectiva.
     let art = images.get(&PANEL_CARTRIDGE_IMG);
     let front_aspect = art
@@ -206,9 +206,9 @@ pub(super) fn draw_blow_scene(
     const CART_W: f32 = 120.0;
     const CAM: f32 = 420.0;
     let cart_h = CART_W * front_aspect;
-    let cart_d = CART_W * 0.18;
+    let cart_d = CART_W * 0.14;
     let (sin, cos) = (pose * 55f32.to_radians()).sin_cos();
-    let (ysin, ycos) = (pose * 20f32.to_radians()).sin_cos();
+    let (ysin, ycos) = (pose * 14f32.to_radians()).sin_cos();
     let mm = w / CART_W;
     let (hw, hh) = (CART_W / 2.0, cart_h / 2.0);
     let proj = |x: f32, y: f32, z: f32| -> (f32, f32) {
@@ -236,7 +236,12 @@ pub(super) fn draw_blow_scene(
                 (-hw, hh, 0.0),
                 (-hw, hh, -cart_d),
             ]),
-            [fcolor(scale_color(PLASTIC, 0.62), 1.0); 4],
+            [
+                fcolor(scale_color(PLASTIC, 0.5), 1.0),
+                fcolor(scale_color(PLASTIC, 0.72), 1.0),
+                fcolor(scale_color(PLASTIC, 0.72), 1.0),
+                fcolor(scale_color(PLASTIC, 0.5), 1.0),
+            ],
         );
     }
 
@@ -312,6 +317,38 @@ pub(super) fn draw_blow_scene(
         }
     }
 
+    // As quinas do plástico são chanfradas, não de caixa: um filete
+    // inclinado entre a frente e o lado, e outro entre a frente e a borda
+    // de baixo, pegando a luz.
+    const BEVEL: f32 = 1.8;
+    if pose > 0.02 {
+        quad(
+            canvas,
+            face([
+                (-hw, -hh, -BEVEL),
+                (-hw + BEVEL, -hh, 0.0),
+                (-hw + BEVEL, hh, 0.0),
+                (-hw, hh, -BEVEL),
+            ]),
+            [fcolor(scale_color(PLASTIC, 0.86), 1.0); 4],
+        );
+        quad(
+            canvas,
+            face([
+                (-hw + BEVEL, hh - BEVEL, 0.0),
+                (hw, hh - BEVEL, 0.0),
+                (hw, hh, -BEVEL),
+                (-hw, hh, -BEVEL),
+            ]),
+            [
+                fcolor((150, 148, 142), 1.0),
+                fcolor((150, 148, 142), 1.0),
+                fcolor((204, 202, 196), 1.0),
+                fcolor((204, 202, 196), 1.0),
+            ],
+        );
+    }
+
     if pose < 0.02 {
         return Vec::new();
     }
@@ -326,7 +363,7 @@ pub(super) fn draw_blow_scene(
     };
     quad(
         canvas,
-        bottom(-hw, hw, 0.0, -cart_d),
+        bottom(-hw, hw, -BEVEL, -cart_d),
         [
             fcolor((182, 180, 174), 1.0),
             fcolor((182, 180, 174), 1.0),
@@ -369,7 +406,7 @@ pub(super) fn draw_blow_scene(
     // A placa em pé: a face (verde-oliva), a ponta lixada (a espessura,
     // um filete claro) e os contatos.
     let pcb_z = -cart_d * 0.5;
-    let pcb_depth = 8.0;
+    let pcb_depth = 7.0;
     let pcb_x = hw * 0.76;
     let pcb_edge = hh - 1.2;
     quad(
