@@ -194,8 +194,8 @@ pub(super) fn draw_blow_scene(
 
     // O cartucho em 3D de verdade, em milímetros: a frente W×H no plano
     // z=0 e o corpo indo para trás até z=-D (um cartucho de SNES tem uns
-    // 12 × 2 cm de borda). Ele gira no eixo horizontal — a borda de baixo
-    // vem para quem joga — numa perspectiva suave.
+    // 12 × 2 cm de borda). Ele gira de lado e tomba — a borda de baixo
+    // vem para quem joga, o lado esquerdo mais perto — em perspectiva.
     let art = images.get(&PANEL_CARTRIDGE_IMG);
     let front_aspect = art
         .map(|a| {
@@ -204,79 +204,101 @@ pub(super) fn draw_blow_scene(
         })
         .unwrap_or(0.72);
     const CART_W: f32 = 120.0;
-    const CAM: f32 = 520.0;
+    const CAM: f32 = 420.0;
     let cart_h = CART_W * front_aspect;
     let cart_d = CART_W * 0.18;
     let (sin, cos) = (pose * 55f32.to_radians()).sin_cos();
+    let (ysin, ycos) = (pose * 20f32.to_radians()).sin_cos();
     let mm = w / CART_W;
     let (hw, hh) = (CART_W / 2.0, cart_h / 2.0);
     let proj = |x: f32, y: f32, z: f32| -> (f32, f32) {
-        // Gira em torno do meio do corpo.
+        // Gira em torno do meio do corpo: tomba (a borda de baixo vem para
+        // quem joga) e depois vira de lado em torno da vertical da tela — as
+        // bordas seguem horizontais, só fugindo para o fundo.
         let z = z + cart_d / 2.0;
         let yr = y * cos - z * sin;
         let zr = y * sin + z * cos;
+        let (x, zr) = (x * ycos + zr * ysin, -x * ysin + zr * ycos);
         let k = CAM / (CAM - zr);
         (cx + x * k * mm, cy + yr * k * mm)
     };
+    let face = |c: [(f32, f32, f32); 4]| c.map(|(x, y, z)| proj(x, y, z));
     // A frente escurece um pouco ao tombar (sai da luz).
     let shade = 1.0 - 0.28 * pose;
 
+    // O lado esquerdo, que o giro mostra.
+    if pose > 0.02 {
+        quad(
+            canvas,
+            face([
+                (-hw, -hh, -cart_d),
+                (-hw, -hh, 0.0),
+                (-hw, hh, 0.0),
+                (-hw, hh, -cart_d),
+            ]),
+            [fcolor(scale_color(PLASTIC, 0.62), 1.0); 4],
+        );
+    }
+
     match art {
         Some(a) => {
-            // Em faixas: a textura afim por triângulo entorta num trapézio
-            // grande; em fatias finas, a perspectiva fica limpa.
+            // Numa grade: a textura afim por triângulo entorta num
+            // trapézio grande; em células pequenas a perspectiva fica limpa.
             let (ux, uy, uw, uh) = a.content;
             let (iw, ih) = (a.w.max(1) as f32, a.h.max(1) as f32);
-            let (u0, u1) = (ux as f32 / iw, (ux + uw) as f32 / iw);
-            const STRIPS: usize = 12;
-            for i in 0..STRIPS {
-                let (t0, t1) = (i as f32 / STRIPS as f32, (i + 1) as f32 / STRIPS as f32);
-                let (y0, y1) = (-hh + cart_h * t0, -hh + cart_h * t1);
-                let (v0, v1) = (
-                    (uy as f32 + uh as f32 * t0) / ih,
-                    (uy as f32 + uh as f32 * t1) / ih,
-                );
-                tex_quad(
-                    canvas,
-                    &a.tex,
-                    [
-                        proj(-hw, y0, 0.0),
-                        proj(hw, y0, 0.0),
-                        proj(hw, y1, 0.0),
-                        proj(-hw, y1, 0.0),
-                    ],
-                    [(u0, v0), (u1, v0), (u1, v1), (u0, v1)],
-                    shade,
-                );
+            const COLS: usize = 10;
+            const ROWS: usize = 8;
+            for r in 0..ROWS {
+                for c in 0..COLS {
+                    let (s0, s1) = (c as f32 / COLS as f32, (c + 1) as f32 / COLS as f32);
+                    let (t0, t1) = (r as f32 / ROWS as f32, (r + 1) as f32 / ROWS as f32);
+                    let (x0, x1) = (-hw + CART_W * s0, -hw + CART_W * s1);
+                    let (y0, y1) = (-hh + cart_h * t0, -hh + cart_h * t1);
+                    let (u0, u1) = (
+                        (ux as f32 + uw as f32 * s0) / iw,
+                        (ux as f32 + uw as f32 * s1) / iw,
+                    );
+                    let (v0, v1) = (
+                        (uy as f32 + uh as f32 * t0) / ih,
+                        (uy as f32 + uh as f32 * t1) / ih,
+                    );
+                    tex_quad(
+                        canvas,
+                        &a.tex,
+                        face([(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)]),
+                        [(u0, v0), (u1, v0), (u1, v1), (u0, v1)],
+                        shade,
+                    );
+                }
             }
         }
         None => {
             let plastic = scale_color(PLASTIC, shade);
             quad(
                 canvas,
-                [
-                    proj(-hw, -hh, 0.0),
-                    proj(hw, -hh, 0.0),
-                    proj(hw, hh, 0.0),
-                    proj(-hw, hh, 0.0),
-                ],
+                face([
+                    (-hw, -hh, 0.0),
+                    (hw, -hh, 0.0),
+                    (hw, hh, 0.0),
+                    (-hw, hh, 0.0),
+                ]),
                 [fcolor(plastic, 1.0); 4],
             );
             let label = scale_color((30, 28, 40), shade);
             let (lx0, lx1, ly0, ly1) = (-hw * 0.72, hw * 0.72, -hh * 0.84, hh * 0.3);
             quad(
                 canvas,
-                [
-                    proj(lx0, ly0, 0.0),
-                    proj(lx1, ly0, 0.0),
-                    proj(lx1, ly1, 0.0),
-                    proj(lx0, ly1, 0.0),
-                ],
+                face([
+                    (lx0, ly0, 0.0),
+                    (lx1, ly0, 0.0),
+                    (lx1, ly1, 0.0),
+                    (lx0, ly1, 0.0),
+                ]),
                 [fcolor(label, 1.0); 4],
             );
             let (tx, ty) = proj(0.0, (ly0 + ly1) / 2.0, 0.0);
             let scale = if w > 260.0 { 2 } else { 1 };
-            let cols = ((w * 0.66) / (GLYPH_W * scale) as f32).max(1.0) as usize;
+            let cols = ((w * 0.6) / (GLYPH_W * scale) as f32).max(1.0) as usize;
             let title: String = scene.title.chars().take(cols).collect();
             osd_text_centered(
                 canvas,
@@ -295,36 +317,25 @@ pub(super) fn draw_blow_scene(
     }
 
     // A borda de baixo, como a de um cartucho de verdade: o plástico vira
-    // quase só moldura em volta de uma abertura larga; lá dentro, a parede
-    // do fundo, a ponta da placa recuada e os contatos em três grupos
-    // (curto | longo | curto), com as guias de plástico que encaixam no
-    // console entre eles; e os recortes nas duas quinas.
-    let at = |x0: f32, x1: f32, y: f32, z0: f32, z1: f32| {
-        [
-            proj(x0, y, z0),
-            proj(x1, y, z0),
-            proj(x1, y, z1),
-            proj(x0, y, z1),
-        ]
+    // quase só moldura em volta de uma abertura larga. A placa fica EM PÉ
+    // lá dentro, no meio do corpo, paralela à frente — o que se vê pela
+    // abertura é a face dela, com os contatos dourados verticais em três
+    // grupos (curto | longo | curto), na mesma perspectiva do cartucho.
+    let bottom = |x0: f32, x1: f32, z0: f32, z1: f32| {
+        face([(x0, hh, z0), (x1, hh, z0), (x1, hh, z1), (x0, hh, z1)])
     };
-    let bottom = |x0: f32, x1: f32, z0: f32, z1: f32| at(x0, x1, hh, z0, z1);
     quad(
         canvas,
         bottom(-hw, hw, 0.0, -cart_d),
         [
-            fcolor((178, 176, 170), 1.0),
-            fcolor((178, 176, 170), 1.0),
-            fcolor((128, 126, 120), 1.0),
-            fcolor((128, 126, 120), 1.0),
+            fcolor((182, 180, 174), 1.0),
+            fcolor((182, 180, 174), 1.0),
+            fcolor((136, 134, 128), 1.0),
+            fcolor((136, 134, 128), 1.0),
         ],
     );
     // Os recortes das quinas.
-    for side in [-1.0f32, 1.0] {
-        let (x0, x1) = if side < 0.0 {
-            (-hw, -hw + 5.0)
-        } else {
-            (hw - 5.0, hw)
-        };
+    for (x0, x1) in [(-hw, -hw + 5.0), (hw - 5.0, hw)] {
         quad(
             canvas,
             bottom(x0, x1, -cart_d * 0.25, -cart_d * 0.75),
@@ -335,32 +346,56 @@ pub(super) fn draw_blow_scene(
     quad(
         canvas,
         bottom(-slot_x, slot_x, slot_z0, slot_z1),
-        [fcolor((14, 13, 16), 1.0); 4],
+        [fcolor((10, 10, 12), 1.0); 4],
     );
-    // A parede do fundo da abertura, subindo para dentro do cartucho.
-    let wall = 7.0;
+    // A parede do fundo da abertura, que aparece atrás da placa.
+    let inner = 9.0;
     quad(
         canvas,
+        face([
+            (-slot_x, hh - inner, slot_z1),
+            (slot_x, hh - inner, slot_z1),
+            (slot_x, hh, slot_z1),
+            (-slot_x, hh, slot_z1),
+        ]),
         [
-            proj(-slot_x, hh, slot_z1),
-            proj(slot_x, hh, slot_z1),
-            proj(slot_x, hh - wall, slot_z1),
-            proj(-slot_x, hh - wall, slot_z1),
-        ],
-        [
-            fcolor((70, 68, 66), 1.0),
-            fcolor((70, 68, 66), 1.0),
-            fcolor((22, 21, 24), 1.0),
-            fcolor((22, 21, 24), 1.0),
+            fcolor((12, 12, 14), 1.0),
+            fcolor((12, 12, 14), 1.0),
+            fcolor((64, 63, 60), 1.0),
+            fcolor((64, 63, 60), 1.0),
         ],
     );
-    // A placa, recuada uns milímetros, vista por cima.
-    let pcb_y = hh - 2.5;
-    let (pcb_x, pcb_z0, pcb_z1) = (hw * 0.76, -cart_d * 0.3, -cart_d * 0.7);
+
+    // A placa em pé: a face (verde-oliva), a ponta lixada (a espessura,
+    // um filete claro) e os contatos.
+    let pcb_z = -cart_d * 0.5;
+    let pcb_depth = 8.0;
+    let pcb_x = hw * 0.76;
+    let pcb_edge = hh - 1.2;
     quad(
         canvas,
-        at(-pcb_x, pcb_x, pcb_y, pcb_z0, pcb_z1),
-        [fcolor((46, 66, 42), 1.0); 4],
+        face([
+            (-pcb_x, pcb_edge - pcb_depth, pcb_z),
+            (pcb_x, pcb_edge - pcb_depth, pcb_z),
+            (pcb_x, pcb_edge, pcb_z),
+            (-pcb_x, pcb_edge, pcb_z),
+        ]),
+        [
+            fcolor((24, 34, 22), 1.0),
+            fcolor((24, 34, 22), 1.0),
+            fcolor((62, 80, 50), 1.0),
+            fcolor((62, 80, 50), 1.0),
+        ],
+    );
+    quad(
+        canvas,
+        face([
+            (-pcb_x, pcb_edge, pcb_z),
+            (pcb_x, pcb_edge, pcb_z),
+            (pcb_x, pcb_edge, pcb_z - 1.6),
+            (-pcb_x, pcb_edge, pcb_z - 1.6),
+        ]),
+        [fcolor((120, 128, 96), 1.0); 4],
     );
 
     let clean = scene.clean.clamp(0.0, 1.0);
@@ -369,30 +404,37 @@ pub(super) fn draw_blow_scene(
         lerp(PIN_DIRTY.1, PIN_CLEAN.1, clean),
         lerp(PIN_DIRTY.2, PIN_CLEAN.2, clean),
     );
-    // Os grupos: 4 | 26 | 4 contatos, com uma guia em cada vão.
+    // Os grupos: 4 | 26 | 4 contatos, com uma guia de plástico em cada vão.
     const GROUPS: [i32; 3] = [4, 26, 4];
     const GAP: f32 = 3.0;
     let span = pcb_x * 2.0 * 0.97;
     let total = GROUPS.iter().sum::<i32>() as f32 + GAP * 2.0;
     let pitch = span / total;
     let sparkle = (clean > 0.97).then(|| ((scene.time * 14.0) as i32).rem_euclid(PINS + 12));
+    let finger_top = pcb_edge - pcb_depth * 0.8;
     let mut slot_i = 0.0f32;
     let mut i = 0i32;
     for (g, n) in GROUPS.iter().enumerate() {
         if g > 0 {
-            // A guia de plástico no vão, em pé na abertura.
-            let gx0 = -span / 2.0 + pitch * (slot_i + 0.8);
-            let gx1 = gx0 + pitch * (GAP - 1.6);
+            // A guia: uma aleta de plástico que desce até a abertura,
+            // na frente da placa.
+            let gx0 = -span / 2.0 + pitch * (slot_i + 0.9);
+            let gx1 = gx0 + pitch * (GAP - 1.8);
             quad(
                 canvas,
-                at(gx0, gx1, hh - 1.0, pcb_z0 + 1.0, pcb_z1 - 1.0),
-                [fcolor((98, 96, 90), 1.0); 4],
+                face([
+                    (gx0, finger_top, pcb_z + 2.0),
+                    (gx1, finger_top, pcb_z + 2.0),
+                    (gx1, hh, pcb_z + 2.0),
+                    (gx0, hh, pcb_z + 2.0),
+                ]),
+                [fcolor((92, 90, 86), 1.0); 4],
             );
             slot_i += GAP;
         }
         for _ in 0..*n {
-            let x0 = -span / 2.0 + pitch * (slot_i + 0.2);
-            let x1 = x0 + pitch * 0.6;
+            let x0 = -span / 2.0 + pitch * (slot_i + 0.18);
+            let x1 = x0 + pitch * 0.64;
             // A sujeira é oxidação: uns contatos bem mais escuros que
             // outros, clareando com a limpeza.
             let h = (i as u32).wrapping_mul(2_654_435_761) >> 16;
@@ -405,15 +447,39 @@ pub(super) fn draw_blow_scene(
             if sparkle == Some(i) {
                 c = (255, 246, 200);
             }
+            // Mais escuro no fundo, mais claro na ponta que pega luz.
+            let deep = scale_color(c, 0.55);
             quad(
                 canvas,
-                at(x0, x1, pcb_y, pcb_z0 + 0.5, pcb_z1 - 0.5),
-                [fcolor(c, 1.0); 4],
+                face([
+                    (x0, finger_top, pcb_z + 0.1),
+                    (x1, finger_top, pcb_z + 0.1),
+                    (x1, pcb_edge, pcb_z + 0.1),
+                    (x0, pcb_edge, pcb_z + 0.1),
+                ]),
+                [
+                    fcolor(deep, 1.0),
+                    fcolor(deep, 1.0),
+                    fcolor(c, 1.0),
+                    fcolor(c, 1.0),
+                ],
             );
             slot_i += 1.0;
             i += 1;
         }
     }
+    // O lábio de plástico da abertura do lado de cá cobre o pé da placa.
+    quad(
+        canvas,
+        bottom(-slot_x, slot_x, 0.0, slot_z0),
+        [
+            fcolor((182, 180, 174), 1.0),
+            fcolor((182, 180, 174), 1.0),
+            fcolor((160, 158, 152), 1.0),
+            fcolor((160, 158, 152), 1.0),
+        ],
+    );
+
     if scene.fog > 0.0 {
         quad(
             canvas,
