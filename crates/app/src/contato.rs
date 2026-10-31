@@ -138,6 +138,9 @@ impl Contact {
             0.5
         };
         self.bad = self.roll((base + fog * 0.4).min(0.9));
+        // Cartucho de volta no slot, ainda sem ligar: ejetar agora é o de
+        // sempre — o sopro só volta se o próximo Power falhar de novo.
+        self.failed = false;
     }
 
     fn roll(&mut self, fail: f32) -> bool {
@@ -763,6 +766,18 @@ mod tests {
         let mut c = contact(false);
         assert_eq!(c.power_on(), None);
         assert!(!c.needs_ritual());
+    }
+
+    #[test]
+    fn ejecting_again_after_reinserting_goes_to_the_shelf() {
+        let mut c = contact(true);
+        assert!(c.power_on().is_some());
+        assert!(c.needs_ritual());
+        c.reinserted(1.0, 0.0);
+        assert!(!c.needs_ritual(), "reinseriu sem ligar: ejetar é o normal");
+        c.bad = true;
+        assert!(c.power_on().is_some());
+        assert!(c.needs_ritual(), "falhou de novo: o sopro volta");
     }
 
     #[test]
