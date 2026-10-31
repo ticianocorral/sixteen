@@ -10,10 +10,7 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 ## [Não lançado]
 
 ### Adicionado
-- **DEGAUSS** no queixo da TV: o "tum" grave da bobina e a imagem tremendo
-  com manchas coloridas que somem aos poucos. Apertar de novo logo em
-  seguida dá um Degauss mais fraco (a bobina precisa esfriar).
-- **Menu de imagem da TV** (tecla **MENU** no queixo): brilho, contraste,
+- **Menu de imagem da TV** (tecla **MENU** no queixo, ao lado do VOL): brilho, contraste,
   cor e nitidez em letras verdes de TV dos anos 90, ajustados com VOL –/+
   e aplicados no filtro NTSC de verdade. Salvos em `tv_picture`.
 - **Burn-in leve** (opcional, `burn_in`): horas no mesmo jogo marcam o HUD

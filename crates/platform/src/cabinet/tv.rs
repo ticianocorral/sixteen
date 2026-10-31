@@ -1,15 +1,10 @@
-//! A TV e o quarto em volta dela: o botão Degauss, o menu OSD de imagem,
+//! A TV e o quarto em volta dela: o menu OSD de imagem,
 //! o burn-in do tubo, os sons do próprio tubo (o chiado do flyback e os
 //! estalos do vidro esquentando), o alto-falante da TV contra o 3 em 1 e
 //! a luz do quarto pela hora do dia.
 
 use super::*;
 
-/// Quanto dura o Degauss: o "tum" e a ondulação colorida sumindo.
-const DEGAUSS_SECS: f32 = 1.6;
-/// O termistor da bobina precisa esfriar: apertar de novo antes disso dá
-/// um Degauss mais fraco, como na TV de verdade.
-const DEGAUSS_RECHARGE_SECS: f32 = 30.0;
 /// O menu OSD fecha sozinho depois disso sem mexer.
 const MENU_IDLE: Duration = Duration::from_secs(6);
 /// Passo de cada toque de VOL-/VOL+ no menu (escala 0..100).
@@ -222,11 +217,6 @@ pub(super) struct TvExtras {
     pub picture: Picture,
     /// O menu OSD aberto: o item em ajuste e o último toque.
     menu: Option<(usize, Instant)>,
-    degauss_at: Option<Instant>,
-    /// A força do Degauss em curso (o termistor ainda quente enfraquece).
-    degauss_power: f32,
-    /// O "tum" a tocar no próximo bloco de som.
-    degauss_sound: Option<f32>,
     pub sound: TvSound,
     burn_on: bool,
     burn: Option<Burn>,
@@ -242,8 +232,6 @@ pub(super) struct TvExtras {
     ticks: Vec<Instant>,
     /// O estalo tocando: (envelope, fase, passo).
     tick: Option<(f32, f32, f32)>,
-    /// O "tum" tocando: segundos desde o início.
-    thud_t: Option<f32>,
     room_on: bool,
     /// A hora forçada (`SIXTEEN_HORA=21.5`), para testar.
     hour_override: Option<f32>,
@@ -252,8 +240,6 @@ pub(super) struct TvExtras {
     pub lum: f32,
     lum_target: f32,
     lum_sampled: Instant,
-    /// O mesh atual foi deformado pelo Degauss (refazer limpo no fim).
-    pub mesh_fx: bool,
 }
 
 impl TvExtras {
@@ -262,9 +248,6 @@ impl TvExtras {
         let mut me = Self {
             picture: Picture::default(),
             menu: None,
-            degauss_at: None,
-            degauss_power: 1.0,
-            degauss_sound: None,
             sound: TvSound::Stereo,
             burn_on: false,
             burn: None,
@@ -277,14 +260,12 @@ impl TvExtras {
             amb_phase: 0.0,
             ticks: Vec::new(),
             tick: None,
-            thud_t: None,
             room_on: true,
             hour_override: env_f32("SIXTEEN_HORA"),
             hour_cache: None,
             lum: 0.2,
             lum_target: 0.2,
             lum_sampled: Instant::now(),
-            mesh_fx: false,
         };
         // O app abre com a TV ligando: o vidro também estala.
         me.schedule_ticks();
@@ -308,28 +289,6 @@ impl TvExtras {
             t += 1.5 + (k * k) as f32 * 0.7 + self.rand() * 4.0;
             self.ticks.push(now + Duration::from_secs_f32(t));
         }
-    }
-
-    // --- Degauss -------------------------------------------------------
-
-    pub fn degauss(&mut self) {
-        let now = Instant::now();
-        let rest = self
-            .degauss_at
-            .map(|t| now.duration_since(t).as_secs_f32())
-            .unwrap_or(DEGAUSS_RECHARGE_SECS);
-        self.degauss_power = (rest / DEGAUSS_RECHARGE_SECS).clamp(0.15, 1.0);
-        self.degauss_at = Some(now);
-        self.degauss_sound = Some(self.degauss_power);
-    }
-
-    /// O Degauss na tela agora: (intensidade 0..1, segundos desde o botão).
-    pub fn degauss_fx(&self) -> Option<(f32, f32)> {
-        let t = self.degauss_at?.elapsed().as_secs_f32();
-        (t < DEGAUSS_SECS).then(|| {
-            let k = 1.0 - t / DEGAUSS_SECS;
-            (k * k * self.degauss_power, t)
-        })
     }
 
     // --- Menu OSD ------------------------------------------------------
@@ -507,7 +466,7 @@ impl TvExtras {
         self.flyback = on;
     }
 
-    /// Alimenta o stream do tubo: o flyback, os estalos e o Degauss —
+    /// Alimenta o stream do tubo: o flyback e os estalos —
     /// fora do volume da TV (é o aparelho fazendo barulho, não o som do
     /// canal). Sem nada a tocar, não abre nem enfileira nada.
     pub fn feed_sound(&mut self, audio: &AudioSubsystem, tv_on: bool) {
@@ -519,12 +478,8 @@ impl TvExtras {
             let amp = 0.5 + self.rand() * 0.5;
             self.tick = Some((amp, 0.0, std::f32::consts::TAU * freq / AMB_RATE as f32));
         }
-        if let Some(p) = self.degauss_sound.take() {
-            self.thud_t = Some(0.0);
-            self.degauss_power = p;
-        }
         let whine = self.flyback && tv_on;
-        if !whine && self.tick.is_none() && self.thud_t.is_none() {
+        if !whine && self.tick.is_none() {
             return;
         }
         if self.amb.is_none() {
@@ -534,7 +489,6 @@ impl TvExtras {
                     log::warn!("som do tubo: {e}");
                     self.flyback = false;
                     self.tick = None;
-                    self.thud_t = None;
                     return;
                 }
             }
@@ -564,39 +518,12 @@ impl TvExtras {
                     self.tick = None;
                 }
             }
-            if let Some(t) = &mut self.thud_t {
-                v += degauss_sample(*t, self.degauss_power, &mut self.amb_rng);
-                *t += dt;
-                if *t > DEGAUSS_SECS {
-                    self.thud_t = None;
-                }
-            }
             let s = v.clamp(-30000.0, 30000.0) as i16;
             self.amb_buf.push(s);
             self.amb_buf.push(s);
         }
         amb.queue(&self.amb_buf);
     }
-}
-
-/// Uma amostra do som do Degauss em `t` segundos: o clique do relé, o
-/// "tum" grave da bobina e o zumbido de 60 Hz morrendo.
-fn degauss_sample(t: f32, power: f32, rng: &mut u32) -> f32 {
-    use std::f32::consts::TAU;
-    *rng ^= *rng << 13;
-    *rng ^= *rng >> 17;
-    *rng ^= *rng << 5;
-    let noise = ((*rng >> 8) & 0xFFFF) as f32 / 32768.0 - 1.0;
-    let click = if t < 0.004 { noise * 7000.0 } else { 0.0 };
-    let attack = (t / 0.012).min(1.0);
-    let thud = (TAU * 52.0 * t).sin() * (-t / 0.16).exp() * 12000.0;
-    let hum = ((TAU * 60.0 * t).sin()
-        + 0.6 * (TAU * 120.0 * t).sin()
-        + 0.35 * (TAU * 180.0 * t).sin()
-        + 0.2 * (TAU * 240.0 * t).sin())
-        * (-t / 0.45).exp()
-        * 4200.0;
-    click + attack * (thud + hum) * power
 }
 
 /// A hora local (0..24) pelo relógio do SDL.
@@ -610,49 +537,7 @@ fn local_hour() -> Option<f32> {
     ok.then(|| dt.hour as f32 + dt.minute as f32 / 60.0)
 }
 
-/// Deforma o mesh do tubo com o Degauss: a imagem treme em ondas e manchas
-/// de cor escorregam pelo vidro (a pureza do tubo bagunçada pelo campo),
-/// tudo sumindo com `amount`.
-pub(super) fn apply_degauss(mesh: &mut CrtMesh, dst: Rect, amount: f32, t: f32) {
-    let (dw, dh) = (dst.width() as f32, dst.height() as f32);
-    for v in &mut mesh.verts {
-        let (u, w) = (v.tex_coord.x, v.tex_coord.y);
-        let (cx, cy) = (u * 2.0 - 1.0, w * 2.0 - 1.0);
-        v.position.x += amount * dw * 0.012 * (w * 11.0 + t * 38.0).sin();
-        v.position.y += amount * dh * 0.008 * (u * 8.0 - t * 31.0).sin();
-        // Manchas de cor grandes que escorregam pelo vidro (não um
-        // redemoinho): o campo da bobina bagunçando a pureza.
-        let hue = (cx * 0.55
-            + cy * 0.35
-            + (cx * 2.3 + t * 3.0).sin() * 0.18
-            + (cy * 1.7 - t * 2.4).cos() * 0.15
-            + t * 0.35)
-            .rem_euclid(1.0);
-        let (r, g, b) = hue_rgb(hue);
-        let k = (amount * 0.55).min(0.55);
-        v.color.r *= 1.0 - k + k * r;
-        v.color.g *= 1.0 - k + k * g;
-        v.color.b *= 1.0 - k + k * b;
-    }
-}
-
-/// Um matiz (0..1) em RGB saturado.
-fn hue_rgb(h: f32) -> (f32, f32, f32) {
-    let f = |n: f32| {
-        let k = (n + h * 6.0) % 6.0;
-        1.0 - (k.min(4.0 - k).clamp(0.0, 1.0))
-    };
-    (f(5.0), f(3.0), f(1.0))
-}
-
 impl Cabinet {
-    /// O Degauss do queixo.
-    pub fn degauss(&mut self) {
-        if self.tv_on() {
-            self.tvx.degauss();
-        }
-    }
-
     /// Os ajustes de imagem do menu OSD (o app passa para o filtro NTSC e
     /// salva na configuração).
     pub fn picture(&self) -> Picture {
@@ -972,16 +857,6 @@ mod tests {
         }
         b.paint();
         assert!(b.rgba[3] < 8, "sumiu com o tempo");
-    }
-
-    #[test]
-    fn degauss_weakens_while_the_coil_is_hot() {
-        let mut tv = TvExtras::new();
-        tv.degauss();
-        let (first, _) = tv.degauss_fx().unwrap();
-        tv.degauss();
-        let (second, _) = tv.degauss_fx().unwrap();
-        assert!(second < first * 0.5);
     }
 
     #[test]

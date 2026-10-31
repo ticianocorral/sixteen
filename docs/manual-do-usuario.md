@@ -164,11 +164,7 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
   próximo item (depois do último, fecha); com o menu aberto, **VOL –/+**
   ajustam o item em vez do volume. Os ajustes mexem no filtro da imagem do
   jogo de verdade e ficam salvos. O menu fecha sozinho depois de alguns
-  segundos parado.
-- **DEGAUSS** desmagnetiza o tubo: o "tum" grave e a imagem tremendo com
-  manchas coloridas que somem aos poucos. Apertar de novo logo em seguida
-  dá um Degauss mais fraco — a bobina precisa esfriar, como na TV de
-  verdade. (MENU e DEGAUSS ficam à esquerda da marca e só aparecem quando
+  segundos parado. (A tecla MENU fica ao lado do VOL e só aparece quando
   a janela tem espaço no queixo.)
 - O vidro estala de leve algumas vezes nos primeiros minutos depois de
   ligar a TV, enquanto esquenta.

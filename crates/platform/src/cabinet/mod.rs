@@ -446,7 +446,7 @@ pub struct Cabinet {
     /// the queued audio before the device ever plays it (the bug that made
     /// the first foley attempt silent).
     foley: Option<AudioOut>,
-    /// A TV e o quarto: Degauss, menu de imagem, burn-in, sons do tubo,
+    /// A TV e o quarto: menu de imagem, burn-in, sons do tubo,
     /// alto-falante e luz do quarto (`tv.rs`).
     tvx: TvExtras,
     /// The "CH 3" channel banner's deadline during gameplay (plan revision:
@@ -558,7 +558,6 @@ pub enum TvControl {
     Channel,
     /// O menu OSD de imagem (brilho, contraste, cor, nitidez).
     Menu,
-    Degauss,
 }
 
 /// Os rects clicáveis do queixo da TV, registrados a cada frame (ver
@@ -571,7 +570,6 @@ pub struct TvChinControls {
     pub ch: Rect,
     pub power: Rect,
     pub menu: Rect,
-    pub degauss: Rect,
 }
 
 impl TvChinControls {
@@ -584,7 +582,6 @@ impl TvChinControls {
             ch: no,
             power: no,
             menu: no,
-            degauss: no,
         }
     }
 }
@@ -1520,8 +1517,6 @@ impl Cabinet {
             Some(TvControl::Channel)
         } else if c.menu.contains_point((ox, oy)) {
             Some(TvControl::Menu)
-        } else if c.degauss.contains_point((ox, oy)) {
-            Some(TvControl::Degauss)
         } else {
             None
         }
@@ -2443,20 +2438,10 @@ impl Cabinet {
 
     fn ensure_mesh(&mut self, dst: Rect) {
         let (w, h) = (dst.width(), dst.height());
-        // O Degauss deforma o mesh quadro a quadro; no fim, um limpo.
-        let fx = self.tvx.degauss_fx();
-        if fx.is_none()
-            && !self.tvx.mesh_fx
-            && matches!(&self.mesh, Some(m) if m.w == w && m.h == h)
-        {
+        if matches!(&self.mesh, Some(m) if m.w == w && m.h == h) {
             return;
         }
-        let mut mesh = build_crt_mesh(dst, 1.0);
-        if let Some((amount, t)) = fx {
-            tv::apply_degauss(&mut mesh, dst, amount, t);
-        }
-        self.tvx.mesh_fx = fx.is_some();
-        self.mesh = Some(mesh);
+        self.mesh = Some(build_crt_mesh(dst, 1.0));
     }
 
     /// Garante o `mesh` da tela atual e um `fade_mesh` igual a ele com o
@@ -2865,7 +2850,6 @@ impl Cabinet {
                     self.tvx.menu_press();
                 }
             }
-            TvControl::Degauss => self.degauss(),
         }
     }
 
