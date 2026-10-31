@@ -1624,7 +1624,7 @@ pub fn run_game(
         return Ok(GameExit::Quit);
     }
     if let Some(dir) = &spec.debug_blow {
-        crate::contato::debug_shots(cab, &mut ntsc, &rom_bytes, &title, dir)?;
+        crate::contato::debug_shots(&mut core, cab, &mut ntsc, &rom_bytes, &title, dir)?;
         return Ok(GameExit::Quit);
     }
 

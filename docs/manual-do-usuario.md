@@ -263,7 +263,8 @@ contato do cartucho** (*raro* ≈ 1 encaixe em 15, *anos 90* ≈ 1 em 5).
 
 Com ele ligado, às vezes o cartucho entra mal encaixado e o primeiro
 **POWER** não sobe o jogo: tela preta com zumbido, lixo de tiles colorido,
-a abertura travando com um "bzzzt" em loop, ou as cores trocadas. Para
+a abertura travando com um "bzzzt" em loop, ou o jogo rodando com os
+gráficos embaralhados (sprites e cenários cheios de lixo) até travar. Para
 resolver, faça o ritual:
 
 1. Desligue no **POWER** e clique em **EJETAR**.

@@ -1,7 +1,7 @@
 //! Mau contato do cartucho (soprar o cartucho): opcional, desligado por
 //! padrão (`bad_contact` no `sixteen.cfg`). O encaixe é sorteado quando o
 //! cartucho entra; se deu mau contato, o primeiro Power não sobe o jogo —
-//! tela preta, lixo de tiles, imagem travada ou paleta trocada — até
+//! tela preta, lixo de tiles, imagem travada ou gráficos embaralhados — até
 //! desligar, ejetar, soprar e inserir de novo. Desligar e ligar de novo às
 //! vezes resolve sozinho, como na vida real.
 //!
@@ -64,8 +64,10 @@ pub(crate) enum FaultKind {
     Tiles,
     /// A abertura começa e trava, com o "bzzzt" em loop.
     Freeze,
-    /// A abertura com as cores trocadas, travando em seguida.
-    Palette,
+    /// O jogo roda, com música, mas um pino de dados mal encostado
+    /// corrompe o que vai para a memória de vídeo: sprites e cenários
+    /// embaralhados — e depois de um tempo trava.
+    Assets,
 }
 
 /// O estado do encaixe do cartucho no slot, de um `run_game` inteiro.
@@ -111,14 +113,14 @@ impl Contact {
         self.streak += 1;
         self.failed = true;
         let r = self.rng.next_f32();
-        Some(if r < 0.35 {
+        Some(if r < 0.3 {
             FaultKind::Black
-        } else if r < 0.65 {
+        } else if r < 0.55 {
             FaultKind::Tiles
-        } else if r < 0.85 {
+        } else if r < 0.7 {
             FaultKind::Freeze
         } else {
-            FaultKind::Palette
+            FaultKind::Assets
         })
     }
 
@@ -152,8 +154,10 @@ impl Contact {
 pub(crate) struct FaultRun {
     pub(crate) kind: FaultKind,
     frames: u32,
-    /// Freeze/Palette: o frame em que a imagem trava.
+    /// Freeze/Assets: o frame em que a imagem trava.
     stop_at: u32,
+    /// Assets: o bit do "pino de dados" que encosta mal.
+    stuck_bit: u8,
     rng: Rng,
     /// O quadro RGB565 da tela (sintetizado, ou o último do core travado).
     screen: Vec<u8>,
@@ -171,13 +175,16 @@ impl FaultRun {
         let mut rng = Rng::seeded();
         let stop_at = match kind {
             FaultKind::Freeze => 40 + rng.next_u32() % 70,
-            FaultKind::Palette => 120 + rng.next_u32() % 80,
+            // Uns 10 a 25 s de jogo embaralhado antes de travar.
+            FaultKind::Assets => 600 + rng.next_u32() % 900,
             _ => 0,
         };
+        let stuck_bit = 1u8 << (rng.next_u32() % 8);
         FaultRun {
             kind,
             frames: 0,
             stop_at,
+            stuck_bit,
             rng,
             screen: vec![0; (SNES_W * SNES_H * 2) as usize],
             pitch: (SNES_W * 2) as usize,
@@ -189,7 +196,7 @@ impl FaultRun {
         }
     }
 
-    /// Um frame da falha: roda o core até travar (Freeze/Palette) ou
+    /// Um frame da falha: roda o core até travar (Freeze/Assets) ou
     /// desenha o lixo, passa pelo NTSC e pelo tubo, e põe o som na fila.
     // A falha mexe em tudo que o laço do jogo mexe (core, NTSC, tubo,
     // áudio): agrupar em struct só para a contagem de argumentos esconderia
@@ -214,6 +221,9 @@ impl FaultRun {
                 }
             }
             core.run();
+            if self.kind == FaultKind::Assets {
+                self.corrupt_vram(core);
+            }
             if audio.queued_frames() < audio_cap {
                 crate::runner::queue_game_audio(audio, cab, core.audio(), vol_buf, rf);
             }
@@ -237,7 +247,7 @@ impl FaultRun {
                 self.tiles(rom);
             }
             if audio.queued_frames() < audio_cap {
-                let chunk = if matches!(self.kind, FaultKind::Freeze | FaultKind::Palette)
+                let chunk = if matches!(self.kind, FaultKind::Freeze | FaultKind::Assets)
                     && !self.stuck_audio.is_empty()
                 {
                     self.stuck_audio.clone()
@@ -283,8 +293,7 @@ impl FaultRun {
             .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
 
-    /// Copia o frame do core para a tela da falha — com as cores trocadas
-    /// (vermelho ↔ azul) na falha de paleta.
+    /// Copia o frame do core para a tela da falha.
     fn grab(&mut self, frame: &EmuFrame) {
         if frame.format != EmuFormat::Rgb565 {
             return;
@@ -294,13 +303,40 @@ impl FaultRun {
         self.pitch = frame.pitch;
         self.screen.clear();
         self.screen.extend_from_slice(&frame.pixels);
-        if self.kind == FaultKind::Palette {
-            for px in self.screen.as_chunks_mut::<2>().0 {
-                let p = u16::from_le_bytes([px[0], px[1]]);
-                let swapped = ((p & 0x1f) << 11) | (p & 0x07e0) | (p >> 11);
-                px.copy_from_slice(&swapped.to_le_bytes());
-            }
+    }
+
+    /// O mau contato num pino de dados: trechos do que o jogo pôs na VRAM
+    /// chegam com aquele bit grudado em 1 — tiles de sprite e de cenário
+    /// embaralhados, piscando conforme o jogo recarrega os gráficos.
+    fn corrupt_vram(&mut self, core: &mut Core) {
+        if !self.frames.is_multiple_of(3) {
+            return;
         }
+        let bit = self.stuck_bit;
+        let rng = &mut self.rng;
+        core.with_memory_mut(sixteen_emulation::MEMORY_VIDEO_RAM, |vram| {
+            if vram.is_empty() {
+                return;
+            }
+            // Uns trechos curtos a cada poucos frames, e de vez em quando
+            // um bloco grande.
+            let runs = if rng.next_u32().is_multiple_of(40) {
+                1
+            } else {
+                4
+            };
+            for _ in 0..runs {
+                let len = if runs == 1 {
+                    2048 + rng.next_u32() as usize % 4096
+                } else {
+                    32 + rng.next_u32() as usize % 256
+                };
+                let start = rng.next_u32() as usize % vram.len();
+                for b in vram.iter_mut().skip(start).take(len) {
+                    *b |= bit;
+                }
+            }
+        });
     }
 
     /// O lixo de tiles: bytes da própria ROM lidos como tiles 4bpp do SNES
@@ -698,6 +734,7 @@ pub(crate) fn blow_ritual(
 /// Captura headless (`emu-run --debug-blow DIR`): as quatro falhas e a
 /// cena do sopro em vários momentos, em BMP.
 pub(crate) fn debug_shots(
+    core: &mut Core,
     cab: &mut Cabinet,
     ntsc: &mut NtscFilter,
     rom: &[u8],
@@ -711,6 +748,23 @@ pub(crate) fn debug_shots(
     ] {
         let mut f = FaultRun::new(kind);
         f.capture(ntsc, cab, rom, &dir.join(format!("{name}.bmp")))?;
+    }
+    // O jogo de verdade rodando com a VRAM corrompida (sem Start: a
+    // abertura e a tela título, como quem acabou de ligar).
+    let mut f = FaultRun::new(FaultKind::Assets);
+    let vram = core.with_memory(sixteen_emulation::MEMORY_VIDEO_RAM, |_| {});
+    log::info!("debug-blow: VRAM exposta pelo core: {vram}");
+    for i in 1..=1200u32 {
+        f.frames += 1;
+        core.run();
+        f.corrupt_vram(core);
+        if let Some(frame) = core.take_frame() {
+            f.grab(&frame);
+            core.recycle_frame(frame);
+        }
+        if i.is_multiple_of(300) {
+            f.capture(ntsc, cab, rom, &dir.join(format!("falha_graficos_{i}.bmp")))?;
+        }
     }
     cab.set_cartridge_motion(Some((1.0, true)));
     let mut blow = Blow::new(title);

@@ -15,7 +15,9 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   90* ≈ 1 em 5; `bad_contact = "off" | "rare" | "90s"` no `sixteen.cfg`).
   Um encaixe ruim faz o primeiro POWER cair numa falha — tela preta com
   zumbido, lixo de tiles feito dos bytes da própria ROM, abertura travada
-  com o som em loop ou paleta trocada. Desligar, ejetar e o cartucho vem
+  com o som em loop, ou o jogo rodando com os gráficos embaralhados — um
+  "pino de dados" grudado corrompendo a VRAM de verdade — até travar.
+  Desligar, ejetar e o cartucho vem
   para a frente da TV com os contatos virados: segurar o clique (ou Y/B)
   sopra a poeira e doura os pinos, com barra de fôlego (soprar demais
   embaça os pinos). Nunca mais de duas falhas seguidas, retomar com POWER

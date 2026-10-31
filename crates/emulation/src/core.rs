@@ -56,6 +56,8 @@ pub const MAX_PORTS: usize = 2;
 pub const MEMORY_SAVE_RAM: c_uint = RETRO_MEMORY_SAVE_RAM;
 /// Console work RAM.
 pub const MEMORY_SYSTEM_RAM: c_uint = RETRO_MEMORY_SYSTEM_RAM;
+/// Video RAM (tiles e mapas do PPU).
+pub const MEMORY_VIDEO_RAM: c_uint = RETRO_MEMORY_VIDEO_RAM;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelFormat {
@@ -501,6 +503,26 @@ impl Core {
         // Safety: the core owns this buffer for the life of the loaded game;
         // `f` must not retain the slice past the call (enforced by lifetime).
         let live = unsafe { std::slice::from_raw_parts(ptr as *const u8, size) };
+        f(live);
+        true
+    }
+
+    /// Like [`Core::with_memory`], but writable in place — o mau contato do
+    /// cartucho corrompe a VRAM por aqui. `false` when the region isn't
+    /// available.
+    pub fn with_memory_mut(&mut self, id: c_uint, f: impl FnOnce(&mut [u8])) -> bool {
+        let (ptr, size) = self.enter(|api| unsafe {
+            (
+                (api.retro_get_memory_data)(id),
+                (api.retro_get_memory_size)(id),
+            )
+        });
+        if ptr.is_null() || size == 0 {
+            return false;
+        }
+        // Safety: same as `with_memory` — the core owns the buffer for the
+        // life of the loaded game and nothing else touches it during `f`.
+        let live = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, size) };
         f(live);
         true
     }
