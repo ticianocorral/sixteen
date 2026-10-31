@@ -1877,12 +1877,14 @@ pub fn run_game(
                             PanelButton::LoadState => Some(UiEvent::OpenLoadModal),
                             // The rest are all idle-screen-, pause-book- or
                             // modal-only, never shown alongside the panel
-                            // that's up now. `Dev` is idle-screen-only too
-                            // (and its menu lives outside a game). Same for
+                            // that's up now. `Dev` and `ConsoleManual` are
+                            // idle-screen-only too (their screens live
+                            // outside a game). Same for
                             // `Insert` — the idle screen owns it.
                             PanelButton::Insert
                             | PanelButton::Settings
                             | PanelButton::Dev
+                            | PanelButton::ConsoleManual
                             | PanelButton::CoreDownload
                             | PanelButton::PauseContinue
                             | PanelButton::PauseNotePrev

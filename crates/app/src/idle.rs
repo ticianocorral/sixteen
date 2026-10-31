@@ -36,6 +36,113 @@ const SETUP_TEXT: (u8, u8, u8) = (232, 232, 232);
 const SETUP_DIM: (u8, u8, u8) = (150, 150, 158);
 const SETUP_GREEN: (u8, u8, u8) = (60, 230, 70);
 
+/// O manual do console (plan revision: "fazer um botao em cima das
+/// configurações na tela inicial para visualizar esse pdf"), um por
+/// idioma — gerados por
+/// `packaging/manual-console/gerar-manual.py`.
+const CONSOLE_MANUAL_EN: &[u8] = include_bytes!("../assets/console-manual-en.pdf");
+const CONSOLE_MANUAL_PT: &[u8] = include_bytes!("../assets/console-manual-pt.pdf");
+
+/// O leitor do manual do console aberto no tubo — o mesmo leitor dos
+/// manuais da estante (`shelf::draw_manual_view`): páginas renderizadas sob
+/// demanda por um worker, que vivem como texturas sob `key`.
+struct ConsoleManual {
+    /// A chave das texturas das páginas (o "sha1" do leitor da estante) —
+    /// uma por idioma, para a troca de idioma não reaproveitar páginas.
+    key: &'static str,
+    pages: usize,
+    page: usize,
+    requested: std::collections::HashSet<usize>,
+    rx: Receiver<crate::manual::ManualEv>,
+    tx: mpsc::Sender<usize>,
+    rects: (
+        crate::shelf::ViewBtn,
+        crate::shelf::ViewBtn,
+        crate::shelf::ViewBtn,
+    ),
+}
+
+impl ConsoleManual {
+    /// Grava o PDF do idioma corrente na pasta temporária (o renderizador
+    /// lê de arquivo) e sobe o worker. `None` = não deu para gravar.
+    fn open() -> Option<Self> {
+        let (key, bytes) = tr!(
+            ("console-manual-en", CONSOLE_MANUAL_EN),
+            ("console-manual-pt", CONSOLE_MANUAL_PT)
+        );
+        let path = std::env::temp_dir().join(format!("sixteen-{key}.pdf"));
+        if let Err(e) = std::fs::write(&path, bytes) {
+            log::warn!("console manual: writing {}: {e}", path.display());
+            return None;
+        }
+        let (ev_tx, rx) = mpsc::channel();
+        let (tx, req_rx) = mpsc::channel::<usize>();
+        std::thread::spawn(move || {
+            let Ok(pages) = crate::manual::page_count(&path) else {
+                return;
+            };
+            let _ = ev_tx.send(crate::manual::ManualEv::Ready {
+                sha1: key.to_string(),
+                pages,
+            });
+            for page in req_rx {
+                let (w, h, rgba) = match crate::manual::render_page(&path, page, 2048) {
+                    Ok(Some(img)) => (img.w, img.h, img.rgba),
+                    _ => (0, 0, Vec::new()),
+                };
+                let _ = ev_tx.send(crate::manual::ManualEv::Page {
+                    sha1: key.to_string(),
+                    page,
+                    w,
+                    h,
+                    rgba,
+                });
+            }
+        });
+        Some(Self {
+            key,
+            pages: 0,
+            page: 1,
+            requested: std::collections::HashSet::new(),
+            rx,
+            tx,
+            rects: ((0, 0, 1, 1), (0, 0, 1, 1), (0, 0, 1, 1)),
+        })
+    }
+
+    /// Eventos do worker (contagem e páginas viram texturas) e o pedido da
+    /// página corrente e da seguinte assim que faltam.
+    fn poll(&mut self, cab: &mut Cabinet) {
+        while let Ok(ev) = self.rx.try_recv() {
+            match ev {
+                crate::manual::ManualEv::Ready { pages, .. } => self.pages = pages,
+                crate::manual::ManualEv::Page {
+                    page, w, h, rgba, ..
+                } => {
+                    if w > 0 {
+                        cab.set_image(crate::shelf::manual_page_id(self.key, page), w, h, &rgba);
+                    }
+                }
+            }
+        }
+        for page in [self.page, self.page + 1] {
+            if self.pages > 0 && page <= self.pages && self.requested.insert(page) {
+                let _ = self.tx.send(page);
+            }
+        }
+    }
+
+    fn prev(&mut self) {
+        self.page = self.page.saturating_sub(1).max(1);
+    }
+
+    fn next(&mut self) {
+        if self.page < self.pages {
+            self.page += 1;
+        }
+    }
+}
+
 /// The screen's resting static level — startup and "Esc on the shelf" have no
 /// prior game to inherit a level from, so they use this (same dim hiss the
 /// console settles on after powering off, `runner::OFF_STATIC_LEVEL`).
@@ -225,6 +332,7 @@ pub fn run(
     let mut update_pct: Option<u32> = None;
     let mut update_status = String::new();
     let mut update_rects: (UpdateBtn, UpdateBtn) = ((0, 0, 1, 1), (0, 0, 1, 1));
+    let mut console_manual: Option<ConsoleManual> = None;
 
     loop {
         let core_was_done = core.done;
@@ -445,6 +553,55 @@ pub fn run(
             core_missing.then_some(tr!("Download the snes9x core", "Baixar núcleo snes9x")),
         );
 
+        // Manual do console aberto: dono do tubo (‹/› viram página,
+        // voltar/Back fecha) — com a TV ligada ou não, como as
+        // Configurações.
+        if let Some(man) = console_manual.as_mut() {
+            let mut close = false;
+            for nav in &m.nav {
+                match nav {
+                    MenuNav::Left => man.prev(),
+                    MenuNav::Right => man.next(),
+                    MenuNav::Back => close = true,
+                    _ => {}
+                }
+            }
+            if let Some((x, y)) = m.click {
+                let (ox, oy) = cab.window_to_output(x, y);
+                if cab.hit_close_button(ox, oy) {
+                    return Ok(IdleExit::Quit);
+                }
+                if cab.hit_panel_button(ox, oy) == Some(PanelButton::ConsoleManual) {
+                    close = true;
+                }
+                if let Some((sx, sy)) = cab.hit_screen_point(ox, oy) {
+                    let (prev, next, voltar) = man.rects;
+                    if in_update_rect(sx, sy, prev) {
+                        man.prev();
+                    } else if in_update_rect(sx, sy, next) {
+                        man.next();
+                    } else if in_update_rect(sx, sy, voltar) {
+                        close = true;
+                    }
+                }
+            }
+            if close {
+                console_manual = None;
+            } else {
+                man.poll(cab);
+                let ready = cab.has_image(crate::shelf::manual_page_id(man.key, man.page));
+                let (key, page, pages) = (man.key, man.page, man.pages);
+                let mut rects = man.rects;
+                let render = |d: &mut Screen| {
+                    rects = crate::shelf::draw_manual_view(d, key, page, pages, ready);
+                };
+                cab.frame_idle_2d(SETUP_BG, render);
+                man.rects = rects;
+                crate::runner::pace_frame(&mut next, frame);
+                continue;
+            }
+        }
+
         // Tela de update do app aberta: dona do tubo (changelog + botão).
         if update_view.is_some() {
             let (upt_tag, upt_body, asset_url) = {
@@ -586,6 +743,7 @@ pub fn run(
                         return Ok(IdleExit::OpenSettings)
                     }
                     Some(PanelButton::Dev) if cab.dev_mode() => return Ok(IdleExit::OpenDev),
+                    Some(PanelButton::ConsoleManual) => console_manual = ConsoleManual::open(),
                     Some(_) => {
                         cab.push_osd(
                             &[tr!(
@@ -613,6 +771,8 @@ pub fn run(
                 // desenha), mas o gate fica explícito: sem devmode, cliques
                 // fantasmas não abrem nada.
                 Some(PanelButton::Dev) if cab.dev_mode() => return Ok(IdleExit::OpenDev),
+                // O manual do console não depende do núcleo — é só leitura.
+                Some(PanelButton::ConsoleManual) => console_manual = ConsoleManual::open(),
                 Some(PanelButton::CoreDownload) if core.rx.is_none() => {
                     match core_update::core_download_url() {
                         Some(url) => {
@@ -930,4 +1090,27 @@ pub fn capture_preview(
         cab.capture_static_bmp(static_level, path)
             .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
+}
+
+/// Headless preview of the console manual reader on `page` (dev/testing) —
+/// renders the page synchronously instead of through the worker.
+pub fn capture_console_manual_preview(cab: &mut Cabinet, page: usize, path: &Path) -> Result<()> {
+    let man = ConsoleManual::open().ok_or_else(|| anyhow::anyhow!("couldn't write the PDF"))?;
+    let pdf = std::env::temp_dir().join(format!("sixteen-{}.pdf", man.key));
+    let pages = crate::manual::page_count(&pdf)?;
+    if let Some(img) = crate::manual::render_page(&pdf, page, 2048)? {
+        cab.set_image(
+            crate::shelf::manual_page_id(man.key, page),
+            img.w,
+            img.h,
+            &img.rgba,
+        );
+    }
+    crate::console_art::load_brand_images(cab);
+    let ready = cab.has_image(crate::shelf::manual_page_id(man.key, page));
+    let render = |d: &mut Screen| {
+        crate::shelf::draw_manual_view(d, man.key, page, pages, ready);
+    };
+    cab.capture_idle_2d(SETUP_BG, render, path)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
