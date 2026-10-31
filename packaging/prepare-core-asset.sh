@@ -11,9 +11,12 @@
 # Fluxo de release:
 #   1. packaging/prepare-core-asset.sh            # gera packaging/core-asset/
 #   2. colar os hashes impressos em crates/app/src/core_update.rs
-#   3. commit, tag v<X.Y.Z>, push
-#   4. criar a release no GitHub e subir os zips de packaging/core-asset/
-#      (mesmos nomes impressos abaixo — o app monta a URL a partir deles)
+#   3. subir os zips de packaging/core-asset/ numa release do GitHub
+#      (mesmos nomes impressos abaixo) e apontar CORE_ASSET_TAG, no mesmo
+#      arquivo, para o tag dessa release — a URL do core usa esse tag, não
+#      a versão do app, então releases seguintes não precisam re-anexar
+#   4. commit, tag v<X.Y.Z>, push (o workflow de release confere que os
+#      zips existem no CORE_ASSET_TAG antes de publicar)
 #
 # Usage: prepare-core-asset.sh [target ...]
 # Targets default: todos os suportados. Bash 3.2 ok (macOS).

@@ -81,14 +81,21 @@ pub fn core_file_name() -> &'static str {
     }
 }
 
-/// A URL do core homologado para esta plataforma na release do GitHub do
-/// app — `None` para uma combinação sem build (e.g. Linux/arm64), onde a
-/// tela de configurações cai no "baixe manualmente".
+/// A release do GitHub que carrega os zips de `CORE_ASSETS`. Fica fixa e
+/// anda junto com os hashes, não com a versão do app: a URL montada com
+/// `CARGO_PKG_VERSION` dava 404 em toda release que não teve os zips
+/// re-anexados à mão (1.4.0 a 1.6.0 — "o botão de baixar o core não
+/// baixa"). Ao regenerar os hashes com `prepare-core-asset.sh`, subir os
+/// zips numa release e apontar esta constante para ela.
+const CORE_ASSET_TAG: &str = "v1.3.3";
+
+/// A URL do core homologado para esta plataforma — `None` para uma
+/// combinação sem build (e.g. Linux/arm64), onde a tela de configurações
+/// cai no "baixe manualmente".
 pub fn core_download_url() -> Option<String> {
     core_expected_sha256()?;
     Some(format!(
-        "https://github.com/ticianocorral/sixteen/releases/download/v{}/snes9x_libretro-{TARGET_TRIPLE}.zip",
-        env!("CARGO_PKG_VERSION")
+        "https://github.com/ticianocorral/sixteen/releases/download/{CORE_ASSET_TAG}/snes9x_libretro-{TARGET_TRIPLE}.zip"
     ))
 }
 
@@ -282,6 +289,36 @@ mod tests {
         install_core_bytes(&dir, b"nova").unwrap();
         assert_eq!(std::fs::read(dir.join(core_file_name())).unwrap(), b"nova");
         assert!(!dir.join(format!("{}.new", core_file_name())).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn core_url_uses_the_pinned_asset_tag() {
+        let Some(url) = core_download_url() else {
+            return;
+        };
+        assert_eq!(
+            url,
+            format!(
+                "https://github.com/ticianocorral/sixteen/releases/download/{CORE_ASSET_TAG}/snes9x_libretro-{TARGET_TRIPLE}.zip"
+            )
+        );
+    }
+
+    /// Baixa o core de verdade e confere o SHA-256 — precisa de rede, então
+    /// fica fora do `cargo test` normal: `cargo test -p sixteen-app --
+    /// --ignored core_asset_downloads`.
+    #[test]
+    #[ignore]
+    fn core_asset_downloads_and_verifies() {
+        let Some(url) = core_download_url() else {
+            return;
+        };
+        let dir = std::env::temp_dir().join("sixteen-core-download-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let (tx, _rx) = std::sync::mpsc::channel();
+        try_download(&url, &dir, &tx).unwrap();
+        assert!(dir.join(core_file_name()).is_file());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
