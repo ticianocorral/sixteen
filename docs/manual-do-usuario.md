@@ -134,8 +134,10 @@ extensão):
 Exemplo: para o jogo salvo como `roms/Super Mario World (USA).sfc`, a capa
 deve se chamar `assets/cover/Super Mario World (USA).png` (ou `.jpg`).
 
-Sem arte nenhuma o app funciona normalmente: a estante mostra uma lista
-numerada com os nomes dos jogos.
+Sem arte o app funciona normalmente: o jogo aparece na estante como um
+cartucho cinza genérico, com uma etiqueta de papel colada e o nome e o ano
+escritos à caneta. Cada jogo tem sempre a mesma letra, a mesma caneta e o
+mesmo durex.
 
 ---
 

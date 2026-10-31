@@ -7,6 +7,17 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+### Alterado
+- **Jogo sem arte vira cartucho com etiqueta escrita à mão** — em vez da
+  caixa escura (ou da lista numerada, quando não havia arte nenhuma), a
+  estante mostra um cartucho cinza genérico com uma etiqueta de papel
+  torta, o nome e o ano escritos à caneta (azul, preta ou vermelha) e às
+  vezes um pedaço de durex. O sorteio vem do próprio jogo, então ele
+  aparece sempre igual. A estante fica sempre em grade, mesmo sem
+  nenhuma arte instalada.
+
 ## [1.6.0] - 2026-10-31
 
 ### Adicionado
