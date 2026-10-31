@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
+use sixteen_app::config::ShelfTheme;
 use sixteen_app::dirs;
 use sixteen_app::shelf::{self, Pick, ShelfOpts};
 use sixteen_domain::{Catalog, NoIntroDat, Order};
@@ -31,6 +32,11 @@ fn main() -> Result<()> {
     let shot = arg(&args, "--shot").map(PathBuf::from);
     let preset_filter = arg(&args, "--filter").map(str::to_string);
     let debug_history = args.iter().any(|a| a == "--debug-history-shot");
+    // O móvel da estante: `--theme metal` mostra o expositor da locadora.
+    let theme = match arg(&args, "--theme") {
+        Some("metal") => ShelfTheme::Metal,
+        _ => ShelfTheme::Wood,
+    };
 
     let dat = NoIntroDat::load(&dirs::nointro_dat_path()).ok();
     let catalog = Catalog::open(&dirs::roms_dir(), &dirs::library_path(), dat.as_ref())
@@ -55,6 +61,7 @@ fn main() -> Result<()> {
         fade_in: None,
         preset_filter,
         ra: None,
+        theme,
     };
     match shelf::run(&mut plat, &mut cab, &catalog, &opts)? {
         Pick::Play { rom, .. } => {

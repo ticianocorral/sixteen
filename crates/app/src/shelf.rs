@@ -24,6 +24,7 @@ use sixteen_platform::{
     ShelfPanelInfo,
 };
 
+use crate::config::ShelfTheme;
 use crate::idle;
 
 // Landscape, not portrait: the cover art dropped into `assets/cover/` is
@@ -168,6 +169,9 @@ pub struct ShelfOpts {
     /// that shows "conquistas: N" in the panel; `None` keeps the shelf
     /// entirely RA-free.
     pub ra: Option<(String, String, String)>,
+    /// O móvel em volta das capas — madeira ou o expositor de metal da
+    /// locadora (`shelf_theme` no `sixteen.cfg`).
+    pub theme: ShelfTheme,
 }
 
 impl Default for ShelfOpts {
@@ -179,6 +183,7 @@ impl Default for ShelfOpts {
             fade_in: None,
             preset_filter: None,
             ra: None,
+            theme: ShelfTheme::Wood,
         }
     }
 }
@@ -564,12 +569,33 @@ impl Paint for Raster {
 /// O móvel da estante desenhado num buffer: o corpo (fundo, montantes,
 /// travessa) e a prateleira sob cada fileira visível da grade — a
 /// prateleira mora no vão de `GAP`, sem mexer nos rects de clique.
-fn furniture_layer(scr_w: u32, scr_h: u32, grid: &GridLayout) -> sixteen_platform::PreparedArt {
+fn furniture_layer(
+    scr_w: u32,
+    scr_h: u32,
+    grid: &GridLayout,
+    theme: ShelfTheme,
+) -> sixteen_platform::PreparedArt {
     let mut r = Raster::new(scr_w, scr_h);
-    draw_cabinet(&mut r, scr_w, scr_h, grid.y0 + 1);
-    for row in 0..grid.vis_rows {
-        let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
-        draw_shelf_board(&mut r, MARGIN, scr_w - MARGIN as u32 * 2, y, 14);
+    let board_w = scr_w - MARGIN as u32 * 2;
+    match theme {
+        ShelfTheme::Wood => {
+            draw_cabinet(&mut r, scr_w, scr_h, grid.y0 + 1);
+            for row in 0..grid.vis_rows {
+                let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
+                draw_shelf_board(&mut r, MARGIN, board_w, y, 14);
+            }
+        }
+        ShelfTheme::Metal => {
+            draw_rack(&mut r, scr_w, scr_h, grid.y0 + 1);
+            // Uma etiqueta de preço na canaleta sob cada coluna de capas.
+            let tags: Vec<i32> = (0..grid.cols)
+                .map(|c| grid.x0 + c as i32 * grid.cell_w + grid.item_w / 2)
+                .collect();
+            for row in 0..grid.vis_rows {
+                let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
+                draw_rack_shelf(&mut r, MARGIN, board_w, y, 14, &tags);
+            }
+        }
     }
     sixteen_platform::PreparedArt::raw(r.w, r.h, r.px)
 }
@@ -637,6 +663,135 @@ fn draw_cabinet(d: &mut impl Paint, scr_w: u32, scr_h: u32, top: i32) {
     d.fill(x0, top - 10, (x1 - x0) as u32, 10, (56, 41, 31, 255));
     d.fill(x0, top - 10, (x1 - x0) as u32, 2, (90, 70, 55, 255));
     d.fill(x0, top - 1, (x1 - x0) as u32, 1, (32, 22, 15, 255));
+}
+
+/// O EXPOSITOR DE METAL da locadora em volta das capas — a alternativa ao
+/// móvel de madeira, na mesma geometria de `draw_cabinet`: o fundo de chapa
+/// perfurada (a parede de ganchos das locadoras) escurecendo para os
+/// cantos, os dois montantes de aço com a cremalheira de rasgos onde as
+/// prateleiras encaixam e a travessa do topo com o filete vermelho da
+/// sinalização da loja.
+fn draw_rack(d: &mut impl Paint, scr_w: u32, scr_h: u32, top: i32) {
+    const POST: i32 = 12;
+    const HOLE_STEP: i32 = 14;
+    let x0 = MARGIN - POST - 4;
+    let x1 = scr_w as i32 - MARGIN + 4;
+    let bottom = scr_h as i32;
+    let inner_w = (x1 - x0 - POST * 2).max(1) as u32;
+    let inner_h = (bottom - top).max(1) as u32;
+    let ix = x0 + POST;
+
+    // Chapa perfurada: aço pintado e a grade de furos, cada furo com a
+    // borda de baixo pegando luz (a chapa tem espessura).
+    d.fill(ix, top, inner_w, inner_h, (42, 45, 49, 255));
+    let mut hy = top + 8;
+    while hy < bottom - 2 {
+        let mut hx = ix + 8;
+        while hx < x1 - POST - 4 {
+            d.fill(hx, hy, 3, 3, (20, 21, 24, 255));
+            d.fill(hx, hy + 3, 3, 1, (60, 64, 69, 255));
+            hx += HOLE_STEP;
+        }
+        hy += HOLE_STEP;
+    }
+    // Vinheta: o fundo escurece para as laterais.
+    for i in 0..10 {
+        let a = (60 - i * 6) as u8;
+        d.fill(ix + i * 3, top, 3, inner_h, (0, 0, 0, a));
+        d.fill(x1 - POST - (i + 1) * 3, top, 3, inner_h, (0, 0, 0, a));
+    }
+    // Sombra da travessa na chapa, logo abaixo dela.
+    for i in 0..8 {
+        d.fill(
+            ix,
+            top + 10 + i * 2,
+            inner_w,
+            2,
+            (0, 0, 0, (90 - i * 11) as u8),
+        );
+    }
+
+    // Montantes: aço escovado, quina iluminada, fio de sombra interno e a
+    // cremalheira — rasgos verticais no meio da face.
+    for (px, light_left) in [(x0, true), (x1 - POST, false)] {
+        d.fill(px, top - 10, POST as u32, inner_h + 10, (86, 90, 96, 255));
+        let edge = if light_left { px } else { px + POST - 2 };
+        d.fill(edge, top - 10, 2, inner_h + 10, (152, 158, 166, 255));
+        let inner = if light_left { px + POST - 1 } else { px };
+        d.fill(inner, top, 1, inner_h, (30, 32, 36, 255));
+        let mut sy = top + 4;
+        while sy < bottom - 8 {
+            d.fill(px + POST / 2 - 1, sy, 3, 7, (24, 25, 28, 255));
+            d.fill(px + POST / 2 - 1, sy + 7, 3, 1, (124, 130, 138, 255));
+            sy += 14;
+        }
+    }
+    // Travessa do topo, com o filete vermelho da sinalização da locadora.
+    d.fill(x0, top - 10, (x1 - x0) as u32, 10, (80, 84, 90, 255));
+    d.fill(x0, top - 10, (x1 - x0) as u32, 2, (150, 156, 164, 255));
+    d.fill(x0, top - 6, (x1 - x0) as u32, 2, (176, 34, 38, 255));
+    d.fill(x0, top - 1, (x1 - x0) as u32, 1, (30, 32, 36, 255));
+}
+
+/// A prateleira de aço do expositor sob uma fileira de caixas — irmã de
+/// `draw_shelf_board`, no mesmo vão de `GAP`: o tampo de chapa visto de
+/// cima, a canaleta de preço na frente (com uma etiqueta de papel sob cada
+/// coluna, em `tags`) e as mãos-francesas de chapa dobrada nas pontas.
+fn draw_rack_shelf(d: &mut impl Paint, x: i32, w: u32, y: i32, h: i32, tags: &[i32]) {
+    const DEPTH: i32 = 9;
+    // O tampo entrando para o fundo, com a quina de trás escura.
+    d.fill(x, y - DEPTH, w, DEPTH as u32, (100, 104, 110, 255));
+    d.fill(x, y - DEPTH, w, 1, (32, 34, 38, 255));
+    d.fill(x, y - DEPTH + 1, w, 2, (84, 88, 94, 255));
+    // A dobra da frente pegando a luz.
+    d.fill(x, y - 1, w, 1, (196, 202, 210, 255));
+
+    // A canaleta: lábio de cima, a face funda com o friso, lábio de baixo.
+    let face_h = (h - 6).max(1);
+    d.fill(x, y, w, 2, (146, 152, 160, 255));
+    d.fill(x, y + 2, w, face_h as u32, (66, 70, 76, 255));
+    d.fill(x, y + 2, w, 1, (40, 42, 46, 255));
+    d.fill(x, y + 2 + face_h - 1, w, 1, (116, 122, 130, 255));
+    d.fill(x, y + h - 4, w, 4, (30, 32, 36, 255));
+
+    // As etiquetas de preço: papel amarelado, uma linha de "título" e o
+    // preço em vermelho — cada uma sob o centro de uma coluna de capas.
+    let (tw, th) = (28, (face_h - 3).max(3));
+    for &cx in tags {
+        let tx = cx - tw / 2;
+        d.fill(tx, y + 3, tw as u32, th as u32, (232, 224, 196, 255));
+        d.fill(tx + 3, y + 4, 12, 1, (70, 66, 60, 255));
+        d.fill(tx + tw - 10, y + 3 + th - 3, 7, 2, (186, 38, 40, 255));
+    }
+
+    // Sombra do tampo na chapa, embaixo.
+    for (i, c) in [(16u8, 17u8, 19u8), (22u8, 23u8, 26u8), (30u8, 32u8, 35u8)]
+        .into_iter()
+        .enumerate()
+    {
+        d.fill(
+            x + 4,
+            y + h + i as i32,
+            w.saturating_sub(8),
+            1,
+            (c.0, c.1, c.2, 255),
+        );
+    }
+
+    // Mão-francesa de chapa sob cada ponta: um triângulo reto, a face
+    // encostada no montante — curta, como a de madeira.
+    let r: i32 = 8;
+    for i in 0..r {
+        let dx = (r - i).max(1);
+        d.fill(x + 2, y + h + i, dx as u32, 1, (78, 82, 88, 255));
+        d.fill(
+            x + w as i32 - 2 - dx,
+            y + h + i,
+            dx as u32,
+            1,
+            (78, 82, 88, 255),
+        );
+    }
 }
 
 /// Whether `entry`'s title matches a filter query — empty matches everything,
@@ -748,6 +903,9 @@ struct CoverLook {
     /// Dentro do móvel (a listagem geral): luz de vitrine, sombra no fundo
     /// e o tom abaixo fora da seleção. As faixas de cima ficam fora dele.
     on_shelf: bool,
+    /// O móvel da grade: o suporte de acrílico (madeira) ou o arame
+    /// cromado (expositor de metal).
+    theme: ShelfTheme,
     selected: bool,
     hovered: bool,
     favorite: bool,
@@ -833,7 +991,10 @@ fn draw_cover(d: &mut Screen, id: u64, title: &str, slot: (i32, i32, u32, u32), 
     }
 
     if look.on_shelf {
-        draw_stand(d, (cx, cy, cw, ch), base);
+        match look.theme {
+            ShelfTheme::Wood => draw_stand(d, (cx, cy, cw, ch), base),
+            ShelfTheme::Metal => draw_wire_rail(d, (cx, cy, cw, ch), base),
+        }
     }
 
     if look.selected {
@@ -893,6 +1054,24 @@ fn draw_stand(d: &mut Screen, cover: (i32, i32, u32, u32), base: i32) {
         lip as u32,
         (240, 246, 252, 110),
     );
+}
+
+/// O arame cromado do expositor de metal que segura a caixa em pé: uma
+/// barra fina na frente do pé da capa, presa por dois pinos que sobem da
+/// canaleta — o "gradil" das prateleiras de locadora.
+fn draw_wire_rail(d: &mut Screen, cover: (i32, i32, u32, u32), base: i32) {
+    let (cx, _cy, cw, ch) = cover;
+    let lip = (ch / 12).clamp(5, 10) as i32;
+    let y = base - lip;
+    // Os pinos, um pouco para fora da capa.
+    for px in [cx - 4, cx + cw as i32 + 2] {
+        d.fill(px, y, 2, lip as u32, (150, 156, 164, 255));
+        d.fill(px, y, 1, lip as u32, (222, 228, 234, 255));
+    }
+    // A barra: corpo cromado, brilho em cima e a sombra dela na capa.
+    d.fill(cx - 5, y, cw + 10, 2, (168, 174, 182, 255));
+    d.fill(cx - 5, y, cw + 10, 1, (238, 242, 246, 255));
+    d.fill(cx, y + 2, cw, 1, (0, 0, 0, 90));
 }
 
 /// O retângulo da caixa genérica dentro do slot: em pé, proporção de
@@ -2634,7 +2813,10 @@ pub fn run(
                 grid.vis_rows,
             );
             if furniture_key != Some(key) {
-                cab.set_prepared_image(FURNITURE_IMG, furniture_layer(scr_w, scr_h, &grid));
+                cab.set_prepared_image(
+                    FURNITURE_IMG,
+                    furniture_layer(scr_w, scr_h, &grid, opts.theme),
+                );
                 furniture_key = Some(key);
             }
         }
@@ -2686,6 +2868,7 @@ pub fn run(
                         (x, y, STRIP_TILE_W, STRIP_TILE_H),
                         CoverLook {
                             on_shelf: false,
+                            theme: opts.theme,
                             selected: cur.in_fav && i == cur.fav_idx,
                             hovered: hover_fav == Some(i),
                             favorite: true,
@@ -2737,6 +2920,7 @@ pub fn run(
                         (x, y, grid.item_w as u32, grid.item_h as u32),
                         CoverLook {
                             on_shelf: true,
+                            theme: opts.theme,
                             selected: !cur.in_fav && i == cur.sel,
                             hovered: hover_grid == Some(i),
                             favorite: entry.rom.favorite,

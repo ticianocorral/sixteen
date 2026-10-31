@@ -248,6 +248,7 @@ fn main() -> Result<()> {
         fade_in: None,
         preset_filter: None,
         ra: None,
+        theme: Default::default(),
     };
     refresh_ra(&cfg, &mut cab, &mut shelf_opts);
 
@@ -438,8 +439,10 @@ fn main() -> Result<()> {
 /// (Re)avalia o estado do RA — selo no queixo e credenciais que a estante
 /// carrega. Chamado no arranque e a cada volta das configurações: o login
 /// por senha acontece com o app aberto, e sem isto o token novo só seria
-/// visto no próximo arranque (o RA "sumia" até reiniciar).
+/// visto no próximo arranque (o RA "sumia" até reiniciar). Leva junto o
+/// tema do móvel, trocado na mesma tela.
 fn refresh_ra(cfg: &Config, cab: &mut Cabinet, shelf_opts: &mut ShelfOpts) {
+    shelf_opts.theme = cfg.shelf_theme;
     let on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
     cab.set_ra_status(on.then_some(RaStatus {
         hardcore: cfg.ra_hardcore,

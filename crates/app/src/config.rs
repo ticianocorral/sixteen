@@ -34,6 +34,11 @@ pub struct Config {
     /// — plan revision: "som de chiado de tv fora do ar ... colocar na
     /// configuração para tocar ou não. por padrão vem desligado".
     pub hiss_on_static: bool,
+    /// O móvel da estante (plan revision: "poder escolher um tema de
+    /// expositor, igual era em locadoras de games") — a estante de madeira
+    /// (padrão) ou o expositor de metal da locadora. Linha "Estante" na
+    /// seção de vídeo das configurações.
+    pub shelf_theme: ShelfTheme,
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
     /// fase 1) — the username and the web-API token the user generates on
     /// retroachievements.org (Settings → Web API). Both empty (the default)
@@ -110,6 +115,45 @@ impl LangOpt {
     }
 }
 
+/// O tema do móvel da estante — gravado como a palavra no `sixteen.cfg`
+/// (`shelf_theme = "wood"` / `"metal"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShelfTheme {
+    /// A estante de madeira: fundo com veios, prateleiras de tábua e
+    /// suportes de acrílico.
+    #[default]
+    Wood,
+    /// O expositor de metal da locadora: chapa perfurada no fundo,
+    /// montantes com cremalheira, prateleiras de aço com canaleta de preço
+    /// e um arame cromado segurando as caixas.
+    Metal,
+}
+
+impl ShelfTheme {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ShelfTheme::Wood => "wood",
+            ShelfTheme::Metal => "metal",
+        }
+    }
+
+    /// Click / left-right on the settings row: madeira ↔ metal.
+    pub fn cycle(self) -> Self {
+        match self {
+            ShelfTheme::Wood => ShelfTheme::Metal,
+            ShelfTheme::Metal => ShelfTheme::Wood,
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "wood" | "madeira" | "" => Some(ShelfTheme::Wood),
+            "metal" => Some(ShelfTheme::Metal),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Deserialize, Default)]
 struct Raw {
     #[serde(default)]
@@ -120,6 +164,8 @@ struct Raw {
     check_updates_on_start: Option<bool>,
     #[serde(default)]
     hiss_on_static: Option<bool>,
+    #[serde(default)]
+    shelf_theme: Option<String>,
     #[serde(default)]
     ra_user: Option<String>,
     #[serde(default)]
@@ -152,6 +198,7 @@ impl Config {
             lang: LangOpt::En,
             check_updates_on_start: true,
             hiss_on_static: false,
+            shelf_theme: ShelfTheme::Wood,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -205,6 +252,15 @@ impl Config {
         }
         if let Some(h) = raw.hiss_on_static {
             self.hiss_on_static = h;
+        }
+        if let Some(t) = raw.shelf_theme {
+            match ShelfTheme::parse(&t) {
+                Some(v) => self.shelf_theme = v,
+                None => log::warn!(
+                    "[config] shelf_theme = {t:?}: not a theme (want wood|metal), keeping {}",
+                    self.shelf_theme.as_str()
+                ),
+            }
         }
         if let Some(u) = raw.ra_user {
             self.ra_user = u;
@@ -265,6 +321,7 @@ impl Config {
              # lang: UI language — en (default) or pt (Brazilian Portuguese).\n\
              # check_updates_on_start: look for a newer release/snes9x core at launch.\n\
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
+             # shelf_theme: the shelf furniture — wood (default) or metal (rental-store rack).\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
@@ -278,7 +335,11 @@ impl Config {
             "check_updates_on_start = {}\n",
             self.check_updates_on_start
         ));
-        s.push_str(&format!("hiss_on_static = {}\n\n", self.hiss_on_static));
+        s.push_str(&format!("hiss_on_static = {}\n", self.hiss_on_static));
+        s.push_str(&format!(
+            "shelf_theme = {:?}\n\n",
+            self.shelf_theme.as_str()
+        ));
         s.push_str("# RetroAchievements\n");
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
         s.push_str(&format!("ra_token = {:?}\n", self.ra_token));
@@ -329,6 +390,7 @@ mod tests {
             lang: LangOpt::En,
             check_updates_on_start: true,
             hiss_on_static: false,
+            shelf_theme: ShelfTheme::Wood,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -408,6 +470,22 @@ mod tests {
             .keymap
             .describe()
             .contains(&("b".to_string(), "Space".to_string())));
+    }
+
+    #[test]
+    fn shelf_theme_round_trips_and_rejects_junk() {
+        let mut cfg = defaults();
+        assert_eq!(cfg.shelf_theme, ShelfTheme::Wood);
+        cfg.apply(toml::from_str("shelf_theme = \"metal\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.shelf_theme, ShelfTheme::Metal);
+        cfg.apply(toml::from_str("shelf_theme = \"vidro\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.shelf_theme, ShelfTheme::Metal);
+        let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
+        let mut round = defaults();
+        round.apply(raw).unwrap();
+        assert_eq!(round.shelf_theme, ShelfTheme::Metal);
     }
 
     #[test]

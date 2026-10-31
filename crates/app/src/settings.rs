@@ -67,7 +67,8 @@ const RA_ROW_SENHA: usize = 2;
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
         SEC_JOGO => 1,
-        SEC_VIDEO => 2,
+        // tela cheia / chiado / estante
+        SEC_VIDEO => 3,
         // núcleo / checar updates / idioma / renomear ROMs
         SEC_SISTEMA => 4,
         // usuário / token / senha / testar login / hardcore
@@ -490,9 +491,12 @@ fn activate_row(
                 cfg.fullscreen = !cfg.fullscreen;
                 cab.toggle_fullscreen();
             }
-            _ => {
+            1 => {
                 cfg.hiss_on_static = !cfg.hiss_on_static;
                 cab.set_static_hiss(cfg.hiss_on_static);
+            }
+            _ => {
+                cfg.shelf_theme = cfg.shelf_theme.cycle();
             }
         },
         SEC_SISTEMA => match i {
@@ -560,6 +564,9 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _righ
             cfg.hiss_on_static = !cfg.hiss_on_static;
             cab.set_static_hiss(cfg.hiss_on_static);
         }
+        (SEC_VIDEO, 2) => {
+            cfg.shelf_theme = cfg.shelf_theme.cycle();
+        }
         (SEC_SISTEMA, 1) => {
             cfg.check_updates_on_start = !cfg.check_updates_on_start;
         }
@@ -586,6 +593,16 @@ fn lang_value_name(lang: crate::config::LangOpt) -> &'static str {
     match lang {
         crate::config::LangOpt::En => tr!("English", "Inglês"),
         crate::config::LangOpt::Pt => "Português (Brasil)",
+    }
+}
+
+/// The shelf row's value — the furniture the games stand on.
+fn shelf_theme_name(theme: crate::config::ShelfTheme) -> &'static str {
+    match theme {
+        crate::config::ShelfTheme::Wood => tr!("wooden bookcase", "móvel de madeira"),
+        crate::config::ShelfTheme::Metal => {
+            tr!("metal rental-store rack", "expositor de metal da locadora")
+        }
     }
 }
 
@@ -790,6 +807,10 @@ fn draw_video(d: &mut Screen, cfg: &Config, sel: usize) {
                     "desligado"
                 }
             )
+        ),
+        tr!(
+            format!("Shelf: {}", shelf_theme_name(cfg.shelf_theme)),
+            format!("Estante: {}", shelf_theme_name(cfg.shelf_theme)),
         ),
     ];
     for (i, row) in rows.iter().enumerate() {
