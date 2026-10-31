@@ -10,7 +10,7 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 ## [Não lançado]
 
 ### Adicionado
-- **Menu de imagem da TV** (tecla **MENU** no queixo, ao lado do VOL): brilho, contraste,
+- **Menu de imagem da TV** (tecla **MENU** no queixo, à esquerda do POWER): brilho, contraste,
   cor e nitidez em letras verdes de TV dos anos 90, ajustados com VOL –/+
   e aplicados no filtro NTSC de verdade. Salvos em `tv_picture`.
 - **Burn-in leve** (opcional, `burn_in`): horas no mesmo jogo marcam o HUD

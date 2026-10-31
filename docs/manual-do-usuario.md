@@ -164,7 +164,7 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
   próximo item (depois do último, fecha); com o menu aberto, **VOL –/+**
   ajustam o item em vez do volume. Os ajustes mexem no filtro da imagem do
   jogo de verdade e ficam salvos. O menu fecha sozinho depois de alguns
-  segundos parado. (A tecla MENU fica ao lado do VOL e só aparece quando
+  segundos parado. (A tecla MENU fica à esquerda do POWER e só aparece quando
   a janela tem espaço no queixo.)
 - O vidro estala de leve algumas vezes nos primeiros minutos depois de
   ligar a TV, enquanto esquenta.

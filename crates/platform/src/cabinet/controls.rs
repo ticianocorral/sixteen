@@ -207,12 +207,43 @@ pub(super) fn draw_tv_chin_controls(
         draw_led_color(canvas, led_cx, cy - 6, 12, true, LED_TV_ON, LED_TV_ON_HI);
     }
 
-    // O botão único do canal: rótulo "CH" + a tecla "3-4" — um clique
-    // alterna entre os dois canais que a TV tem.
+    // MENU, colado à esquerda do POWER — se a fileira inteira (VOL, CH,
+    // MENU) ainda couber sem encostar na marca do centro do queixo; numa
+    // janela estreita ele fica de fora e o resto não se mexe.
     let ch_label = "CH";
     let ch_lw = GLYPH_W as i32 * ch_label.chars().count() as i32;
     let ch_key_w = GLYPH_W as i32 * 3 + 12;
-    let ch_left = pcx - pw / 2 - group_gap - ch_lw - 8 - ch_key_w;
+    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w * 2;
+    let logo_h = (chin_h as f32 * 0.25).round() as i32;
+    let logo_w = (logo_h as f32 * BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32).round() as i32;
+    let logo_right = screen.left() + (screen.width() as i32 + logo_w) / 2;
+    let menu_w = GLYPH_W as i32 * 4 + 14;
+    let row_w = vol_w + group_gap + ch_lw + 8 + ch_key_w + group_gap + menu_w + 14;
+    let mut menu = TvChinControls::offscreen().menu;
+    let mut ch_right = pcx - pw / 2 - group_gap;
+    if pcx - pw / 2 - row_w >= logo_right + 12 {
+        menu = Rect::new(
+            pcx - pw / 2 - 14 - menu_w,
+            cy - key_h / 2,
+            menu_w as u32,
+            key_h as u32,
+        );
+        draw_silver_key(canvas, menu, on);
+        draw_text_absolute(
+            canvas,
+            font,
+            menu.x() + 7,
+            menu.y() + (menu.height() as i32 - GLYPH_H as i32) / 2,
+            TextStyle::new(1, key_ink),
+            "MENU",
+            usize::MAX,
+        );
+        ch_right = menu.x() - group_gap;
+    }
+
+    // O botão único do canal: rótulo "CH" + a tecla "3-4" — um clique
+    // alterna entre os dois canais que a TV tem.
+    let ch_left = ch_right - ch_lw - 8 - ch_key_w;
     draw_text_absolute(
         canvas,
         font,
@@ -275,31 +306,7 @@ pub(super) fn draw_tv_chin_controls(
             }
             (down, up)
         };
-    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w * 2;
-    let vol_left = ch_left - group_gap - vol_w;
-    let (vol_down, vol_up) = draw_pair(canvas, font, vol_left, "VOL");
-
-    // MENU, no mesmo grupo, à esquerda do volume — se couber sem encostar
-    // na marca do centro do queixo (janela estreita: fica de fora).
-    let logo_h = (chin_h as f32 * 0.25).round() as i32;
-    let logo_w = (logo_h as f32 * BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32).round() as i32;
-    let logo_right = screen.left() + (screen.width() as i32 + logo_w) / 2;
-    let menu_w = GLYPH_W as i32 * 4 + 14;
-    let menu_left = vol_left - 14 - menu_w;
-    let mut menu = TvChinControls::offscreen().menu;
-    if menu_left >= logo_right + 12 {
-        menu = Rect::new(menu_left, cy - key_h / 2, menu_w as u32, key_h as u32);
-        draw_silver_key(canvas, menu, on);
-        draw_text_absolute(
-            canvas,
-            font,
-            menu.x() + 7,
-            menu.y() + (menu.height() as i32 - GLYPH_H as i32) / 2,
-            TextStyle::new(1, key_ink),
-            "MENU",
-            usize::MAX,
-        );
-    }
+    let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
 
     TvChinControls {
         vol_down,
