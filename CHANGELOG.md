@@ -7,7 +7,7 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
-## [Não lançado]
+## [1.6.1] - 2026-10-31
 
 ### Alterado
 - **Jogo sem arte vira cartucho com etiqueta escrita à mão** — em vez da
@@ -17,6 +17,13 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   vezes um pedaço de durex. O sorteio vem do próprio jogo, então ele
   aparece sempre igual. A estante fica sempre em grade, mesmo sem
   nenhuma arte instalada.
+
+### Corrigido
+- **Baixar o core voltou a funcionar** — de 1.4.0 a 1.6.0 o botão de baixar
+  o core dava erro (404) em todas as plataformas, porque procurava os
+  arquivos na release da versão do app. Agora baixa sempre da release que
+  guarda o core homologado, e a publicação de uma release confere que ele
+  está lá.
 
 ## [1.6.0] - 2026-10-31
 
