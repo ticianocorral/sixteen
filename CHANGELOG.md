@@ -22,6 +22,14 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   nunca falha e a SRAM do disco volta ao core ao sair da falha — o save
   nunca é tocado. `SIXTEEN_MAU_CONTATO=1` força o primeiro encaixe ruim
   (testes); `emu-run --debug-blow DIR` captura as telas em BMP.
+- **Soprar no microfone** (opcional, desligado por padrão) — Configurações
+  → jogo → Soprar no microfone (`blow_mic = true`): na cena do sopro, o
+  sopro de verdade no microfone limpa os contatos — no Steam Deck e no ROG
+  Ally é soprar no próprio portátil. O detector separa o vento contínuo do
+  sopro do ruído do ambiente (piso adaptativo) e de estalos curtos; uma
+  barrinha MIC mostra o nível. O microfone só abre durante a cena e nada é
+  gravado; o "ffff" sintetizado fica mudo quando é o microfone que sopra
+  (não realimenta). macOS: `NSMicrophoneUsageDescription` no Info.plist.
 
 ## [1.5.0] - 2026-10-30
 

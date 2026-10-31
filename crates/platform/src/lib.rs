@@ -7,7 +7,7 @@ mod input;
 pub mod sysinfo;
 pub mod tr;
 
-pub use audio::AudioOut;
+pub use audio::{AudioIn, AudioOut};
 pub use cabinet::{
     prepare_art, BlowButton, BlowScene, Cabinet, Dust, FrameRef, HltbBar, HltbBars, IgdbSection,
     PanelButton, PanelSection, PixelFormat, PreparedArt, RaStatus, RfAudio, Screen, SettingsButton,
@@ -789,6 +789,12 @@ impl Platform {
 
     pub fn open_audio(&self, sample_rate: u32) -> Result<AudioOut, PlatformError> {
         AudioOut::new(&self.audio_subsystem, sample_rate)
+    }
+
+    /// O microfone padrão do sistema, mono — `Err` sem microfone ou sem
+    /// permissão (macOS pergunta na primeira vez).
+    pub fn open_mic(&self, sample_rate: u32) -> Result<AudioIn, PlatformError> {
+        AudioIn::new(&self.audio_subsystem, sample_rate)
     }
 
     pub fn new_input(&self) -> Input {

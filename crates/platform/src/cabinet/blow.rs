@@ -38,6 +38,9 @@ pub struct BlowScene {
     pub time: f32,
     /// O nome do jogo, para o cartucho genérico (sem arte de cartucho).
     pub title: String,
+    /// O microfone está ouvindo: o nível de 0..1 (a barrinha "MIC") e a
+    /// dica pede para soprar nele. `None` = sem microfone.
+    pub mic: Option<f32>,
 }
 
 /// Os botões da cena do sopro.
@@ -378,7 +381,13 @@ pub(super) fn draw_blow_scene(
     } else if clean >= 0.999 {
         tr!("ALL CLEAN - INSERT IT AGAIN", "LIMPINHO - INSIRA DE NOVO")
     } else {
-        tr!("HOLD CLICK OR Y TO BLOW", "SEGURE O CLIQUE OU Y PRA SOPRAR")
+        match scene.mic {
+            Some(_) => tr!(
+                "BLOW INTO THE MICROPHONE (OR HOLD CLICK)",
+                "SOPRE NO MICROFONE (OU SEGURE O CLIQUE)"
+            ),
+            None => tr!("HOLD CLICK OR Y TO BLOW", "SEGURE O CLIQUE OU Y PRA SOPRAR"),
+        }
     };
     let hint_color = if scene.out_of_breath {
         (240, 80, 70)
@@ -431,6 +440,30 @@ pub(super) fn draw_blow_scene(
         12,
         bar_c,
     );
+    // O microfone: uma barrinha fina de nível logo abaixo do fôlego.
+    if let Some(level) = scene.mic {
+        let mic_y = bar_y + 22;
+        draw_text_absolute(
+            canvas,
+            font,
+            mx,
+            mic_y,
+            TextStyle::new(1, OSD_GREEN),
+            "MIC",
+            usize::MAX,
+        );
+        let lx = mx + (GLYPH_W * 4) as i32;
+        let lw = bar_w.saturating_sub(GLYPH_W * 4);
+        fill_rgba(canvas, lx, mic_y + 3, lw, 6, (20, 34, 22, 220));
+        fill_rgba(
+            canvas,
+            lx,
+            mic_y + 3,
+            (lw as f32 * level.clamp(0.0, 1.0)) as u32,
+            6,
+            (205, 230, 255, 255),
+        );
+    }
     let contacts = format!(
         "{} {}%",
         tr!("CONTACTS", "CONTATOS"),

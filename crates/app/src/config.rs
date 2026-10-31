@@ -44,6 +44,10 @@ pub struct Config {
     /// de tiles ou imagem travada — até ejetar, soprar e inserir de novo.
     /// Desligado por padrão. Linha na seção "jogo" das configurações.
     pub bad_contact: BadContact,
+    /// Soprar no microfone de verdade na cena do sopro (Steam Deck, ROG
+    /// Ally, notebook) — além do clique/Y. Desligado por padrão: o
+    /// microfone só abre durante a cena, e só com isto ligado.
+    pub blow_mic: bool,
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
     /// fase 1) — the username and the web-API token the user generates on
     /// retroachievements.org (Settings → Web API). Both empty (the default)
@@ -225,6 +229,8 @@ struct Raw {
     #[serde(default)]
     bad_contact: Option<String>,
     #[serde(default)]
+    blow_mic: Option<bool>,
+    #[serde(default)]
     ra_user: Option<String>,
     #[serde(default)]
     ra_token: Option<String>,
@@ -258,6 +264,7 @@ impl Config {
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
             bad_contact: BadContact::Off,
+            blow_mic: false,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -330,6 +337,9 @@ impl Config {
                 ),
             }
         }
+        if let Some(m) = raw.blow_mic {
+            self.blow_mic = m;
+        }
         if let Some(u) = raw.ra_user {
             self.ra_user = u;
         }
@@ -391,6 +401,7 @@ impl Config {
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
              # shelf_theme: the shelf furniture — wood (default) or metal (rental-store rack).\n\
              # bad_contact: cartridge bad contact on first power-on — off (default), rare or 90s.\n\
+             # blow_mic: blow into the real microphone to clean the cartridge (off by default).\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
@@ -406,10 +417,8 @@ impl Config {
         ));
         s.push_str(&format!("hiss_on_static = {}\n", self.hiss_on_static));
         s.push_str(&format!("shelf_theme = {:?}\n", self.shelf_theme.as_str()));
-        s.push_str(&format!(
-            "bad_contact = {:?}\n\n",
-            self.bad_contact.as_str()
-        ));
+        s.push_str(&format!("bad_contact = {:?}\n", self.bad_contact.as_str()));
+        s.push_str(&format!("blow_mic = {}\n\n", self.blow_mic));
         s.push_str("# RetroAchievements\n");
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
         s.push_str(&format!("ra_token = {:?}\n", self.ra_token));
@@ -462,6 +471,7 @@ mod tests {
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
             bad_contact: BadContact::Off,
+            blow_mic: false,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -575,6 +585,14 @@ mod tests {
         round.apply(raw).unwrap();
         assert_eq!(round.bad_contact, BadContact::Nineties);
         assert_eq!(BadContact::Nineties.cycle(), BadContact::Off);
+        assert!(!round.blow_mic);
+        cfg.apply(toml::from_str("blow_mic = true").unwrap())
+            .unwrap();
+        let mut round = defaults();
+        round
+            .apply(toml::from_str(&cfg.to_toml()).unwrap())
+            .unwrap();
+        assert!(round.blow_mic);
     }
 
     #[test]

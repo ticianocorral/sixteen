@@ -19,6 +19,8 @@ finish-args:
   - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
+  # pulseaudio também dá o microfone: a cena de soprar o cartucho ouve
+  # o sopro (opcional, desligado por padrão).
   - --socket=pulseaudio
   # Network: RetroAchievements (login/conquistas/badges) e o download do
   # core snes9x na primeira execução — este vem do asset da release do

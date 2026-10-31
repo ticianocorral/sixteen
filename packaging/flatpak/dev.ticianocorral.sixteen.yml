@@ -21,6 +21,8 @@ finish-args:
   - --share=ipc
   - --socket=x11
   - --socket=wayland
+  # pulseaudio também dá o microfone: a cena de soprar o cartucho ouve
+  # o sopro (opcional, desligado por padrão).
   - --socket=pulseaudio
   - --device=dri
   - --device=all

@@ -49,3 +49,47 @@ impl AudioOut {
         let _ = self.stream.clear();
     }
 }
+
+/// O microfone (mono, S16): a cena do sopro lê o que chegou a cada frame
+/// para sentir o sopro de verdade (Steam Deck, ROG Ally, notebook). Aberto
+/// só enquanto a cena dura — fechar é soltar o valor.
+pub struct AudioIn {
+    stream: AudioStreamOwner,
+    pub rate: u32,
+    buf: Vec<i16>,
+}
+
+impl AudioIn {
+    pub(crate) fn new(audio: &AudioSubsystem, sample_rate: u32) -> Result<Self, PlatformError> {
+        let device = audio.default_recording_device();
+        let spec = AudioSpec::new(Some(sample_rate as i32), Some(1), Some(AudioFormat::S16LE));
+        let stream = device
+            .open_device_stream(Some(&spec))
+            .map_err(|e| PlatformError::Sdl(e.to_string()))?;
+        stream
+            .resume()
+            .map_err(|e| PlatformError::Sdl(e.to_string()))?;
+        Ok(Self {
+            stream,
+            rate: sample_rate,
+            buf: Vec::new(),
+        })
+    }
+
+    /// Tudo o que o microfone gravou desde a última leitura (mono).
+    pub fn read(&mut self) -> &[i16] {
+        let avail = self
+            .stream
+            .available_bytes()
+            .map(|b| b.max(0) as usize / 2)
+            .unwrap_or(0);
+        self.buf.resize(avail, 0);
+        let n = if avail == 0 {
+            0
+        } else {
+            self.stream.read_i16_samples(&mut self.buf).unwrap_or(0)
+        };
+        self.buf.truncate(n);
+        &self.buf
+    }
+}

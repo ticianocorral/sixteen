@@ -24,6 +24,8 @@
 	<string>12.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O SixteeN ouve o microfone só durante a cena de soprar o cartucho, quando a opção "Soprar no microfone" está ligada. Nada é gravado.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Personal, non-commercial project.</string>
 </dict>

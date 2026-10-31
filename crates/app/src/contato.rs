@@ -473,6 +473,79 @@ impl Blow {
     }
 }
 
+/// Sente o sopro no microfone: sopro em cima do microfone é um "vento"
+/// alto e contínuo — bem acima do ruído do ambiente por um tempinho. O
+/// piso de ruído se adapta (o chiado da TV, o ventilador do Deck), e o
+/// sopro segura um pouco depois de cair, para não piscar entre lufadas.
+#[derive(Debug, Default)]
+pub(crate) struct MicBlow {
+    floor: f32,
+    heard: f32,
+    above: f32,
+    hold: f32,
+    on: bool,
+    /// 0..1 — o nível para a barrinha "MIC".
+    pub(crate) level: f32,
+}
+
+impl MicBlow {
+    /// Janela de análise, em segundos.
+    const WINDOW: f32 = 0.01;
+    /// O sopro precisa durar isso acima do limiar para contar.
+    const ATTACK: f32 = 0.08;
+    /// E segura isso depois de cair.
+    const RELEASE: f32 = 0.15;
+    /// O tempo inicial em que só se mede o ambiente.
+    const WARMUP: f32 = 0.3;
+
+    pub(crate) fn feed(&mut self, samples: &[i16], rate: u32) {
+        let win = ((rate as f32 * Self::WINDOW) as usize).max(1);
+        for chunk in samples.chunks(win) {
+            let rms = (chunk
+                .iter()
+                .map(|&v| {
+                    let f = v as f32 / 32768.0;
+                    f * f
+                })
+                .sum::<f32>()
+                / chunk.len() as f32)
+                .sqrt();
+            let dt = chunk.len() as f32 / rate as f32;
+            if self.heard < Self::WARMUP {
+                self.heard += dt;
+                self.floor = self.floor.max(rms * 0.5) * 0.7 + rms * 0.3;
+                continue;
+            }
+            let thr = (self.floor * 4.0).max(0.05);
+            if rms > thr {
+                self.above += dt;
+                if self.above >= Self::ATTACK {
+                    self.on = true;
+                    self.hold = Self::RELEASE;
+                }
+            } else {
+                self.above = 0.0;
+                if rms < thr * 0.7 {
+                    self.hold -= dt;
+                    if self.hold <= 0.0 {
+                        self.on = false;
+                    }
+                }
+            }
+            if !self.on && rms < thr {
+                // Só o ambiente ajusta o piso — devagar, e com teto.
+                self.floor = (self.floor * 0.995 + rms * 0.005).min(0.08);
+            }
+            let target = (rms / (thr * 2.0)).min(1.0);
+            self.level += (target - self.level) * 0.3;
+        }
+    }
+
+    pub(crate) fn blowing(&self) -> bool {
+        self.on
+    }
+}
+
 /// A cena do sopro, depois de ejetar um cartucho que falhou: o cartucho
 /// voa para a frente da TV com os contatos para quem joga, segurar o clique
 /// (ou Y/B) sopra, e "Inserir de novo"/"Guardar na estante" encerram.
@@ -482,6 +555,7 @@ pub(crate) fn blow_ritual(
     input: &mut Input,
     keymap: &KeyMap,
     title: &str,
+    use_mic: bool,
 ) -> RitualExit {
     const FLY_IN: f32 = 0.9;
     const FLY_OUT: f32 = 0.6;
@@ -496,6 +570,19 @@ pub(crate) fn blow_ritual(
     let mut noise = Rng::seeded();
     let mut lp = 0.0f32;
     cab.set_cartridge_motion(Some((1.0, true)));
+    // O microfone só abre aqui, durante a cena, e só com a opção ligada.
+    let mut mic = if use_mic {
+        match plat.open_mic(16_000) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                log::warn!("microfone indisponível: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let mut mic_blow = MicBlow::default();
 
     loop {
         let now = Instant::now();
@@ -543,7 +630,13 @@ pub(crate) fn blow_ritual(
             let (ox, oy) = cab.window_to_output(x, y);
             cab.hit_screen_point(ox, oy).is_some() && cab.hit_blow_button(ox, oy).is_none()
         });
-        let holding = leaving.is_none() && (mouse || held(PadButton::Y) || held(PadButton::B));
+        if let Some(m) = &mut mic {
+            let rate = m.rate;
+            mic_blow.feed(m.read(), rate);
+            blow.scene.mic = Some(mic_blow.level);
+        }
+        let by_hand = mouse || held(PadButton::Y) || held(PadButton::B);
+        let holding = leaving.is_none() && (by_hand || mic_blow.blowing());
 
         match leaving {
             None => {
@@ -573,7 +666,9 @@ pub(crate) fn blow_ritual(
 
         // O "ffff": ruído passado num passa-baixa, só enquanto sopra.
         if let Some(a) = &audio {
-            if blow.scene.blowing && cab.tv_on() && cab.volume() > 0 {
+            // Soprando no microfone o som é o seu: o "ffff" sintetizado
+            // ficaria realimentando o próprio microfone.
+            if blow.scene.blowing && by_hand && cab.tv_on() && cab.volume() > 0 {
                 if a.queued_frames() < 22_050 / 15 {
                     let n = 22_050 / 60;
                     let amp = 5200.0 * cab.volume() as f32 / 16.0;
@@ -616,11 +711,12 @@ pub(crate) fn debug_shots(
     }
     cab.set_cartridge_motion(Some((1.0, true)));
     let mut blow = Blow::new(title);
-    let shots: [(&str, f32, f32, bool); 6] = [
+    let shots: [(&str, f32, f32, bool); 7] = [
         ("sopro_0_subindo", 0.25, 0.0, false),
         ("sopro_1_virando", 0.6, 0.0, false),
         ("sopro_2_sujo", 1.0, 0.0, false),
         ("sopro_3_soprando", 1.0, 1.2, true),
+        ("sopro_3b_microfone", 1.0, 0.3, true),
         ("sopro_4_sem_folego", 1.0, 1.0, true),
         ("sopro_5_limpo", 1.0, 3.0, true),
     ];
@@ -632,6 +728,7 @@ pub(crate) fn debug_shots(
             let hold = holding && !(name == "sopro_5_limpo" && (i / 50) % 2 == 1);
             blow.step(1.0 / 60.0, hold);
         }
+        blow.scene.mic = (name == "sopro_3b_microfone").then_some(0.7);
         if name == "sopro_5_limpo" {
             blow.scene.clean = 1.0;
             blow.scene.fog = 0.0;
@@ -711,6 +808,41 @@ mod tests {
         let before = b.scene.clean;
         b.step(1.0 / 60.0, true);
         assert_eq!(b.scene.clean, before, "sem fôlego não limpa");
+    }
+
+    fn tone(rate: u32, secs: f32, amp: f32, noise: bool) -> Vec<i16> {
+        let mut rng = Rng(777);
+        (0..(rate as f32 * secs) as usize)
+            .map(|i| {
+                let v = if noise {
+                    rng.next_f32() * 2.0 - 1.0
+                } else {
+                    (i as f32 * 0.05).sin()
+                };
+                (v * amp * 32767.0) as i16
+            })
+            .collect()
+    }
+
+    #[test]
+    fn mic_hears_a_blow_over_room_noise_and_lets_go() {
+        let mut m = MicBlow::default();
+        m.feed(&tone(16_000, 0.6, 0.01, true), 16_000);
+        assert!(!m.blowing(), "o ambiente não é sopro");
+        m.feed(&tone(16_000, 0.3, 0.5, true), 16_000);
+        assert!(m.blowing(), "o vento do sopro conta");
+        assert!(m.level > 0.5);
+        m.feed(&tone(16_000, 0.4, 0.01, true), 16_000);
+        assert!(!m.blowing(), "parou de soprar, solta");
+    }
+
+    #[test]
+    fn mic_ignores_a_short_click() {
+        let mut m = MicBlow::default();
+        m.feed(&tone(16_000, 0.6, 0.01, true), 16_000);
+        m.feed(&tone(16_000, 0.03, 0.8, true), 16_000);
+        m.feed(&tone(16_000, 0.05, 0.01, true), 16_000);
+        assert!(!m.blowing(), "um estalo não é sopro");
     }
 
     #[test]

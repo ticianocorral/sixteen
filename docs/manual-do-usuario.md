@@ -275,6 +275,14 @@ resolver, faça o ritual:
    e pino embaçado encaixa pior. Sopros curtos funcionam melhor.
 4. Clique em **Inserir de novo** (ou **A**/**Start**) e ligue.
 
+**Soprando de verdade:** ligue **Configurações → jogo → Soprar no
+microfone** e sopre no microfone do aparelho — no Steam Deck e no ROG Ally
+o microfone fica na própria carcaça, então é só soprar no portátil. Uma
+barrinha **MIC** mostra o que ele está ouvindo; o clique e o Y/B continuam
+valendo. O microfone só é aberto durante a cena do sopro e nada é gravado.
+No macOS o sistema pede permissão na primeira vez; sem microfone (ou sem
+permissão), a cena funciona só com o clique.
+
 Desligar e ligar de novo, sem ejetar, às vezes também resolve. Se
 preferir desistir, **Guardar na estante** (ou **Select**) tira o cartucho
 como o EJETAR de sempre.
@@ -420,6 +428,9 @@ cinco seções na coluna; tudo é salvo na hora.
 - **Mau contato do cartucho** — *desligado* (padrão), *raro* ou *anos 90*:
   a chance de o primeiro POWER não subir o jogo até você soprar o cartucho
   (veja [Mau contato](#mau-contato-soprar-o-cartucho)).
+- **Soprar no microfone** — *desligado* (padrão) ou *ligado*: na cena do
+  sopro, soprar no microfone de verdade limpa os contatos (Steam Deck, ROG
+  Ally, notebook).
 
 ### vídeo
 - **Tela cheia** — liga/desliga o modo tela cheia (padrão: ligada).

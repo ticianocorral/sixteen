@@ -2016,6 +2016,7 @@ pub fn run_game(
                             &mut input,
                             &cfg.keymap,
                             &title,
+                            cfg.blow_mic,
                         ) {
                             crate::contato::RitualExit::Reinsert { clean, fog } => {
                                 contact.reinserted(clean, fog);

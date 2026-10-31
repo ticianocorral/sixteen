@@ -66,7 +66,7 @@ const RA_ROW_SENHA: usize = 2;
 
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
-        SEC_JOGO => 2,
+        SEC_JOGO => 3,
         // tela cheia / chiado / estante
         SEC_VIDEO => 3,
         // núcleo / checar updates / idioma / renomear ROMs
@@ -484,8 +484,10 @@ fn activate_row(
             if i == 0 {
                 *sec = SEC_CONTROLES;
                 *sel = 0;
-            } else {
+            } else if i == 1 {
                 cfg.bad_contact = cfg.bad_contact.cycle();
+            } else {
+                cfg.blow_mic = !cfg.blow_mic;
             }
         }
         SEC_VIDEO => match i {
@@ -560,6 +562,9 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _righ
     match (sec, sel) {
         (SEC_JOGO, 1) => {
             cfg.bad_contact = cfg.bad_contact.cycle();
+        }
+        (SEC_JOGO, 2) => {
+            cfg.blow_mic = !cfg.blow_mic;
         }
         (SEC_VIDEO, 0) => {
             cfg.fullscreen = !cfg.fullscreen;
@@ -778,6 +783,20 @@ fn draw_jogo(d: &mut Screen, cfg: &Config, sel: usize) {
             format!(
                 "Mau contato do cartucho: {}",
                 bad_contact_name(cfg.bad_contact)
+            ),
+        ),
+        tr!(
+            format!(
+                "Blow into the microphone: {}",
+                if cfg.blow_mic {
+                    tr!("on", "ligado")
+                } else {
+                    tr!("off", "desligado")
+                }
+            ),
+            format!(
+                "Soprar no microfone: {}",
+                if cfg.blow_mic { "ligado" } else { "desligado" }
             ),
         ),
     ];
