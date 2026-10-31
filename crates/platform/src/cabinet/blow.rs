@@ -53,10 +53,9 @@ pub enum BlowButton {
 }
 
 const PLASTIC: (u8, u8, u8) = (150, 148, 140);
-const PLASTIC_DARK: (u8, u8, u8) = (104, 102, 96);
 const PIN_DIRTY: (f32, f32, f32) = (112.0, 86.0, 46.0);
 const PIN_CLEAN: (f32, f32, f32) = (236.0, 190.0, 82.0);
-const PINS: i32 = 31;
+const PINS: i32 = 34;
 
 fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
@@ -295,38 +294,73 @@ pub(super) fn draw_blow_scene(
         return Vec::new();
     }
 
-    // A borda de baixo: o plástico (mais claro perto da quina, que pega a
-    // luz), a fenda escura e, lá dentro, a ponta da placa verde com os
-    // contatos dourados finos.
-    let bottom = |x0: f32, x1: f32, z0: f32, z1: f32| {
+    // A borda de baixo, como a de um cartucho de verdade: o plástico vira
+    // quase só moldura em volta de uma abertura larga; lá dentro, a parede
+    // do fundo, a ponta da placa recuada e os contatos em três grupos
+    // (curto | longo | curto), com as guias de plástico que encaixam no
+    // console entre eles; e os recortes nas duas quinas.
+    let at = |x0: f32, x1: f32, y: f32, z0: f32, z1: f32| {
         [
-            proj(x0, hh, z0),
-            proj(x1, hh, z0),
-            proj(x1, hh, z1),
-            proj(x0, hh, z1),
+            proj(x0, y, z0),
+            proj(x1, y, z0),
+            proj(x1, y, z1),
+            proj(x0, y, z1),
         ]
     };
+    let bottom = |x0: f32, x1: f32, z0: f32, z1: f32| at(x0, x1, hh, z0, z1);
     quad(
         canvas,
         bottom(-hw, hw, 0.0, -cart_d),
         [
-            fcolor((170, 168, 160), 1.0),
-            fcolor((170, 168, 160), 1.0),
-            fcolor(PLASTIC_DARK, 1.0),
-            fcolor(PLASTIC_DARK, 1.0),
+            fcolor((178, 176, 170), 1.0),
+            fcolor((178, 176, 170), 1.0),
+            fcolor((128, 126, 120), 1.0),
+            fcolor((128, 126, 120), 1.0),
         ],
     );
-    let (slot_x, slot_z0, slot_z1) = (hw * 0.86, -cart_d * 0.2, -cart_d * 0.8);
+    // Os recortes das quinas.
+    for side in [-1.0f32, 1.0] {
+        let (x0, x1) = if side < 0.0 {
+            (-hw, -hw + 5.0)
+        } else {
+            (hw - 5.0, hw)
+        };
+        quad(
+            canvas,
+            bottom(x0, x1, -cart_d * 0.25, -cart_d * 0.75),
+            [fcolor((24, 23, 26), 1.0); 4],
+        );
+    }
+    let (slot_x, slot_z0, slot_z1) = (hw * 0.8, -cart_d * 0.14, -cart_d * 0.86);
     quad(
         canvas,
         bottom(-slot_x, slot_x, slot_z0, slot_z1),
-        [fcolor((12, 11, 14), 1.0); 4],
+        [fcolor((14, 13, 16), 1.0); 4],
     );
-    let (pcb_x, pcb_z0, pcb_z1) = (hw * 0.82, -cart_d * 0.32, -cart_d * 0.68);
+    // A parede do fundo da abertura, subindo para dentro do cartucho.
+    let wall = 7.0;
     quad(
         canvas,
-        bottom(-pcb_x, pcb_x, pcb_z0, pcb_z1),
-        [fcolor((30, 70, 44), 1.0); 4],
+        [
+            proj(-slot_x, hh, slot_z1),
+            proj(slot_x, hh, slot_z1),
+            proj(slot_x, hh - wall, slot_z1),
+            proj(-slot_x, hh - wall, slot_z1),
+        ],
+        [
+            fcolor((70, 68, 66), 1.0),
+            fcolor((70, 68, 66), 1.0),
+            fcolor((22, 21, 24), 1.0),
+            fcolor((22, 21, 24), 1.0),
+        ],
+    );
+    // A placa, recuada uns milímetros, vista por cima.
+    let pcb_y = hh - 2.5;
+    let (pcb_x, pcb_z0, pcb_z1) = (hw * 0.76, -cart_d * 0.3, -cart_d * 0.7);
+    quad(
+        canvas,
+        at(-pcb_x, pcb_x, pcb_y, pcb_z0, pcb_z1),
+        [fcolor((46, 66, 42), 1.0); 4],
     );
 
     let clean = scene.clean.clamp(0.0, 1.0);
@@ -335,30 +369,50 @@ pub(super) fn draw_blow_scene(
         lerp(PIN_DIRTY.1, PIN_CLEAN.1, clean),
         lerp(PIN_DIRTY.2, PIN_CLEAN.2, clean),
     );
-    let span = pcb_x * 2.0 * 0.96;
-    let pitch = span / PINS as f32;
-    // Limpos de vez: um brilho corre pelos contatos.
+    // Os grupos: 4 | 26 | 4 contatos, com uma guia em cada vão.
+    const GROUPS: [i32; 3] = [4, 26, 4];
+    const GAP: f32 = 3.0;
+    let span = pcb_x * 2.0 * 0.97;
+    let total = GROUPS.iter().sum::<i32>() as f32 + GAP * 2.0;
+    let pitch = span / total;
     let sparkle = (clean > 0.97).then(|| ((scene.time * 14.0) as i32).rem_euclid(PINS + 12));
-    for i in 0..PINS {
-        let x0 = -span / 2.0 + pitch * (i as f32 + 0.25);
-        let x1 = x0 + pitch * 0.5;
-        // A sujeira é oxidação: uns contatos bem mais escuros que outros,
-        // clareando com a limpeza.
-        let h = (i as u32).wrapping_mul(2_654_435_761) >> 16;
-        let grime = (1.0 - clean) * if h.is_multiple_of(3) { 0.75 } else { 0.25 };
-        let mut c = (
-            lerp(pin.0, 64.0, grime) as u8,
-            lerp(pin.1, 52.0, grime) as u8,
-            lerp(pin.2, 36.0, grime) as u8,
-        );
-        if sparkle == Some(i) {
-            c = (255, 246, 200);
+    let mut slot_i = 0.0f32;
+    let mut i = 0i32;
+    for (g, n) in GROUPS.iter().enumerate() {
+        if g > 0 {
+            // A guia de plástico no vão, em pé na abertura.
+            let gx0 = -span / 2.0 + pitch * (slot_i + 0.8);
+            let gx1 = gx0 + pitch * (GAP - 1.6);
+            quad(
+                canvas,
+                at(gx0, gx1, hh - 1.0, pcb_z0 + 1.0, pcb_z1 - 1.0),
+                [fcolor((98, 96, 90), 1.0); 4],
+            );
+            slot_i += GAP;
         }
-        quad(
-            canvas,
-            bottom(x0, x1, pcb_z0 - cart_d * 0.02, pcb_z1 + cart_d * 0.02),
-            [fcolor(c, 1.0); 4],
-        );
+        for _ in 0..*n {
+            let x0 = -span / 2.0 + pitch * (slot_i + 0.2);
+            let x1 = x0 + pitch * 0.6;
+            // A sujeira é oxidação: uns contatos bem mais escuros que
+            // outros, clareando com a limpeza.
+            let h = (i as u32).wrapping_mul(2_654_435_761) >> 16;
+            let grime = (1.0 - clean) * if h.is_multiple_of(3) { 0.75 } else { 0.25 };
+            let mut c = (
+                lerp(pin.0, 64.0, grime) as u8,
+                lerp(pin.1, 52.0, grime) as u8,
+                lerp(pin.2, 36.0, grime) as u8,
+            );
+            if sparkle == Some(i) {
+                c = (255, 246, 200);
+            }
+            quad(
+                canvas,
+                at(x0, x1, pcb_y, pcb_z0 + 0.5, pcb_z1 - 0.5),
+                [fcolor(c, 1.0); 4],
+            );
+            slot_i += 1.0;
+            i += 1;
+        }
     }
     if scene.fog > 0.0 {
         quad(
