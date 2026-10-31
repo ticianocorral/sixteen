@@ -1244,14 +1244,24 @@ fn preview_modal(
 /// 0..16, 8 = padrão). TV desligada com o jogo rodando: o jogo segue SEM
 /// som pelo alto-falante dela — a fila morre na hora (o corte, não o fade,
 /// é a mesma regra do hiss); ao religar, o áudio volta no tempo do jogo.
+/// No canal 4 o som vem como a imagem: abafado, com chiado e o zumbido do
+/// vertical ([`RfAudio`](sixteen_platform::RfAudio)).
 fn queue_game_audio(
     audio: &sixteen_platform::AudioOut,
     cab: &Cabinet,
     samples: &[i16],
     vol_buf: &mut Vec<i16>,
+    rf: &mut sixteen_platform::RfAudio,
 ) {
     if !cab.tv_on() {
         audio.clear();
+        return;
+    }
+    if let Some(signal) = cab.ch4_signal() {
+        if cab.volume() > 0 {
+            rf.process(samples, audio.source_rate, signal, cab.volume(), vol_buf);
+            audio.queue(vol_buf);
+        }
         return;
     }
     let vol = cab.volume() as i32;
@@ -1620,6 +1630,7 @@ pub fn run_game(
     // fresh Vec every frame (the default volume of 8 always takes this
     // path, so it used to allocate ~2–4 KB at 60 Hz).
     let mut vol_buf: Vec<i16> = Vec::new();
+    let mut rf_audio = sixteen_platform::RfAudio::default();
 
     // Run-ahead: only if the core actually serializes; hardcore also rules
     // it out (a speculative frame would validate a hit the rewind undoes).
@@ -2334,7 +2345,7 @@ pub fn run_game(
                 note_request = Some(note_slot);
             }
             if audio.queued_frames() < audio_cap {
-                queue_game_audio(&audio, cab, core.audio(), &mut vol_buf);
+                queue_game_audio(&audio, cab, core.audio(), &mut vol_buf, &mut rf_audio);
             }
 
             // Earned do servidor chegando: une no set da sessão (memória e

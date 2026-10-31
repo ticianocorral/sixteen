@@ -29,7 +29,10 @@ mod geometry;
 mod panel;
 mod panel_art;
 mod pause;
+mod rf;
 mod text;
+
+pub use rf::RfAudio;
 
 use chin::*;
 use chrome::*;
@@ -328,6 +331,8 @@ pub struct Cabinet {
     /// `update_noise_tex` caps regeneration at ~30Hz.
     noise_stamp: Option<(std::time::Instant, f32)>,
     rng: u32,
+    /// O sinal do canal 4 (rolagem, rasgos, quedas) entre quadros.
+    rf: rf::RfDetune,
     /// 128 glyphs laid out horizontally, white on transparent (2D path).
     font: Texture,
     images: HashMap<u64, ImgTex>,
@@ -1284,6 +1289,7 @@ impl Cabinet {
             noise: Vec::new(),
             noise_stamp: None,
             rng: 0x9E37_79B9,
+            rf: rf::RfDetune::new(),
             font,
             images: HashMap::new(),
             screen: screen_area(canvas_rect.width(), canvas_rect.height()),
@@ -2100,7 +2106,6 @@ impl Cabinet {
 
     /// Draw one frame to the window. `aspect_ratio <= 0` means "use 4:3".
     pub fn present_frame(&mut self, frame: &FrameRef, aspect_ratio: f32) {
-        self.ensure_src(frame.width, frame.height, frame.format);
         self.upload(frame);
 
         let (real_w, real_h) = self
@@ -2137,14 +2142,6 @@ impl Cabinet {
             let _ = self
                 .canvas
                 .render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
-            // A interferência do canal 4 (plan revision: "no canal 4, uma
-            // interferência na imagem, igual acontecia de verdade") — o
-            // sinal do canal errado: estático picado + a barra de hum
-            // rolando por cima da imagem. No canal 3, nada.
-            if self.tv_on() && self.tv_channel == 4 {
-                let specks = self.ch4_specks(dst);
-                draw_ch4_layer(&mut self.canvas, dst, &specks);
-            }
         }
         // A máscara da fase por cima do que ficou no vidro (mesma do
         // estático: faixas mortas, borda âmbar, ponto do afterglow, vidro
@@ -2239,7 +2236,6 @@ impl Cabinet {
         aspect_ratio: f32,
         path: &std::path::Path,
     ) -> Result<(), PlatformError> {
-        self.ensure_src(frame.width, frame.height, frame.format);
         self.upload(frame);
 
         let (real_w, real_h) = self
@@ -2265,10 +2261,6 @@ impl Cabinet {
         let src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
-        // A interferência do canal 4 na captura também — o BMP bate com o
-        // que a janela real mostra. Pré-computado antes dos empréstimos
-        // imutáveis que a closure captura.
-        let ch4_specks = self.ch4_specks_for_capture(screen);
         self.ensure_brand_logo();
         let panel_info = self.panel.as_ref();
         let session = self.session;
@@ -2288,10 +2280,6 @@ impl Cabinet {
         // janela real mostraria neste instante do começo do sinal.
         let ch3_show = tv_on && self.ch3_until.is_some_and(|until| Instant::now() < until);
         let ch_label = self.ch_osd_label();
-        // A interferência do canal 4 na captura também — o BMP bate com o
-        // que a janela real mostra (o estático picado é pré-computado, a
-        // closure não pode tocar em `self`).
-        let ch4 = tv_on && self.tv_channel == 4;
         let font = &mut self.font;
         let images = &self.images;
         let nameplate = self.nameplate.as_str();
@@ -2307,9 +2295,6 @@ impl Cabinet {
             // vivo faz no gameplay).
             if !matches!(phase, TvPhase::Dead) {
                 let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
-                if ch4 {
-                    draw_ch4_layer(c, screen, &ch4_specks);
-                }
             }
             draw_tv_glass_phase(c, screen, &phase);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
@@ -2372,7 +2357,26 @@ impl Cabinet {
         saved
     }
 
+    /// Sobe o quadro do core para a textura do tubo. No canal 4 o quadro
+    /// passa antes pelo sinal degradado ([`rf::RfDetune`]) — a janela e as
+    /// capturas usam este mesmo caminho, então batem.
     fn upload(&mut self, frame: &FrameRef) {
+        if self.tv_on() && self.tv_channel == 4 {
+            self.rf.process(
+                frame.pixels,
+                frame.width,
+                frame.height,
+                frame.pitch,
+                frame.format,
+            );
+            self.ensure_src(frame.width, frame.height, PixelFormat::Xrgb8888);
+            let src = self.src.as_mut().unwrap();
+            src.tex
+                .update(None, &self.rf.out, frame.width as usize * 4)
+                .expect("upload frame");
+            return;
+        }
+        self.ensure_src(frame.width, frame.height, frame.format);
         let expected_pitch = frame.width as usize * frame.format.bytes_per_pixel();
         let src = self.src.as_mut().unwrap();
         let pitch = if frame.pitch == 0 {
@@ -2383,6 +2387,12 @@ impl Cabinet {
         src.tex
             .update(None, frame.pixels, pitch)
             .expect("upload frame");
+    }
+
+    /// A força do sinal no canal 4 (0..1), para o áudio acompanhar a
+    /// imagem; `None` no canal 3 ou com a TV desligada.
+    pub fn ch4_signal(&self) -> Option<f32> {
+        (self.tv_on() && self.tv_channel == 4).then(|| self.rf.signal())
     }
 
     fn ensure_src(&mut self, w: u32, h: u32, format: PixelFormat) {
@@ -2881,35 +2891,6 @@ impl Cabinet {
 
     /// O OSD das barrinhas de volume (plan revision: "mostrando no CRT as
     /// barrinhas de volume retro quando aumenta e diminui") — segmentos
-    /// Os componentes da interferência do canal 4, pré-computados — as
-    /// passadas de captura (a closure do BMP) não podem tocar em `self`.
-    fn ch4_specks(&mut self, screen: Rect) -> Vec<(i32, i32, bool)> {
-        let mut specks = Vec::new();
-        if screen.width() == 0 || screen.height() == 0 {
-            return specks;
-        }
-        let n = ((screen.width() as u64 * screen.height() as u64) / 1400).max(60);
-        for _ in 0..n {
-            self.rng ^= self.rng << 13;
-            self.rng ^= self.rng >> 7;
-            self.rng ^= self.rng << 17;
-            let x = screen.x() + ((self.rng as u64) % (screen.width() as u64)) as i32;
-            let y = screen.y() + (((self.rng as u64) >> 16) % (screen.height() as u64)) as i32;
-            specks.push((x, y, self.rng & 1 == 0));
-        }
-        specks
-    }
-
-    /// A variante da captura: vazio a menos que a TV esteja ligada no
-    /// canal 4 — a decisão toda num lugar só, antes dos empréstimos.
-    fn ch4_specks_for_capture(&mut self, screen: Rect) -> Vec<(i32, i32, bool)> {
-        if self.tv_on() && self.tv_channel == 4 {
-            self.ch4_specks(screen)
-        } else {
-            Vec::new()
-        }
-    }
-
     /// As dimensões da imagem registrada sob `id` — o input do leitor
     /// usa para centralizar o zoom onde o usuário clicou.
     pub fn image_size(&self, id: u64) -> Option<(u32, u32)> {
