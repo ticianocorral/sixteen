@@ -1,6 +1,6 @@
 # SixteeN — Manual do Usuário
 
-*Compatível com a versão 1.1.x do app. Última atualização deste manual: 01/10/2026.*
+*Compatível com a versão 1.6.x do app. Última atualização deste manual: 31/10/2026.*
 
 Bem-vindo! Este manual explica, passo a passo e sem termos técnicos, como
 usar o SixteeN: um console de Super Nintendo inteiro desenhado na
@@ -147,7 +147,16 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
 - **"Estante de games"** — o botão principal, na altura do slot. Abre a
   estante para escolher um jogo (é o equivalente a pegar um cartucho na
   estante).
+- **"Manual do console"** — logo acima de Configurações: abre no tubo o
+  manual do próprio SixteeN (10 páginas, no idioma da interface). As setas
+  ou os botões **< página**/**página >** folheiam; **voltar** fecha.
 - **"Configurações"** — no pé do painel.
+- Os **controles da TV** no queixo: **POWER** liga e desliga o tubo,
+  **VOL –/+** muda o volume e **CH 3-4** troca o canal. O console sai no
+  canal 3; no **canal 4** a TV pega só a borda do sinal, como no canal
+  vizinho do modulador de verdade — imagem fraca e com neve, cor sumindo,
+  a imagem rolando de vez em quando e o som abafado. Dá para jogar assim,
+  se quiser a nostalgia completa.
 - O **nome do console** no queixo da TV, com a versão do app e do núcleo.
   **Setas verdes** acendem ao lado quando existe atualização do app ou do
   núcleo — clique nelas para atualizar (veja a [seção 13](#13-atualizações)).
@@ -288,10 +297,10 @@ Desligar e ligar de novo, sem ejetar, às vezes também resolve. Se
 preferir desistir, **Guardar na estante** (ou **Select**) tira o cartucho
 como o EJETAR de sempre.
 
-Para não irritar: só o primeiro POWER depois de inserir pode falhar (retomar
-com POWER nunca falha), nunca há mais de **duas falhas seguidas**, e o seu
-save não é tocado — durante a falha o jogo não conta tempo, não salva e
-não ganha conquistas.
+Para não irritar: a falha só acontece até o jogo subir uma vez — depois
+de um boot bom, desligar e religar com POWER nunca falha —, nunca há mais
+de **duas falhas seguidas**, e o seu save não é tocado: durante a falha o
+jogo não conta tempo, não salva e não ganha conquistas.
 
 ---
 

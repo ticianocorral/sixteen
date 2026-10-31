@@ -7,31 +7,59 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
-## [Não lançado]
+## [1.6.0] - 2026-10-31
 
 ### Adicionado
 - **Mau contato: soprar o cartucho** (opcional, desligado por padrão) — em
   Configurações → jogo → Mau contato do cartucho (*raro* ≈ 1 em 15, *anos
   90* ≈ 1 em 5; `bad_contact = "off" | "rare" | "90s"` no `sixteen.cfg`).
-  Um encaixe ruim faz o primeiro POWER cair numa falha — tela preta com
-  zumbido, lixo de tiles feito dos bytes da própria ROM, abertura travada
-  com o som em loop, ou o jogo rodando com os gráficos embaralhados — um
-  "pino de dados" grudado corrompendo a VRAM de verdade — até travar.
-  Desligar, ejetar e o cartucho vem
-  para a frente da TV com os contatos virados: segurar o clique (ou Y/B)
-  sopra a poeira e doura os pinos, com barra de fôlego (soprar demais
-  embaça os pinos). Nunca mais de duas falhas seguidas, retomar com POWER
-  nunca falha e a SRAM do disco volta ao core ao sair da falha — o save
-  nunca é tocado. `SIXTEEN_MAU_CONTATO=1` força o primeiro encaixe ruim
-  (testes); `emu-run --debug-blow DIR` captura as telas em BMP.
+  Um encaixe ruim faz o POWER cair numa falha: tela preta com zumbido,
+  lixo de tiles feito dos bytes da própria ROM, abertura travada com o som
+  em loop, ou o jogo rodando com os gráficos embaralhados (um "pino de
+  dados" grudado corrompendo a VRAM de verdade) até travar. Desligar e
+  ejetar traz o cartucho para a frente da TV, em 3D, com a placa e os
+  contatos à vista: segurar o clique (ou Y/B) sopra a poeira e doura os
+  contatos, com barra de fôlego (soprar demais embaça os pinos). Desligar
+  e religar às vezes resolve sozinho. Nunca mais de duas falhas seguidas,
+  depois de um boot bom nunca falha, e a SRAM do encaixe volta ao core ao
+  sair da falha — o save nunca é tocado. `SIXTEEN_MAU_CONTATO=1` força o
+  primeiro encaixe ruim (testes); `emu-run --debug-blow DIR` captura as
+  telas em BMP.
 - **Soprar no microfone** (opcional, desligado por padrão) — Configurações
   → jogo → Soprar no microfone (`blow_mic = true`): na cena do sopro, o
   sopro de verdade no microfone limpa os contatos — no Steam Deck e no ROG
   Ally é soprar no próprio portátil. O detector separa o vento contínuo do
-  sopro do ruído do ambiente (piso adaptativo) e de estalos curtos; uma
-  barrinha MIC mostra o nível. O microfone só abre durante a cena e nada é
-  gravado; o "ffff" sintetizado fica mudo quando é o microfone que sopra
+  sopro do ruído do ambiente (piso adaptativo, com teto) e de estalos
+  curtos; uma barrinha MIC mostra o nível. O microfone só abre durante a
+  cena e nada é gravado; com ele aberto o "ffff" sintetizado fica mudo
   (não realimenta). macOS: `NSMicrophoneUsageDescription` no Info.plist.
+- **Manual do console** — botão na tela inicial, acima de Configurações:
+  o manual do SixteeN (10 páginas, pt-BR e inglês, embutido no binário)
+  abre no tubo, no idioma da interface.
+- **Canal 4 de verdade** — no lugar dos pontinhos por cima da imagem, o
+  sinal do jogo é degradado antes do tubo, como a TV no canal vizinho do
+  modulador: sinal fraco com quedas, neve esticada e riscos brancos,
+  vertical no limite (com uma volta de vez em quando), linhas tremendo e
+  rasgos, fantasma, cor sumindo e batimento. O som acompanha: abafado, com
+  chiado e o zumbido de 60 Hz. Dá para jogar.
+
+### Alterado
+- **Ícone novo** — o cartucho de SNES que o app desenha no slot, com a
+  marca SixteeN na etiqueta (macOS, Windows, Linux e Flathub).
+
+### Desempenho
+- **Canal 4 mais leve** — a conversão para YIQ usa tabelas no lugar de
+  divisões, decodifica só a linha que o laço usa (em vez de três planos
+  do quadro inteiro, ~1,6 MB por quadro) e pula a croma quando o color
+  killer está ligado.
+- **Cena do sopro sem alocação por quadro** — a arte do cartucho vai numa
+  chamada de desenho só (era uma por célula da grade) e as faces e os
+  contatos usam arrays fixos; os botões e o som do sopro reaproveitam os
+  buffers.
+- **Falhas de mau contato** — o som travado e o zumbido não copiam nem
+  alocam por quadro.
+- **Manual do console** — o PDF não é regravado a cada abertura e as
+  páginas que já estão em textura não são renderizadas de novo.
 
 ## [1.5.0] - 2026-10-30
 
