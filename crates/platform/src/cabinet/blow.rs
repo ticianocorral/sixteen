@@ -56,7 +56,7 @@ const PLASTIC: (u8, u8, u8) = (150, 148, 140);
 const PLASTIC_DARK: (u8, u8, u8) = (104, 102, 96);
 const PIN_DIRTY: (f32, f32, f32) = (112.0, 86.0, 46.0);
 const PIN_CLEAN: (f32, f32, f32) = (236.0, 190.0, 82.0);
-const PINS: i32 = 24;
+const PINS: i32 = 31;
 
 fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
@@ -89,6 +89,35 @@ fn quad(canvas: &mut WindowCanvas, pts: [(f32, f32); 4], colors: [FColor; 4]) {
         })
         .collect();
     let _ = canvas.render_geometry(&verts, None::<&Texture>, &[0, 1, 2, 0, 2, 3][..]);
+}
+
+/// Um quadrilátero com textura (`uv` normalizado), escurecido por `shade`.
+fn tex_quad(
+    canvas: &mut WindowCanvas,
+    tex: &Texture,
+    pts: [(f32, f32); 4],
+    uv: [(f32, f32); 4],
+    shade: f32,
+) {
+    let color = FColor::RGBA(shade, shade, shade, 1.0);
+    let verts: Vec<Vertex> = pts
+        .iter()
+        .zip(uv.iter())
+        .map(|(p, t)| Vertex {
+            position: sdl3::render::FPoint::new(p.0, p.1),
+            color,
+            tex_coord: sdl3::render::FPoint::new(t.0, t.1),
+        })
+        .collect();
+    let _ = canvas.render_geometry(&verts, Some(tex), &[0, 1, 2, 0, 2, 3][..]);
+}
+
+fn scale_color(c: (u8, u8, u8), k: f32) -> (u8, u8, u8) {
+    (
+        (c.0 as f32 * k) as u8,
+        (c.1 as f32 * k) as u8,
+        (c.2 as f32 * k) as u8,
+    )
 }
 
 fn fill_rgba(canvas: &mut WindowCanvas, x: i32, y: i32, w: u32, h: u32, c: (u8, u8, u8, u8)) {
@@ -151,7 +180,7 @@ pub(super) fn draw_blow_scene(
         panel.y() as f32 + 150.0,
         panel.width() as f32 * 0.62,
     );
-    let end = (sx + sw / 2.0, sy + sh * 0.44, (sw * 0.40).min(sh * 0.62));
+    let end = (sx + sw / 2.0, sy + sh * 0.44, (sw * 0.48).min(sh * 0.74));
     let shake = if scene.blowing && !scene.out_of_breath {
         (
             (scene.time * 61.0).sin() * 2.0,
@@ -164,8 +193,10 @@ pub(super) fn draw_blow_scene(
     let cy = lerp(start.1, end.1, e) + shake.1;
     let w = lerp(start.2, end.2, e);
 
-    // A frente: a arte do cartucho (só o conteúdo, sem a margem vazada) ou
-    // um cartucho cinza genérico com o nome do jogo na etiqueta.
+    // O cartucho em 3D de verdade, em milímetros: a frente W×H no plano
+    // z=0 e o corpo indo para trás até z=-D (um cartucho de SNES tem uns
+    // 12 × 2 cm de borda). Ele gira no eixo horizontal — a borda de baixo
+    // vem para quem joga — numa perspectiva suave.
     let art = images.get(&PANEL_CARTRIDGE_IMG);
     let front_aspect = art
         .map(|a| {
@@ -173,163 +204,175 @@ pub(super) fn draw_blow_scene(
             ch.max(1) as f32 / cw.max(1) as f32
         })
         .unwrap_or(0.72);
-    let front_h = w * front_aspect * (1.0 - 0.5 * pose);
-    let bottom_h = w * 0.30 * pose;
-    let top = cy - (front_h + bottom_h) / 2.0;
-    let left = cx - w / 2.0;
+    const CART_W: f32 = 120.0;
+    const CAM: f32 = 520.0;
+    let cart_h = CART_W * front_aspect;
+    let cart_d = CART_W * 0.18;
+    let (sin, cos) = (pose * 55f32.to_radians()).sin_cos();
+    let mm = w / CART_W;
+    let (hw, hh) = (CART_W / 2.0, cart_h / 2.0);
+    let proj = |x: f32, y: f32, z: f32| -> (f32, f32) {
+        // Gira em torno do meio do corpo.
+        let z = z + cart_d / 2.0;
+        let yr = y * cos - z * sin;
+        let zr = y * sin + z * cos;
+        let k = CAM / (CAM - zr);
+        (cx + x * k * mm, cy + yr * k * mm)
+    };
+    // A frente escurece um pouco ao tombar (sai da luz).
+    let shade = 1.0 - 0.28 * pose;
 
     match art {
         Some(a) => {
+            // Em faixas: a textura afim por triângulo entorta num trapézio
+            // grande; em fatias finas, a perspectiva fica limpa.
             let (ux, uy, uw, uh) = a.content;
-            let src = Rect::new(ux as i32, uy as i32, uw.max(1), uh.max(1));
-            let dst = sdl3::render::FRect::new(left, top, w, front_h);
-            let _ = canvas.copy(&a.tex, src, dst);
+            let (iw, ih) = (a.w.max(1) as f32, a.h.max(1) as f32);
+            let (u0, u1) = (ux as f32 / iw, (ux + uw) as f32 / iw);
+            const STRIPS: usize = 12;
+            for i in 0..STRIPS {
+                let (t0, t1) = (i as f32 / STRIPS as f32, (i + 1) as f32 / STRIPS as f32);
+                let (y0, y1) = (-hh + cart_h * t0, -hh + cart_h * t1);
+                let (v0, v1) = (
+                    (uy as f32 + uh as f32 * t0) / ih,
+                    (uy as f32 + uh as f32 * t1) / ih,
+                );
+                tex_quad(
+                    canvas,
+                    &a.tex,
+                    [
+                        proj(-hw, y0, 0.0),
+                        proj(hw, y0, 0.0),
+                        proj(hw, y1, 0.0),
+                        proj(-hw, y1, 0.0),
+                    ],
+                    [(u0, v0), (u1, v0), (u1, v1), (u0, v1)],
+                    shade,
+                );
+            }
         }
         None => {
-            let fh = front_h.max(1.0);
-            fill_rgba(
+            let plastic = scale_color(PLASTIC, shade);
+            quad(
                 canvas,
-                left as i32,
-                top as i32,
-                w as u32,
-                fh as u32,
-                (PLASTIC.0, PLASTIC.1, PLASTIC.2, 255),
+                [
+                    proj(-hw, -hh, 0.0),
+                    proj(hw, -hh, 0.0),
+                    proj(hw, hh, 0.0),
+                    proj(-hw, hh, 0.0),
+                ],
+                [fcolor(plastic, 1.0); 4],
             );
-            // As ranhuras laterais e a etiqueta.
-            for i in 0..3 {
-                let gy = top + fh * (0.12 + 0.1 * i as f32);
-                fill_rgba(
-                    canvas,
-                    left as i32,
-                    gy as i32,
-                    (w * 0.08) as u32,
-                    (fh * 0.05) as u32,
-                    (PLASTIC_DARK.0, PLASTIC_DARK.1, PLASTIC_DARK.2, 255),
-                );
-                fill_rgba(
-                    canvas,
-                    (left + w * 0.92) as i32,
-                    gy as i32,
-                    (w * 0.08) as u32,
-                    (fh * 0.05) as u32,
-                    (PLASTIC_DARK.0, PLASTIC_DARK.1, PLASTIC_DARK.2, 255),
-                );
-            }
-            let (lx, ly, lw, lh) = (left + w * 0.14, top + fh * 0.08, w * 0.72, fh * 0.62);
-            fill_rgba(
+            let label = scale_color((30, 28, 40), shade);
+            let (lx0, lx1, ly0, ly1) = (-hw * 0.72, hw * 0.72, -hh * 0.84, hh * 0.3);
+            quad(
                 canvas,
-                lx as i32,
-                ly as i32,
-                lw as u32,
-                lh as u32,
-                (30, 28, 40, 255),
+                [
+                    proj(lx0, ly0, 0.0),
+                    proj(lx1, ly0, 0.0),
+                    proj(lx1, ly1, 0.0),
+                    proj(lx0, ly1, 0.0),
+                ],
+                [fcolor(label, 1.0); 4],
             );
-            if lh > 20.0 {
-                let scale = if w > 260.0 { 2 } else { 1 };
-                let cols = ((lw - 12.0) / (GLYPH_W * scale) as f32).max(1.0) as usize;
-                let label: String = scene.title.chars().take(cols).collect();
-                osd_text_centered(
-                    canvas,
-                    font,
-                    (lx + lw / 2.0) as i32,
-                    (ly + lh / 2.0) as i32 - (GLYPH_H * scale) as i32 / 2,
-                    scale,
-                    (232, 200, 120),
-                    &label,
-                );
-            }
+            let (tx, ty) = proj(0.0, (ly0 + ly1) / 2.0, 0.0);
+            let scale = if w > 260.0 { 2 } else { 1 };
+            let cols = ((w * 0.66) / (GLYPH_W * scale) as f32).max(1.0) as usize;
+            let title: String = scene.title.chars().take(cols).collect();
+            osd_text_centered(
+                canvas,
+                font,
+                tx as i32,
+                ty as i32 - (GLYPH_H * scale) as i32 / 2,
+                scale,
+                (232, 200, 120),
+                &title,
+            );
         }
     }
 
-    if bottom_h < 2.0 {
+    if pose < 0.02 {
         return Vec::new();
     }
 
-    // A face de baixo: o plástico em perspectiva, a boca escura e os pinos.
-    let by = top + front_h;
-    let inset = w * 0.04;
+    // A borda de baixo: o plástico (mais claro perto da quina, que pega a
+    // luz), a fenda escura e, lá dentro, a ponta da placa verde com os
+    // contatos dourados finos.
+    let bottom = |x0: f32, x1: f32, z0: f32, z1: f32| {
+        [
+            proj(x0, hh, z0),
+            proj(x1, hh, z0),
+            proj(x1, hh, z1),
+            proj(x0, hh, z1),
+        ]
+    };
     quad(
         canvas,
+        bottom(-hw, hw, 0.0, -cart_d),
         [
-            (left, by),
-            (left + w, by),
-            (left + w - inset, by + bottom_h),
-            (left + inset, by + bottom_h),
-        ],
-        [
+            fcolor((170, 168, 160), 1.0),
+            fcolor((170, 168, 160), 1.0),
             fcolor(PLASTIC_DARK, 1.0),
             fcolor(PLASTIC_DARK, 1.0),
-            fcolor(PLASTIC, 1.0),
-            fcolor(PLASTIC, 1.0),
         ],
     );
-    let ox = left + w * 0.12;
-    let ow = w * 0.76;
-    let oy = by + bottom_h * 0.22;
-    let oh = bottom_h * 0.56;
-    fill_rgba(
+    let (slot_x, slot_z0, slot_z1) = (hw * 0.86, -cart_d * 0.2, -cart_d * 0.8);
+    quad(
         canvas,
-        ox as i32,
-        oy as i32,
-        ow as u32,
-        oh as u32,
-        (16, 15, 18, 255),
+        bottom(-slot_x, slot_x, slot_z0, slot_z1),
+        [fcolor((12, 11, 14), 1.0); 4],
+    );
+    let (pcb_x, pcb_z0, pcb_z1) = (hw * 0.82, -cart_d * 0.32, -cart_d * 0.68);
+    quad(
+        canvas,
+        bottom(-pcb_x, pcb_x, pcb_z0, pcb_z1),
+        [fcolor((30, 70, 44), 1.0); 4],
     );
 
     let clean = scene.clean.clamp(0.0, 1.0);
     let pin = (
-        lerp(PIN_DIRTY.0, PIN_CLEAN.0, clean) as u8,
-        lerp(PIN_DIRTY.1, PIN_CLEAN.1, clean) as u8,
-        lerp(PIN_DIRTY.2, PIN_CLEAN.2, clean) as u8,
+        lerp(PIN_DIRTY.0, PIN_CLEAN.0, clean),
+        lerp(PIN_DIRTY.1, PIN_CLEAN.1, clean),
+        lerp(PIN_DIRTY.2, PIN_CLEAN.2, clean),
     );
-    let pitch = ow / PINS as f32;
-    let pin_w = (pitch * 0.55).max(1.0);
-    let pin_h = oh * 0.78;
-    let pin_y = oy + oh * 0.11;
-    // Limpos de vez: um brilho corre pelos pinos.
-    let sparkle = (clean > 0.97).then(|| ((scene.time * 9.0) as i32).rem_euclid(PINS + 8));
+    let span = pcb_x * 2.0 * 0.96;
+    let pitch = span / PINS as f32;
+    // Limpos de vez: um brilho corre pelos contatos.
+    let sparkle = (clean > 0.97).then(|| ((scene.time * 14.0) as i32).rem_euclid(PINS + 12));
     for i in 0..PINS {
-        let px = ox + pitch * (i as f32 + 0.22);
-        let c = if sparkle == Some(i) {
-            (255, 246, 200)
-        } else {
-            pin
-        };
-        fill_rgba(
-            canvas,
-            px as i32,
-            pin_y as i32,
-            pin_w as u32,
-            pin_h as u32,
-            (c.0, c.1, c.2, 255),
-        );
-        // A sujeira: manchas fixas por pino, sumindo com a limpeza.
+        let x0 = -span / 2.0 + pitch * (i as f32 + 0.25);
+        let x1 = x0 + pitch * 0.5;
+        // A sujeira é oxidação: uns contatos bem mais escuros que outros,
+        // clareando com a limpeza.
         let h = (i as u32).wrapping_mul(2_654_435_761) >> 16;
-        if h % 5 < 2 {
-            let a = ((1.0 - clean) * 230.0) as u8;
-            let spot_y = pin_y + pin_h * (0.15 + (h % 7) as f32 * 0.09);
-            fill_rgba(
-                canvas,
-                (px - pin_w * 0.3) as i32,
-                spot_y as i32,
-                (pin_w * 1.6) as u32,
-                (pin_h * 0.22) as u32,
-                (66, 56, 44, a),
-            );
+        let grime = (1.0 - clean) * if h.is_multiple_of(3) { 0.75 } else { 0.25 };
+        let mut c = (
+            lerp(pin.0, 64.0, grime) as u8,
+            lerp(pin.1, 52.0, grime) as u8,
+            lerp(pin.2, 36.0, grime) as u8,
+        );
+        if sparkle == Some(i) {
+            c = (255, 246, 200);
         }
+        quad(
+            canvas,
+            bottom(x0, x1, pcb_z0 - cart_d * 0.02, pcb_z1 + cart_d * 0.02),
+            [fcolor(c, 1.0); 4],
+        );
     }
     if scene.fog > 0.0 {
-        fill_rgba(
+        quad(
             canvas,
-            ox as i32,
-            oy as i32,
-            ow as u32,
-            oh as u32,
-            (214, 222, 230, (scene.fog.clamp(0.0, 1.0) * 210.0) as u8),
+            bottom(-slot_x, slot_x, slot_z0, slot_z1),
+            [fcolor((214, 222, 230), scene.fog.clamp(0.0, 1.0) * 0.8); 4],
         );
     }
 
-    let mouth = (ox + ow / 2.0, oy + oh / 2.0);
+    let (sl, _) = proj(-slot_x, hh, -cart_d * 0.5);
+    let (sr, slot_y) = proj(slot_x, hh, -cart_d * 0.5);
+    let (ox, ow) = (sl, sr - sl);
+    let bottom_h = proj(0.0, hh, -cart_d).1 - proj(0.0, hh, 0.0).1;
+    let mouth = ((sl + sr) / 2.0, slot_y);
 
     // O ar do sopro: arcos claros subindo de baixo até a boca.
     if scene.blowing && !scene.out_of_breath {
