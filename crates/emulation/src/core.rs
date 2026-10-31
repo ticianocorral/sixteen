@@ -491,15 +491,9 @@ impl Core {
     /// (the RetroAchievements runtime reads this every frame). `false` when
     /// the region isn't available.
     pub fn with_memory(&mut self, id: c_uint, f: impl FnOnce(&[u8])) -> bool {
-        let (ptr, size) = self.enter(|api| unsafe {
-            (
-                (api.retro_get_memory_data)(id),
-                (api.retro_get_memory_size)(id),
-            )
-        });
-        if ptr.is_null() || size == 0 {
+        let Some((ptr, size)) = self.memory_region(id) else {
             return false;
-        }
+        };
         // Safety: the core owns this buffer for the life of the loaded game;
         // `f` must not retain the slice past the call (enforced by lifetime).
         let live = unsafe { std::slice::from_raw_parts(ptr as *const u8, size) };
@@ -511,20 +505,27 @@ impl Core {
     /// cartucho corrompe a VRAM por aqui. `false` when the region isn't
     /// available.
     pub fn with_memory_mut(&mut self, id: c_uint, f: impl FnOnce(&mut [u8])) -> bool {
+        let Some((ptr, size)) = self.memory_region(id) else {
+            return false;
+        };
+        // Safety: same as `with_memory`, and `&mut self` keeps every other
+        // call into the core (that could touch the region) out while `f`
+        // holds the only reference.
+        let live = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, size) };
+        f(live);
+        true
+    }
+
+    /// The pointer and size of a core memory region; `None` when the core
+    /// doesn't expose it.
+    fn memory_region(&mut self, id: c_uint) -> Option<(*mut c_void, usize)> {
         let (ptr, size) = self.enter(|api| unsafe {
             (
                 (api.retro_get_memory_data)(id),
                 (api.retro_get_memory_size)(id),
             )
         });
-        if ptr.is_null() || size == 0 {
-            return false;
-        }
-        // Safety: same as `with_memory` — the core owns the buffer for the
-        // life of the loaded game and nothing else touches it during `f`.
-        let live = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, size) };
-        f(live);
-        true
+        (!ptr.is_null() && size != 0).then_some((ptr, size))
     }
 
     /// Copy `bytes` back into a core memory region (e.g. restore battery SRAM

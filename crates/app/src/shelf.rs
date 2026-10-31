@@ -260,6 +260,7 @@ pub(crate) fn draw_manual_view(
     page: usize,
     pages: usize,
     page_ready: bool,
+    failed: bool,
 ) -> (ViewBtn, ViewBtn, ViewBtn) {
     let (w, h) = d.size();
     let (w, h) = (w as i32, h as i32);
@@ -299,6 +300,14 @@ pub(crate) fn draw_manual_view(
             1,
             DIM,
             tr!("rendering the page...", "renderizando a página..."),
+        );
+    } else if failed {
+        d.text(
+            MARGIN,
+            area.1 + 20,
+            1,
+            DIM,
+            tr!("couldn't open the manual", "não deu para abrir o manual"),
         );
     } else {
         d.text(
@@ -2823,7 +2832,7 @@ pub fn run(
         }
         let render = |d: &mut Screen| {
             if let Some(m) = &man.reader {
-                man.rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready);
+                man.rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready, false);
                 return;
             }
             if ach.open {

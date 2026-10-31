@@ -55,7 +55,10 @@ pub enum BlowButton {
 const PLASTIC: (u8, u8, u8) = (150, 148, 140);
 const PIN_DIRTY: (f32, f32, f32) = (112.0, 86.0, 46.0);
 const PIN_CLEAN: (f32, f32, f32) = (236.0, 190.0, 82.0);
-const PINS: i32 = 34;
+/// Os contatos da placa em três grupos (curto | longo | curto), com uma
+/// guia de plástico em cada vão.
+const GROUPS: [i32; 3] = [4, 26, 4];
+const PINS: i32 = GROUPS[0] + GROUPS[1] + GROUPS[2];
 
 fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
@@ -78,38 +81,43 @@ fn fcolor(c: (u8, u8, u8), a: f32) -> FColor {
 /// Um quadrilátero preenchido com uma cor por vértice (sentido horário a
 /// partir do canto de cima à esquerda).
 fn quad(canvas: &mut WindowCanvas, pts: [(f32, f32); 4], colors: [FColor; 4]) {
-    let verts: Vec<Vertex> = pts
-        .iter()
-        .zip(colors.iter())
-        .map(|(p, c)| Vertex {
-            position: sdl3::render::FPoint::new(p.0, p.1),
-            color: *c,
-            tex_coord: sdl3::render::FPoint::new(0.0, 0.0),
-        })
-        .collect();
-    let _ = canvas.render_geometry(&verts, None::<&Texture>, &[0, 1, 2, 0, 2, 3][..]);
+    let verts: [Vertex; 4] = std::array::from_fn(|k| Vertex {
+        position: sdl3::render::FPoint::new(pts[k].0, pts[k].1),
+        color: colors[k],
+        tex_coord: sdl3::render::FPoint::new(0.0, 0.0),
+    });
+    let _ = canvas.render_geometry(&verts, None::<&Texture>, &QUAD_IDX[..]);
 }
 
-/// Um quadrilátero com textura (`uv` normalizado), escurecido por `shade`.
-fn tex_quad(
-    canvas: &mut WindowCanvas,
-    tex: &Texture,
-    pts: [(f32, f32); 4],
-    uv: [(f32, f32); 4],
-    shade: f32,
-) {
-    let color = FColor::RGBA(shade, shade, shade, 1.0);
-    let verts: Vec<Vertex> = pts
-        .iter()
-        .zip(uv.iter())
-        .map(|(p, t)| Vertex {
-            position: sdl3::render::FPoint::new(p.0, p.1),
-            color,
-            tex_coord: sdl3::render::FPoint::new(t.0, t.1),
-        })
-        .collect();
-    let _ = canvas.render_geometry(&verts, Some(tex), &[0, 1, 2, 0, 2, 3][..]);
-}
+/// Os dois triângulos de um quadrilátero.
+const QUAD_IDX: [i32; 6] = [0, 1, 2, 0, 2, 3];
+
+/// A grade da arte da frente: a textura afim por triângulo entorta num
+/// trapézio grande; em células pequenas a perspectiva fica limpa.
+const GRID_COLS: usize = 10;
+const GRID_ROWS: usize = 8;
+const GRID_VERTS: usize = (GRID_COLS + 1) * (GRID_ROWS + 1);
+const GRID_IDX: [i32; GRID_COLS * GRID_ROWS * 6] = {
+    let mut idx = [0i32; GRID_COLS * GRID_ROWS * 6];
+    let mut r = 0;
+    while r < GRID_ROWS {
+        let mut c = 0;
+        while c < GRID_COLS {
+            let a = (r * (GRID_COLS + 1) + c) as i32;
+            let b = a + (GRID_COLS + 1) as i32;
+            let k = (r * GRID_COLS + c) * 6;
+            idx[k] = a;
+            idx[k + 1] = a + 1;
+            idx[k + 2] = b + 1;
+            idx[k + 3] = a;
+            idx[k + 4] = b + 1;
+            idx[k + 5] = b;
+            c += 1;
+        }
+        r += 1;
+    }
+    idx
+};
 
 fn scale_color(c: (u8, u8, u8), k: f32) -> (u8, u8, u8) {
     (
@@ -156,8 +164,23 @@ fn osd_text_centered(
     );
 }
 
+/// Onde os contatos ficaram na tela — de onde sai a poeira e para onde
+/// sobe o ar do sopro.
+struct Mouth {
+    /// O centro da fenda.
+    x: f32,
+    y: f32,
+    /// A largura da fenda na tela, a partir da borda esquerda `left`.
+    left: f32,
+    width: f32,
+    /// A altura da borda de baixo na tela.
+    edge_h: f32,
+    /// A largura do cartucho na tela.
+    cart_w: f32,
+}
+
 /// Desenha a cena do sopro (`screen`/`panel` em coordenadas do viewport do
-/// gabinete) e devolve os botões clicáveis.
+/// gabinete); os botões clicáveis vão para `out` (reaproveitado).
 pub(super) fn draw_blow_scene(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -165,8 +188,31 @@ pub(super) fn draw_blow_scene(
     screen: Rect,
     panel: Rect,
     scene: &BlowScene,
-) -> Vec<(BlowButton, Rect)> {
+    out: &mut Vec<(BlowButton, Rect)>,
+) {
+    out.clear();
     canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    let Some(mouth) = draw_cartridge(canvas, font, images, screen, panel, scene) else {
+        return;
+    };
+    draw_air_and_dust(canvas, scene, &mouth, screen.height() as f32);
+    if scene.lift < 1.0 {
+        return;
+    }
+    draw_osd(canvas, font, screen, scene);
+    draw_buttons(canvas, font, screen, out);
+}
+
+/// O cartucho voando do slot e tombando em 3D, com a borda de baixo e os
+/// contatos; `None` enquanto ainda não tombou (a borda não aparece).
+fn draw_cartridge(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    images: &HashMap<u64, ImgTex>,
+    screen: Rect,
+    panel: Rect,
+    scene: &BlowScene,
+) -> Option<Mouth> {
     let (sx, sy) = (screen.x() as f32, screen.y() as f32);
     let (sw, sh) = (screen.width() as f32, screen.height() as f32);
 
@@ -247,35 +293,26 @@ pub(super) fn draw_blow_scene(
 
     match art {
         Some(a) => {
-            // Numa grade: a textura afim por triângulo entorta num
-            // trapézio grande; em células pequenas a perspectiva fica limpa.
+            // A grade inteira numa chamada só, sem alocar.
             let (ux, uy, uw, uh) = a.content;
             let (iw, ih) = (a.w.max(1) as f32, a.h.max(1) as f32);
-            const COLS: usize = 10;
-            const ROWS: usize = 8;
-            for r in 0..ROWS {
-                for c in 0..COLS {
-                    let (s0, s1) = (c as f32 / COLS as f32, (c + 1) as f32 / COLS as f32);
-                    let (t0, t1) = (r as f32 / ROWS as f32, (r + 1) as f32 / ROWS as f32);
-                    let (x0, x1) = (-hw + CART_W * s0, -hw + CART_W * s1);
-                    let (y0, y1) = (-hh + cart_h * t0, -hh + cart_h * t1);
-                    let (u0, u1) = (
-                        (ux as f32 + uw as f32 * s0) / iw,
-                        (ux as f32 + uw as f32 * s1) / iw,
-                    );
-                    let (v0, v1) = (
-                        (uy as f32 + uh as f32 * t0) / ih,
-                        (uy as f32 + uh as f32 * t1) / ih,
-                    );
-                    tex_quad(
-                        canvas,
-                        &a.tex,
-                        face([(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)]),
-                        [(u0, v0), (u1, v0), (u1, v1), (u0, v1)],
-                        shade,
-                    );
+            let color = FColor::RGBA(shade, shade, shade, 1.0);
+            let verts: [Vertex; GRID_VERTS] = std::array::from_fn(|k| {
+                let (fs, ft) = (
+                    (k % (GRID_COLS + 1)) as f32 / GRID_COLS as f32,
+                    (k / (GRID_COLS + 1)) as f32 / GRID_ROWS as f32,
+                );
+                let (px, py) = proj(-hw + CART_W * fs, -hh + cart_h * ft, 0.0);
+                Vertex {
+                    position: sdl3::render::FPoint::new(px, py),
+                    color,
+                    tex_coord: sdl3::render::FPoint::new(
+                        (ux as f32 + uw as f32 * fs) / iw,
+                        (uy as f32 + uh as f32 * ft) / ih,
+                    ),
                 }
-            }
+            });
+            let _ = canvas.render_geometry(&verts, Some(&a.tex), &GRID_IDX[..]);
         }
         None => {
             let plastic = scale_color(PLASTIC, shade);
@@ -350,7 +387,7 @@ pub(super) fn draw_blow_scene(
     }
 
     if pose < 0.02 {
-        return Vec::new();
+        return None;
     }
 
     // A borda de baixo, como a de um cartucho de verdade: o plástico vira
@@ -441,11 +478,9 @@ pub(super) fn draw_blow_scene(
         lerp(PIN_DIRTY.1, PIN_CLEAN.1, clean),
         lerp(PIN_DIRTY.2, PIN_CLEAN.2, clean),
     );
-    // Os grupos: 4 | 26 | 4 contatos, com uma guia de plástico em cada vão.
-    const GROUPS: [i32; 3] = [4, 26, 4];
     const GAP: f32 = 3.0;
     let span = pcb_x * 2.0 * 0.97;
-    let total = GROUPS.iter().sum::<i32>() as f32 + GAP * 2.0;
+    let total = PINS as f32 + GAP * 2.0;
     let pitch = span / total;
     let sparkle = (clean > 0.97).then(|| ((scene.time * 14.0) as i32).rem_euclid(PINS + 12));
     let finger_top = pcb_edge - pcb_depth * 0.8;
@@ -527,16 +562,25 @@ pub(super) fn draw_blow_scene(
 
     let (sl, _) = proj(-slot_x, hh, -cart_d * 0.5);
     let (sr, slot_y) = proj(slot_x, hh, -cart_d * 0.5);
-    let (ox, ow) = (sl, sr - sl);
     let bottom_h = proj(0.0, hh, -cart_d).1 - proj(0.0, hh, 0.0).1;
-    let mouth = ((sl + sr) / 2.0, slot_y);
+    Some(Mouth {
+        x: (sl + sr) / 2.0,
+        y: slot_y,
+        left: sl,
+        width: sr - sl,
+        edge_h: bottom_h,
+        cart_w: w,
+    })
+}
 
+/// O ar do sopro subindo até a fenda e a poeira saindo dos contatos.
+fn draw_air_and_dust(canvas: &mut WindowCanvas, scene: &BlowScene, m: &Mouth, sh: f32) {
     // O ar do sopro: arcos claros subindo de baixo até a boca.
     if scene.blowing && !scene.out_of_breath {
         for i in 0..7 {
             let p = (scene.time * 2.6 + i as f32 / 7.0).fract();
-            let x0 = ox + ow * (0.1 + 0.8 * i as f32 / 6.0);
-            let y0 = mouth.1 + bottom_h * 0.9 + sh * 0.22 * (1.0 - p);
+            let x0 = m.left + m.width * (0.1 + 0.8 * i as f32 / 6.0);
+            let y0 = m.y + m.edge_h * 0.9 + sh * 0.22 * (1.0 - p);
             let a = ((1.0 - p) * 200.0) as u8;
             canvas.set_draw_color(Color::RGBA(205, 230, 255, a));
             let mut prev = (x0, y0);
@@ -555,21 +599,23 @@ pub(super) fn draw_blow_scene(
     // A poeira saindo dos contatos.
     for d in &scene.dust {
         let a = (d.life.clamp(0.0, 1.0) * 220.0) as u8;
-        let r = (2.0 + d.size * 4.0) * (w / 300.0).max(0.6);
+        let r = (2.0 + d.size * 4.0) * (m.cart_w / 300.0).max(0.6);
         fill_rgba(
             canvas,
-            (mouth.0 + d.x * w - r / 2.0) as i32,
-            (mouth.1 + d.y * w - r / 2.0) as i32,
+            (m.x + d.x * m.cart_w - r / 2.0) as i32,
+            (m.y + d.y * m.cart_w - r / 2.0) as i32,
             r as u32,
             r as u32,
             (172, 162, 142, a),
         );
     }
+}
 
-    if scene.lift < 1.0 {
-        return Vec::new();
-    }
-
+/// O OSD da cena: a dica no alto, o fôlego (e o microfone) e os contatos.
+fn draw_osd(canvas: &mut WindowCanvas, font: &mut Texture, screen: Rect, scene: &BlowScene) {
+    let (sx, sy) = (screen.x() as f32, screen.y() as f32);
+    let (sw, sh) = (screen.width() as f32, screen.height() as f32);
+    let clean = scene.clean.clamp(0.0, 1.0);
     // O OSD: a dica no alto, o fôlego e os contatos embaixo, à esquerda.
     let hint = if scene.out_of_breath {
         tr!(
@@ -688,8 +734,17 @@ pub(super) fn draw_blow_scene(
         &contacts,
         usize::MAX,
     );
+}
 
-    // Os dois botões, centrados embaixo: inserir de novo e guardar.
+/// Os dois botões, centrados embaixo: inserir de novo e guardar.
+fn draw_buttons(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    screen: Rect,
+    out: &mut Vec<(BlowButton, Rect)>,
+) {
+    let (sx, sy) = (screen.x() as f32, screen.y() as f32);
+    let (sw, sh) = (screen.width() as f32, screen.height() as f32);
     let labels = [
         (
             BlowButton::Insert,
@@ -717,7 +772,6 @@ pub(super) fn draw_blow_scene(
     let bh = (GLYPH_H * scale) as i32 + pad * 2 - 6;
     let mut bx = (sx + sw / 2.0) as i32 - width_at(scale) / 2;
     let by = (sy + sh * 0.86) as i32;
-    let mut out = Vec::new();
     for (btn, label) in labels.iter() {
         let tw = (GLYPH_W * scale) as i32 * label.chars().count() as i32;
         let bw = tw + 24;
@@ -747,5 +801,4 @@ pub(super) fn draw_blow_scene(
         out.push((*btn, rect));
         bx += bw + gap;
     }
-    out
 }

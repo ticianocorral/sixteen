@@ -70,9 +70,12 @@ pub(super) struct RfDetune {
     fade_depth: f32,
     /// A força do sinal do último quadro (0..1) — o áudio segue esta.
     signal: f32,
+    /// A linha de origem em YIQ — só a que o laço precisa, não o quadro
+    /// inteiro (o retraço e a rolagem pulam linhas).
     y: Vec<f32>,
     i: Vec<f32>,
     q: Vec<f32>,
+    lut: Box<YiqLut>,
     /// A luminância de uma linha já borrada e com o fantasma somado.
     line: Vec<f32>,
     /// sin/cos do batimento por coluna (a fase da linha entra por soma).
@@ -98,6 +101,7 @@ impl RfDetune {
             y: Vec::new(),
             i: Vec::new(),
             q: Vec::new(),
+            lut: Box::new(YiqLut::new()),
             line: Vec::new(),
             beat_s: Vec::new(),
             beat_c: Vec::new(),
@@ -176,7 +180,6 @@ impl RfDetune {
         if w == 0 || h == 0 {
             return;
         }
-        self.decode(pixels, w, h, pitch, format);
         self.step(h as f32);
         let t = self.t0.elapsed().as_secs_f32();
         let s = self.signal;
@@ -209,6 +212,7 @@ impl RfDetune {
             y: luma_buf,
             i: i_buf,
             q: q_buf,
+            lut,
             line,
             beat_s,
             beat_c,
@@ -220,7 +224,12 @@ impl RfDetune {
             *beat_c = (0..w).map(|x| (x as f32 * beat_fx).cos()).collect();
         }
         line.resize(w, 0.0);
+        luma_buf.resize(w, 0.0);
+        i_buf.resize(w, 0.0);
+        q_buf.resize(w, 0.0);
         out.resize(w * h * 4, 0);
+        let bpp = format.bytes_per_pixel();
+        let pitch = if pitch == 0 { w * bpp } else { pitch };
         let blur = (sx.round() as usize).max(1);
         // Os riscos brancos chegam a intervalos aleatórios (geométricos):
         // um sorteio por risco, não um por pixel.
@@ -261,10 +270,20 @@ impl RfDetune {
                     shift += tear_amp * w as f32 * (1.0 - d.abs()) * (1.0 + d);
                 }
             }
-            let src = sy * w;
-            let ly = &luma_buf[src..src + w];
-            let li = &i_buf[src..src + w];
-            let lq = &q_buf[src..src + w];
+            let Some(src) = pixels.get(sy * pitch..sy * pitch + w * bpp) else {
+                row.fill(0);
+                continue;
+            };
+            decode_row(
+                src,
+                format,
+                lut,
+                luma_buf,
+                (chroma > 0.0).then_some((&mut i_buf[..], &mut q_buf[..])),
+            );
+            let ly = &luma_buf[..w];
+            let li = &i_buf[..w];
+            let lq = &q_buf[..w];
             // Banda estreita: a luminância chega borrada na horizontal, e o
             // fantasma (multipercurso) soma uma cópia atrasada.
             for x in 0..w {
@@ -331,49 +350,68 @@ impl RfDetune {
             }
         }
     }
+}
 
-    /// O quadro do core em YIQ (0..1), qualquer que seja o formato.
-    fn decode(&mut self, pixels: &[u8], w: usize, h: usize, pitch: usize, format: PixelFormat) {
-        let n = w * h;
-        self.y.resize(n, 0.0);
-        self.i.resize(n, 0.0);
-        self.q.resize(n, 0.0);
-        let bpp = format.bytes_per_pixel();
-        let pitch = if pitch == 0 { w * bpp } else { pitch };
-        for yy in 0..h {
-            let Some(row) = pixels.get(yy * pitch..yy * pitch + w * bpp) else {
-                break;
-            };
-            for xx in 0..w {
-                let p = &row[xx * bpp..xx * bpp + bpp];
-                let (r, g, b) = match format {
-                    PixelFormat::Xrgb8888 => (
-                        p[2] as f32 / 255.0,
-                        p[1] as f32 / 255.0,
-                        p[0] as f32 / 255.0,
-                    ),
-                    PixelFormat::Rgb565 => {
-                        let v = u16::from_le_bytes([p[0], p[1]]);
-                        (
-                            ((v >> 11) & 0x1F) as f32 / 31.0,
-                            ((v >> 5) & 0x3F) as f32 / 63.0,
-                            (v & 0x1F) as f32 / 31.0,
-                        )
-                    }
-                    PixelFormat::Rgb1555 => {
-                        let v = u16::from_le_bytes([p[0], p[1]]);
-                        (
-                            ((v >> 10) & 0x1F) as f32 / 31.0,
-                            ((v >> 5) & 0x1F) as f32 / 31.0,
-                            (v & 0x1F) as f32 / 31.0,
-                        )
-                    }
-                };
-                let k = yy * w + xx;
-                self.y[k] = 0.299 * r + 0.587 * g + 0.114 * b;
-                self.i[k] = 0.596 * r - 0.274 * g - 0.322 * b;
-                self.q[k] = 0.211 * r - 0.523 * g + 0.312 * b;
+/// A conversão RGB → YIQ em tabelas: a contribuição de cada canal (já em 8
+/// bits) para Y, I e Q — três somas por pixel no lugar de divisões e
+/// multiplicações.
+struct YiqLut {
+    y: [[f32; 256]; 3],
+    i: [[f32; 256]; 3],
+    q: [[f32; 256]; 3],
+}
+
+impl YiqLut {
+    fn new() -> Self {
+        const Y: [f32; 3] = [0.299, 0.587, 0.114];
+        const I: [f32; 3] = [0.596, -0.274, -0.322];
+        const Q: [f32; 3] = [0.211, -0.523, 0.312];
+        let table = |k: [f32; 3]| {
+            let mut t = [[0.0f32; 256]; 3];
+            for (c, row) in t.iter_mut().enumerate() {
+                for (v, cell) in row.iter_mut().enumerate() {
+                    *cell = k[c] * v as f32 / 255.0;
+                }
             }
+            t
+        };
+        Self {
+            y: table(Y),
+            i: table(I),
+            q: table(Q),
+        }
+    }
+}
+
+/// Uma linha do quadro do core em YIQ (0..1), qualquer que seja o formato;
+/// `iq` `None` pula a croma (o color killer a desligou neste quadro).
+fn decode_row(
+    src: &[u8],
+    format: PixelFormat,
+    lut: &YiqLut,
+    y: &mut [f32],
+    mut iq: Option<(&mut [f32], &mut [f32])>,
+) {
+    // 5/6 bits expandidos para 8, como o DAC faria.
+    let x5 = |v: u16| ((v << 3) | (v >> 2)) as usize;
+    let x6 = |v: u16| ((v << 2) | (v >> 4)) as usize;
+    let bpp = format.bytes_per_pixel();
+    for (k, p) in src.chunks_exact(bpp).enumerate() {
+        let (r, g, b) = match format {
+            PixelFormat::Xrgb8888 => (p[2] as usize, p[1] as usize, p[0] as usize),
+            PixelFormat::Rgb565 => {
+                let v = u16::from_le_bytes([p[0], p[1]]);
+                (x5((v >> 11) & 0x1F), x6((v >> 5) & 0x3F), x5(v & 0x1F))
+            }
+            PixelFormat::Rgb1555 => {
+                let v = u16::from_le_bytes([p[0], p[1]]);
+                (x5((v >> 10) & 0x1F), x5((v >> 5) & 0x1F), x5(v & 0x1F))
+            }
+        };
+        y[k] = lut.y[0][r] + lut.y[1][g] + lut.y[2][b];
+        if let Some((i, q)) = iq.as_mut() {
+            i[k] = lut.i[0][r] + lut.i[1][g] + lut.i[2][b];
+            q[k] = lut.q[0][r] + lut.q[1][g] + lut.q[2][b];
         }
     }
 }

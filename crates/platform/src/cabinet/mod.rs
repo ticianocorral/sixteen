@@ -2809,6 +2809,16 @@ impl Cabinet {
         self.ch3_until = Some(Instant::now() + TV_CH3_FLASH);
     }
 
+    /// Um clique num controle do queixo da TV — o mesmo em toda tela.
+    pub fn apply_tv_control(&mut self, control: TvControl) {
+        match control {
+            TvControl::Power => self.toggle_tv_power(),
+            TvControl::VolUp => self.nudge_volume(1),
+            TvControl::VolDown => self.nudge_volume(-1),
+            TvControl::Channel => self.toggle_channel(),
+        }
+    }
+
     /// O texto do banner de canal — dígito duplo, como as TVs de tubo
     /// mostravam.
     pub fn ch_osd_label(&self) -> String {
@@ -3128,17 +3138,18 @@ impl Cabinet {
         }
         // O cartucho do sopro por cima de tudo: ele sai do painel e vem
         // para a frente do tubo.
-        self.blow_buttons = match blow {
-            Some(scene) => draw_blow_scene(
+        self.blow_buttons.clear();
+        if let Some(scene) = blow {
+            draw_blow_scene(
                 &mut self.canvas,
                 &mut self.font,
                 &self.images,
                 self.screen,
                 panel,
                 scene,
-            ),
-            None => Vec::new(),
-        };
+                &mut self.blow_buttons,
+            );
+        }
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
@@ -3256,7 +3267,7 @@ impl Cabinet {
                 tv_on,
             );
             if let Some(scene) = blow {
-                draw_blow_scene(c, font, images, screen, panel, scene);
+                draw_blow_scene(c, font, images, screen, panel, scene, &mut Vec::new());
             }
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);

@@ -41,7 +41,8 @@ pub struct Config {
     pub shelf_theme: ShelfTheme,
     /// Mau contato do cartucho (soprar o cartucho): com que frequência o
     /// primeiro Power depois de inserir não sobe o jogo — tela preta, lixo
-    /// de tiles ou imagem travada — até ejetar, soprar e inserir de novo.
+    /// de tiles, abertura travada ou gráficos embaralhados — até ejetar,
+    /// soprar e inserir de novo.
     /// Desligado por padrão. Linha na seção "jogo" das configurações.
     pub bad_contact: BadContact,
     /// Soprar no microfone de verdade na cena do sopro (Steam Deck, ROG
@@ -192,6 +193,15 @@ impl BadContact {
             BadContact::Off => BadContact::Rare,
             BadContact::Rare => BadContact::Nineties,
             BadContact::Nineties => BadContact::Off,
+        }
+    }
+
+    /// Seta para a esquerda na linha: o caminho de volta do `cycle`.
+    pub fn cycle_back(self) -> Self {
+        match self {
+            BadContact::Off => BadContact::Nineties,
+            BadContact::Rare => BadContact::Off,
+            BadContact::Nineties => BadContact::Rare,
         }
     }
 
@@ -585,6 +595,9 @@ mod tests {
         round.apply(raw).unwrap();
         assert_eq!(round.bad_contact, BadContact::Nineties);
         assert_eq!(BadContact::Nineties.cycle(), BadContact::Off);
+        for b in [BadContact::Off, BadContact::Rare, BadContact::Nineties] {
+            assert_eq!(b.cycle().cycle_back(), b);
+        }
         assert!(!round.blow_mic);
         cfg.apply(toml::from_str("blow_mic = true").unwrap())
             .unwrap();

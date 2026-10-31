@@ -458,7 +458,8 @@ fn power_off_burst(plat: &Platform, cab: &mut Cabinet) -> f32 {
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::PowerOff);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
     let frame = Duration::from_millis(16);
-    let mut rng: u32 = 0x1234_5678;
+    let mut rng = crate::contato::Rng::new(0x1234_5678);
+    let mut buf = Vec::new();
     let start = Instant::now();
 
     while start.elapsed() < SPAN {
@@ -474,16 +475,7 @@ fn power_off_burst(plat: &Platform, cab: &mut Cabinet) -> f32 {
         if let Some(a) = &audio {
             let n = (RATE / 60) as usize;
             let amp = ((1.0 - t) * 8000.0) as i32;
-            let mut buf = Vec::with_capacity(n * 2);
-            for _ in 0..n {
-                rng ^= rng << 13;
-                rng ^= rng >> 17;
-                rng ^= rng << 5;
-                let s = (((rng >> 8) & 0xFFFF) as i32 - 0x8000) * amp / 0x8000;
-                let v = s.clamp(-32000, 32000) as i16;
-                buf.push(v);
-                buf.push(v);
-            }
+            noise_frame(&mut rng, n, amp, &mut buf);
             a.queue(&buf);
         }
         std::thread::sleep(frame);
@@ -503,7 +495,8 @@ fn power_on_burst(plat: &Platform, cab: &mut Cabinet) {
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::PowerOn);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
     let frame = Duration::from_millis(16);
-    let mut rng: u32 = 0x8765_4321;
+    let mut rng = crate::contato::Rng::new(0x8765_4321);
+    let mut buf = Vec::new();
     let start = Instant::now();
 
     while start.elapsed() < SPAN {
@@ -514,16 +507,7 @@ fn power_on_burst(plat: &Platform, cab: &mut Cabinet) {
         if let Some(a) = &audio {
             let n = (RATE / 60) as usize;
             let amp = (t * 8000.0) as i32;
-            let mut buf = Vec::with_capacity(n * 2);
-            for _ in 0..n {
-                rng ^= rng << 13;
-                rng ^= rng >> 17;
-                rng ^= rng << 5;
-                let s = (((rng >> 8) & 0xFFFF) as i32 - 0x8000) * amp / 0x8000;
-                let v = s.clamp(-32000, 32000) as i16;
-                buf.push(v);
-                buf.push(v);
-            }
+            noise_frame(&mut rng, n, amp, &mut buf);
             a.queue(&buf);
         }
         std::thread::sleep(frame);
@@ -570,7 +554,30 @@ impl SessionClock {
     }
 }
 
-/// Sai de uma falha de mau contato: reset no core e a SRAM do disco de
+/// Um quadro RGB565 do core passado pelo filtro NTSC (RF), pronto para o
+/// tubo — o caminho do jogo e o das falhas de mau contato.
+pub(crate) fn ntsc_frame<'a>(
+    ntsc: &'a mut NtscFilter,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    pitch: usize,
+) -> FrameRef<'a> {
+    let (out, ow, oh) = ntsc.process(pixels, width, height, pitch);
+    // SAFETY: `out` é um `&[u16]` vivo enquanto `ntsc` estiver emprestado
+    // ('a); ver os mesmos bytes como `u8` (o dobro do comprimento) é sempre
+    // válido — u8 não tem exigência de alinhamento nem valores inválidos.
+    let pixels = unsafe { std::slice::from_raw_parts(out.as_ptr() as *const u8, out.len() * 2) };
+    FrameRef {
+        width: ow,
+        height: oh,
+        pitch: ow as usize * 2,
+        format: PlatFormat::Rgb565,
+        pixels,
+    }
+}
+
+/// Sai de uma falha de mau contato: reset no core e a SRAM do encaixe de
 /// volta — o que a abertura travada tenha escrito nunca vira save.
 fn restore_after_fault(core: &mut Core, sram: Option<&[u8]>, last: &mut Option<Vec<u8>>) {
     core.reset();
@@ -578,6 +585,19 @@ fn restore_after_fault(core: &mut Core, sram: Option<&[u8]>, last: &mut Option<V
         core.load_sram(bytes);
     }
     *last = core.sram();
+}
+
+/// Um frame de chiado branco (estéreo, `n` amostras por canal) com
+/// amplitude `amp` em `buf` — o som sintetizado dos bursts de power e do
+/// cartucho entrando/saindo quando não há foley.
+fn noise_frame(rng: &mut crate::contato::Rng, n: usize, amp: i32, buf: &mut Vec<i16>) {
+    buf.clear();
+    for _ in 0..n {
+        let s = (((rng.next_u32() >> 8) & 0xFFFF) as i32 - 0x8000) * amp / 0x8000;
+        let v = s.clamp(-32000, 32000) as i16;
+        buf.push(v);
+        buf.push(v);
+    }
 }
 
 /// Ejetar with the console still on: the lock resists — a short mechanical
@@ -635,7 +655,8 @@ fn cartridge_insert_animation(plat: &Platform, cab: &mut Cabinet) {
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::Insert);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
     let frame = Duration::from_millis(16);
-    let mut rng: u32 = 0x2468_ace0;
+    let mut rng = crate::contato::Rng::new(0x2468_ace0);
+    let mut buf = Vec::new();
     let start = Instant::now();
 
     while start.elapsed() < SPAN {
@@ -646,15 +667,7 @@ fn cartridge_insert_animation(plat: &Platform, cab: &mut Cabinet) {
         if let Some(a) = &audio {
             let n = (RATE / 60) as usize;
             let amp = (2200.0 * (std::f32::consts::PI * t).sin()) as i32;
-            let mut buf = Vec::with_capacity(n * 2);
-            for _ in 0..n {
-                rng ^= rng << 13;
-                rng ^= rng >> 17;
-                rng ^= rng << 5;
-                let s = (((rng >> 8) & 0xFFFF) as i32 - 0x8000) * amp / 0x8000;
-                buf.push(s.clamp(-32000, 32000) as i16);
-                buf.push(s.clamp(-32000, 32000) as i16);
-            }
+            noise_frame(&mut rng, n, amp, &mut buf);
             a.queue(&buf);
         }
         std::thread::sleep(frame);
@@ -685,7 +698,8 @@ fn cartridge_eject_animation(plat: &Platform, cab: &mut Cabinet) {
     const SPAN: Duration = Duration::from_millis(430);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
     let frame = Duration::from_millis(16);
-    let mut rng: u32 = 0x0ff1_ce00;
+    let mut rng = crate::contato::Rng::new(0x0ff1_ce00);
+    let mut buf = Vec::new();
     let start = Instant::now();
 
     while start.elapsed() < SPAN {
@@ -696,15 +710,7 @@ fn cartridge_eject_animation(plat: &Platform, cab: &mut Cabinet) {
         if let Some(a) = &audio {
             let n = (RATE / 60) as usize;
             let amp = (2000.0 * (std::f32::consts::PI * t).sin()) as i32;
-            let mut buf = Vec::with_capacity(n * 2);
-            for _ in 0..n {
-                rng ^= rng << 13;
-                rng ^= rng >> 17;
-                rng ^= rng << 5;
-                let s = (((rng >> 8) & 0xFFFF) as i32 - 0x8000) * amp / 0x8000;
-                buf.push(s.clamp(-32000, 32000) as i16);
-                buf.push(s.clamp(-32000, 32000) as i16);
-            }
+            noise_frame(&mut rng, n, amp, &mut buf);
             a.queue(&buf);
         }
         std::thread::sleep(frame);
@@ -1649,8 +1655,7 @@ pub fn run_game(
     let mut vol_buf: Vec<i16> = Vec::new();
     let mut rf_audio = sixteen_platform::RfAudio::default();
 
-    // Run-ahead: only if the core actually serializes; hardcore also rules
-    // it out (a speculative frame would validate a hit the rewind undoes).
+    // O último SRAM gravado: o flush periódico só escreve quando mudar.
     let mut last_sram = core.sram();
     // Which note slot to save into once the next frame is ready — set at
     // click time, consumed after `core.run()` produces a real frame.
@@ -1676,7 +1681,10 @@ pub fn run_game(
     // tempo de jogo) — só o painel mostra o console ligado.
     let mut contact = crate::contato::Contact::inserted(cfg.bad_contact, spec.shot.is_none());
     let mut fault: Option<crate::contato::FaultRun> = None;
-    let sram_at_insert = fs::read(&sram_path).ok();
+    // A SRAM como estava logo depois de carregar — do disco ou zerada, num
+    // jogo que ainda não tem `.srm` —, para a falha nunca chegar ao save.
+    // `None` só num jogo sem SRAM nenhuma.
+    let sram_at_insert = last_sram.clone();
     let mut static_level = OFF_STATIC_LEVEL;
     // Drives the one deliberate keyboard-typing exception (plan revision) —
     // the free-text note, a slot's caption, or a just-captured print's name
@@ -1890,12 +1898,7 @@ pub fn run_game(
                         // o mesmo par do idle: o knob POWER liga/desliga
                         // o tubo (o jogo segue correndo por baixo), VOL
                         // muda o volume e acende o OSD de barrinhas.
-                        match tv {
-                            sixteen_platform::TvControl::Power => cab.toggle_tv_power(),
-                            sixteen_platform::TvControl::VolUp => cab.nudge_volume(1),
-                            sixteen_platform::TvControl::VolDown => cab.nudge_volume(-1),
-                            sixteen_platform::TvControl::Channel => cab.toggle_channel(),
-                        }
+                        cab.apply_tv_control(tv);
                         None
                     } else {
                         cab.hit_panel_button(ox, oy).and_then(|b| match b {
@@ -2492,18 +2495,13 @@ pub fn run_game(
                 }
                 // RF NTSC on RGB565 frames; anything else passes straight through.
                 let fref = if frame.format == EmuFormat::Rgb565 {
-                    let (out, ow, oh) =
-                        ntsc.process(&frame.pixels, frame.width, frame.height, frame.pitch);
-                    let bytes = unsafe {
-                        std::slice::from_raw_parts(out.as_ptr() as *const u8, out.len() * 2)
-                    };
-                    FrameRef {
-                        width: ow,
-                        height: oh,
-                        pitch: ow as usize * 2,
-                        format: PlatFormat::Rgb565,
-                        pixels: bytes,
-                    }
+                    ntsc_frame(
+                        &mut ntsc,
+                        &frame.pixels,
+                        frame.width,
+                        frame.height,
+                        frame.pitch,
+                    )
                 } else {
                     FrameRef {
                         width: frame.width,

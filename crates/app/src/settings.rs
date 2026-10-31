@@ -558,10 +558,14 @@ fn start_login_test(
 
 /// The left/right adjustments — fullscreen/check-updates toggles, language
 /// flip. Rows without a horizontal feel ignore them.
-fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, _right: bool) {
+fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, right: bool) {
     match (sec, sel) {
         (SEC_JOGO, 1) => {
-            cfg.bad_contact = cfg.bad_contact.cycle();
+            cfg.bad_contact = if right {
+                cfg.bad_contact.cycle()
+            } else {
+                cfg.bad_contact.cycle_back()
+            };
         }
         (SEC_JOGO, 2) => {
             cfg.blow_mic = !cfg.blow_mic;

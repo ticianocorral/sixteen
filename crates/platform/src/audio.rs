@@ -55,7 +55,7 @@ impl AudioOut {
 /// só enquanto a cena dura — fechar é soltar o valor.
 pub struct AudioIn {
     stream: AudioStreamOwner,
-    pub rate: u32,
+    pub source_rate: u32,
     buf: Vec<i16>,
 }
 
@@ -71,7 +71,7 @@ impl AudioIn {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         Ok(Self {
             stream,
-            rate: sample_rate,
+            source_rate: sample_rate,
             buf: Vec::new(),
         })
     }

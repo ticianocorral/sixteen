@@ -52,6 +52,9 @@ struct ConsoleManual {
     key: &'static str,
     pages: usize,
     page: usize,
+    /// O worker não conseguiu abrir o PDF (morreu sem dizer quantas
+    /// páginas tem) — a tela avisa em vez de ficar "abrindo" para sempre.
+    failed: bool,
     requested: std::collections::HashSet<usize>,
     rx: Receiver<crate::manual::ManualEv>,
     tx: mpsc::Sender<usize>,
@@ -71,15 +74,24 @@ impl ConsoleManual {
             ("console-manual-pt", CONSOLE_MANUAL_PT)
         );
         let path = std::env::temp_dir().join(format!("sixteen-{key}.pdf"));
-        if let Err(e) = std::fs::write(&path, bytes) {
-            log::warn!("console manual: writing {}: {e}", path.display());
-            return None;
+        // Já gravado numa abertura anterior (mesmo tamanho): não regrava os
+        // ~1,6 MB na thread de UI a cada clique.
+        let fresh = std::fs::metadata(&path).is_ok_and(|m| m.len() == bytes.len() as u64);
+        if !fresh {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                log::warn!("console manual: writing {}: {e}", path.display());
+                return None;
+            }
         }
         let (ev_tx, rx) = mpsc::channel();
         let (tx, req_rx) = mpsc::channel::<usize>();
         std::thread::spawn(move || {
-            let Ok(pages) = crate::manual::page_count(&path) else {
-                return;
+            let pages = match crate::manual::page_count(&path) {
+                Ok(n) => n,
+                Err(e) => {
+                    log::warn!("console manual: {e}");
+                    return;
+                }
             };
             let _ = ev_tx.send(crate::manual::ManualEv::Ready {
                 sha1: key.to_string(),
@@ -103,6 +115,7 @@ impl ConsoleManual {
             key,
             pages: 0,
             page: 1,
+            failed: false,
             requested: std::collections::HashSet::new(),
             rx,
             tx,
@@ -113,7 +126,15 @@ impl ConsoleManual {
     /// Eventos do worker (contagem e páginas viram texturas) e o pedido da
     /// página corrente e da seguinte assim que faltam.
     fn poll(&mut self, cab: &mut Cabinet) {
-        while let Ok(ev) = self.rx.try_recv() {
+        loop {
+            let ev = match self.rx.try_recv() {
+                Ok(ev) => ev,
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.failed = self.pages == 0;
+                    break;
+                }
+            };
             match ev {
                 crate::manual::ManualEv::Ready { pages, .. } => self.pages = pages,
                 crate::manual::ManualEv::Page {
@@ -121,12 +142,20 @@ impl ConsoleManual {
                 } => {
                     if w > 0 {
                         cab.set_image(crate::shelf::manual_page_id(self.key, page), w, h, &rgba);
+                    } else {
+                        log::warn!("console manual: page {page} didn't render");
                     }
                 }
             }
         }
         for page in [self.page, self.page + 1] {
-            if self.pages > 0 && page <= self.pages && self.requested.insert(page) {
+            // Página já em textura (de uma abertura anterior): não renderiza
+            // de novo.
+            if self.pages > 0
+                && page <= self.pages
+                && !cab.has_image(crate::shelf::manual_page_id(self.key, page))
+                && self.requested.insert(page)
+            {
                 let _ = self.tx.send(page);
             }
         }
@@ -590,10 +619,10 @@ pub fn run(
             } else {
                 man.poll(cab);
                 let ready = cab.has_image(crate::shelf::manual_page_id(man.key, man.page));
-                let (key, page, pages) = (man.key, man.page, man.pages);
+                let (key, page, pages, failed) = (man.key, man.page, man.pages, man.failed);
                 let mut rects = man.rects;
                 let render = |d: &mut Screen| {
-                    rects = crate::shelf::draw_manual_view(d, key, page, pages, ready);
+                    rects = crate::shelf::draw_manual_view(d, key, page, pages, ready, failed);
                 };
                 cab.frame_idle_2d(SETUP_BG, render);
                 man.rects = rects;
@@ -696,12 +725,8 @@ pub fn run(
             // Os controles físicos da TV (plan revision): o knob POWER
             // liga/desliga (com o warm-up/colapso do tubo), VOL-/VOL+ mudam
             // o volume e acendem o OSD de barrinhas.
-            match cab.hit_tv_controls(ox, oy) {
-                Some(sixteen_platform::TvControl::Power) => cab.toggle_tv_power(),
-                Some(sixteen_platform::TvControl::VolUp) => cab.nudge_volume(1),
-                Some(sixteen_platform::TvControl::VolDown) => cab.nudge_volume(-1),
-                Some(sixteen_platform::TvControl::Channel) => cab.toggle_channel(),
-                None => {}
+            if let Some(tv) = cab.hit_tv_controls(ox, oy) {
+                cab.apply_tv_control(tv);
             }
             // Setas verdes do nameplate (plan revision): app abre a tela
             // de changelog; core baixa e instala na hora.
@@ -1109,7 +1134,7 @@ pub fn capture_console_manual_preview(cab: &mut Cabinet, page: usize, path: &Pat
     crate::console_art::load_brand_images(cab);
     let ready = cab.has_image(crate::shelf::manual_page_id(man.key, page));
     let render = |d: &mut Screen| {
-        crate::shelf::draw_manual_view(d, man.key, page, pages, ready);
+        crate::shelf::draw_manual_view(d, man.key, page, pages, ready, false);
     };
     cab.capture_idle_2d(SETUP_BG, render, path)
         .map_err(|e| anyhow::anyhow!(e.to_string()))

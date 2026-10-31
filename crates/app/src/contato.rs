@@ -5,17 +5,17 @@
 //! desligar, ejetar, soprar e inserir de novo. Desligar e ligar de novo às
 //! vezes resolve sozinho, como na vida real.
 //!
-//! Regras para não irritar: só no Power depois de um encaixe (retomar com
-//! Power nunca falha), no máximo duas falhas seguidas, e o save nunca é
-//! tocado — a SRAM do disco volta para o core ao sair da falha.
+//! Regras para não irritar: só falha até o primeiro boot bom (depois dele,
+//! religar com Power nunca falha), no máximo duas falhas seguidas, e o save
+//! nunca é tocado — a SRAM do encaixe volta para o core ao sair da falha.
 
 use std::time::{Duration, Instant};
 
 use sixteen_emulation::{Core, Frame as EmuFrame, PixelFormat as EmuFormat};
 use sixteen_ntsc::NtscFilter;
 use sixteen_platform::{
-    AudioOut, BlowButton, BlowScene, Cabinet, Dust, FrameRef, Input, KeyMap, PadButton,
-    PixelFormat as PlatFormat, Platform, RfAudio, UiEvent,
+    AudioOut, BlowButton, BlowScene, Cabinet, Dust, Input, KeyMap, PadButton, Platform, RfAudio,
+    UiEvent,
 };
 
 use crate::config::BadContact;
@@ -32,6 +32,11 @@ const SNES_H: u32 = 224;
 pub(crate) struct Rng(u32);
 
 impl Rng {
+    /// Semente fixa (o chiado dos bursts não precisa variar).
+    pub(crate) const fn new(seed: u32) -> Self {
+        Rng(if seed == 0 { 1 } else { seed })
+    }
+
     pub(crate) fn seeded() -> Self {
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -167,6 +172,8 @@ pub(crate) struct FaultRun {
     frozen: bool,
     /// O som que fica em loop quando a imagem trava.
     stuck_audio: Vec<i16>,
+    /// O zumbido da TV sem imagem, um frame de som (reaproveitado).
+    hum_buf: Vec<i16>,
     hum_phase: f32,
 }
 
@@ -180,19 +187,57 @@ impl FaultRun {
             _ => 0,
         };
         let stuck_bit = 1u8 << (rng.next_u32() % 8);
-        FaultRun {
+        let mut f = FaultRun {
             kind,
             frames: 0,
             stop_at,
             stuck_bit,
             rng,
-            screen: vec![0; (SNES_W * SNES_H * 2) as usize],
-            pitch: (SNES_W * 2) as usize,
-            width: SNES_W,
-            height: SNES_H,
+            screen: Vec::new(),
+            pitch: 0,
+            width: 0,
+            height: 0,
             frozen: matches!(kind, FaultKind::Black | FaultKind::Tiles),
             stuck_audio: Vec::new(),
+            hum_buf: Vec::new(),
             hum_phase: 0.0,
+        };
+        f.reset_screen();
+        f
+    }
+
+    /// A tela da falha no tamanho do SNES, preta.
+    fn reset_screen(&mut self) {
+        self.width = SNES_W;
+        self.height = SNES_H;
+        self.pitch = (SNES_W * 2) as usize;
+        self.screen.clear();
+        self.screen.resize((SNES_W * SNES_H * 2) as usize, 0);
+    }
+
+    /// Roda um frame do core (Freeze/Assets, até travar): corrompe a VRAM
+    /// no Assets, guarda o som recente para o "bzzzt" e copia a imagem.
+    /// O core nunca recebeu botão nenhum — a falha vem antes de qualquer
+    /// boot bom —, então não há entrada a zerar.
+    fn step_core(&mut self, core: &mut Core, audio_rate: u32) {
+        self.frames += 1;
+        core.run();
+        if self.kind == FaultKind::Assets {
+            self.corrupt_vram(core);
+        }
+        // As últimas ~3 frames de som viram o "bzzzt" quando trava.
+        self.stuck_audio.extend_from_slice(core.audio());
+        let keep = (audio_rate as usize / 20) * 2;
+        if self.stuck_audio.len() > keep {
+            let cut = self.stuck_audio.len() - keep;
+            self.stuck_audio.drain(..cut);
+        }
+        if let Some(frame) = core.take_frame() {
+            self.grab(&frame);
+            core.recycle_frame(frame);
+        }
+        if self.frames >= self.stop_at {
+            self.frozen = true;
         }
     }
 
@@ -213,59 +258,33 @@ impl FaultRun {
         vol_buf: &mut Vec<i16>,
         rf: &mut RfAudio,
     ) {
-        self.frames += 1;
         if !self.frozen {
-            for port in 0..sixteen_platform::MAX_PORTS {
-                for (rb, _) in crate::runner::PAD {
-                    core.set_button(port, rb, false);
-                }
-            }
-            core.run();
-            if self.kind == FaultKind::Assets {
-                self.corrupt_vram(core);
-            }
+            self.step_core(core, audio.source_rate);
             if audio.queued_frames() < audio_cap {
                 crate::runner::queue_game_audio(audio, cab, core.audio(), vol_buf, rf);
             }
-            // As últimas ~3 frames de som viram o "bzzzt" quando trava.
-            self.stuck_audio.extend_from_slice(core.audio());
-            let keep = (audio.source_rate as usize / 20) * 2;
-            if self.stuck_audio.len() > keep {
-                let cut = self.stuck_audio.len() - keep;
-                self.stuck_audio.drain(..cut);
-            }
-            if let Some(frame) = core.take_frame() {
-                self.grab(&frame);
-                core.recycle_frame(frame);
-            }
-            if self.frames >= self.stop_at {
-                self.frozen = true;
-            }
         } else {
+            self.frames += 1;
             if self.kind == FaultKind::Tiles && (self.frames.is_multiple_of(23) || self.frames == 1)
             {
                 self.tiles(rom);
             }
             if audio.queued_frames() < audio_cap {
-                let chunk = if matches!(self.kind, FaultKind::Freeze | FaultKind::Assets)
-                    && !self.stuck_audio.is_empty()
-                {
-                    self.stuck_audio.clone()
+                let stuck = matches!(self.kind, FaultKind::Freeze | FaultKind::Assets)
+                    && !self.stuck_audio.is_empty();
+                if !stuck {
+                    self.hum(audio.source_rate);
+                }
+                let chunk = if stuck {
+                    &self.stuck_audio
                 } else {
-                    self.hum(audio.source_rate)
+                    &self.hum_buf
                 };
-                crate::runner::queue_game_audio(audio, cab, &chunk, vol_buf, rf);
+                crate::runner::queue_game_audio(audio, cab, chunk, vol_buf, rf);
             }
         }
-        let (out, ow, oh) = ntsc.process(&self.screen, self.width, self.height, self.pitch);
-        let bytes = unsafe { std::slice::from_raw_parts(out.as_ptr() as *const u8, out.len() * 2) };
-        let fref = FrameRef {
-            width: ow,
-            height: oh,
-            pitch: ow as usize * 2,
-            format: PlatFormat::Rgb565,
-            pixels: bytes,
-        };
+        let fref =
+            crate::runner::ntsc_frame(ntsc, &self.screen, self.width, self.height, self.pitch);
         cab.present_frame(&fref, 4.0 / 3.0);
     }
 
@@ -280,15 +299,8 @@ impl FaultRun {
         if self.kind == FaultKind::Tiles {
             self.tiles(rom);
         }
-        let (out, ow, oh) = ntsc.process(&self.screen, self.width, self.height, self.pitch);
-        let bytes = unsafe { std::slice::from_raw_parts(out.as_ptr() as *const u8, out.len() * 2) };
-        let fref = FrameRef {
-            width: ow,
-            height: oh,
-            pitch: ow as usize * 2,
-            format: PlatFormat::Rgb565,
-            pixels: bytes,
-        };
+        let fref =
+            crate::runner::ntsc_frame(ntsc, &self.screen, self.width, self.height, self.pitch);
         cab.capture_bmp(&fref, 4.0 / 3.0, path)
             .map_err(|e| anyhow::anyhow!(e.to_string()))
     }
@@ -339,13 +351,10 @@ impl FaultRun {
         });
     }
 
-    /// O lixo de tiles: bytes da própria ROM lidos como tiles 4bpp do SNES
+    /// O lixo de tiles: bytes da própria ROM lidos como tiles 2bpp do SNES
     /// com uma paleta sorteada, mais umas listras verticais.
     fn tiles(&mut self, rom: &[u8]) {
-        self.width = SNES_W;
-        self.height = SNES_H;
-        self.pitch = (SNES_W * 2) as usize;
-        self.screen.resize((SNES_W * SNES_H * 2) as usize, 0);
+        self.reset_screen();
         // Um tilemap corrompido não é ruído: são poucos tiles (2bpp, uma
         // paleta de 4 cores fortes) repetidos em faixas, linhas inteiras
         // duplicadas e trechos vazios.
@@ -413,10 +422,12 @@ impl FaultRun {
         }
     }
 
-    /// O zumbido de 60 Hz da TV sem imagem (um frame de som, estéreo).
-    fn hum(&mut self, rate: u32) -> Vec<i16> {
+    /// O zumbido de 60 Hz da TV sem imagem (um frame de som, estéreo), em
+    /// `hum_buf`.
+    fn hum(&mut self, rate: u32) {
         let n = (rate / 60).max(1) as usize;
-        let mut out = Vec::with_capacity(n * 2);
+        let out = &mut self.hum_buf;
+        out.clear();
         for _ in 0..n {
             self.hum_phase = (self.hum_phase + 60.0 / rate as f32).fract();
             let t = self.hum_phase * std::f32::consts::TAU;
@@ -426,7 +437,6 @@ impl FaultRun {
             out.push(v);
             out.push(v);
         }
-        out
     }
 }
 
@@ -536,6 +546,8 @@ impl MicBlow {
     const RELEASE: f32 = 0.15;
     /// O tempo inicial em que só se mede o ambiente.
     const WARMUP: f32 = 0.3;
+    /// Teto do piso de ruído — o limiar (4× o piso) fica sempre alcançável.
+    const MAX_FLOOR: f32 = 0.08;
 
     pub(crate) fn feed(&mut self, samples: &[i16], rate: u32) {
         let win = ((rate as f32 * Self::WINDOW) as usize).max(1);
@@ -552,7 +564,10 @@ impl MicBlow {
             let dt = chunk.len() as f32 / rate as f32;
             if self.heard < Self::WARMUP {
                 self.heard += dt;
-                self.floor = self.floor.max(rms * 0.5) * 0.7 + rms * 0.3;
+                // Com teto, como no ajuste lento: um sopro (ou um ventilador
+                // alto) logo na abertura não pode deixar o limiar fora de
+                // alcance.
+                self.floor = (self.floor.max(rms * 0.5) * 0.7 + rms * 0.3).min(Self::MAX_FLOOR);
                 continue;
             }
             let thr = (self.floor * 4.0).max(0.05);
@@ -573,7 +588,7 @@ impl MicBlow {
             }
             if !self.on && rms < thr {
                 // Só o ambiente ajusta o piso — devagar, e com teto.
-                self.floor = (self.floor * 0.995 + rms * 0.005).min(0.08);
+                self.floor = (self.floor * 0.995 + rms * 0.005).min(Self::MAX_FLOOR);
             }
             let target = (rms / (thr * 2.0)).min(1.0);
             self.level += (target - self.level) * 0.3;
@@ -585,9 +600,134 @@ impl MicBlow {
     }
 }
 
+/// O que a pessoa fez num frame da cena do sopro.
+struct RitualInput {
+    /// Fechou o app.
+    quit: bool,
+    /// Um botão escolhido (clique, ou A/Start/Select no controle).
+    clicked: Option<BlowButton>,
+    /// Soprando com a mão: clique segurado no tubo, ou Y/B.
+    by_hand: bool,
+}
+
+/// A entrada da cena do sopro: cliques (botões da cena, do queixo da TV,
+/// fechar/minimizar), os botões do controle com borda de subida e o
+/// "segurar para soprar".
+struct RitualControls {
+    prev_insert: bool,
+    prev_shelf: bool,
+}
+
+impl RitualControls {
+    fn new() -> Self {
+        // Começa "apertado": o A que inseriu/ejetou não vale como clique.
+        Self {
+            prev_insert: true,
+            prev_shelf: true,
+        }
+    }
+
+    fn poll(
+        &mut self,
+        plat: &mut Platform,
+        cab: &mut Cabinet,
+        input: &mut Input,
+        keymap: &KeyMap,
+    ) -> RitualInput {
+        let mut out = RitualInput {
+            quit: false,
+            clicked: None,
+            by_hand: false,
+        };
+        for ev in plat.poll(input, keymap) {
+            match ev {
+                UiEvent::CloseRequested => out.quit = true,
+                UiEvent::Click(x, y) => {
+                    let (ox, oy) = cab.window_to_output(x, y);
+                    if cab.hit_close_button(ox, oy) {
+                        out.quit = true;
+                    } else if cab.hit_minimize_button(ox, oy) {
+                        cab.minimize();
+                    } else if let Some(b) = cab.hit_blow_button(ox, oy) {
+                        out.clicked = Some(b);
+                    } else if let Some(tv) = cab.hit_tv_controls(ox, oy) {
+                        cab.apply_tv_control(tv);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let held = |b: PadButton| (0..sixteen_platform::MAX_PORTS).any(|p| input.held(p, b));
+        let insert = held(PadButton::A) || held(PadButton::Start);
+        let shelf = held(PadButton::Select);
+        if insert && !self.prev_insert {
+            out.clicked = Some(BlowButton::Insert);
+        }
+        if shelf && !self.prev_shelf {
+            out.clicked = Some(BlowButton::Shelf);
+        }
+        self.prev_insert = insert;
+        self.prev_shelf = shelf;
+        // Segurar o clique no tubo, fora dos botões (ou Y/B), sopra.
+        let mouse = plat.left_mouse_held().is_some_and(|(x, y)| {
+            let (ox, oy) = cab.window_to_output(x, y);
+            cab.hit_screen_point(ox, oy).is_some() && cab.hit_blow_button(ox, oy).is_none()
+        });
+        out.by_hand = mouse || held(PadButton::Y) || held(PadButton::B);
+        out
+    }
+}
+
+/// O "ffff" do sopro: ruído passado num passa-baixa, só enquanto sopra.
+struct BlowHiss {
+    audio: Option<AudioOut>,
+    rng: Rng,
+    lp: f32,
+    buf: Vec<i16>,
+}
+
+impl BlowHiss {
+    const RATE: u32 = 22_050;
+
+    fn new(plat: &Platform) -> Self {
+        Self {
+            audio: plat.open_audio(Self::RATE).ok(),
+            rng: Rng::seeded(),
+            lp: 0.0,
+            buf: Vec::new(),
+        }
+    }
+
+    /// Um frame: chiado com `on`, silêncio (fila cortada) sem.
+    fn frame(&mut self, cab: &Cabinet, on: bool) {
+        let Some(a) = &self.audio else {
+            return;
+        };
+        if !(on && cab.tv_on() && cab.volume() > 0) {
+            a.clear();
+            return;
+        }
+        if a.queued_frames() >= (Self::RATE / 15) as usize {
+            return;
+        }
+        let n = (Self::RATE / 60) as usize;
+        let amp = 5200.0 * cab.volume() as f32 / 16.0;
+        self.buf.clear();
+        for _ in 0..n {
+            let w = self.rng.next_f32() * 2.0 - 1.0;
+            self.lp += (w - self.lp) * 0.18;
+            let v = (self.lp * amp) as i16;
+            self.buf.push(v);
+            self.buf.push(v);
+        }
+        a.queue(&self.buf);
+    }
+}
+
 /// A cena do sopro, depois de ejetar um cartucho que falhou: o cartucho
 /// voa para a frente da TV com os contatos para quem joga, segurar o clique
-/// (ou Y/B) sopra, e "Inserir de novo"/"Guardar na estante" encerram.
+/// (ou Y/B, ou soprar no microfone) sopra, e "Inserir de novo"/"Guardar na
+/// estante" encerram.
 pub(crate) fn blow_ritual(
     plat: &mut Platform,
     cab: &mut Cabinet,
@@ -599,28 +739,21 @@ pub(crate) fn blow_ritual(
     const FLY_IN: f32 = 0.9;
     const FLY_OUT: f32 = 0.6;
     let frame_time = Duration::from_secs_f64(1.0 / 60.0);
-    let audio = plat.open_audio(22_050).ok();
+    let mut hiss = BlowHiss::new(plat);
+    let mut controls = RitualControls::new();
     let mut blow = Blow::new(title);
     let mut last = Instant::now();
     let mut next = Instant::now();
-    let mut prev_a = true;
-    let mut prev_select = true;
     let mut leaving: Option<RitualExit> = None;
-    let mut noise = Rng::seeded();
-    let mut lp = 0.0f32;
     cab.set_cartridge_motion(Some((1.0, true)));
     // O microfone só abre aqui, durante a cena, e só com a opção ligada.
-    let mut mic = if use_mic {
-        match plat.open_mic(16_000) {
-            Ok(m) => Some(m),
-            Err(e) => {
-                log::warn!("microfone indisponível: {e}");
-                None
-            }
-        }
-    } else {
-        None
-    };
+    let mut mic = use_mic
+        .then(|| {
+            plat.open_mic(16_000)
+                .map_err(|e| log::warn!("microfone indisponível: {e}"))
+                .ok()
+        })
+        .flatten();
     let mut mic_blow = MicBlow::default();
 
     loop {
@@ -628,103 +761,43 @@ pub(crate) fn blow_ritual(
         let dt = (now - last).as_secs_f32().min(0.05);
         last = now;
 
-        let mut clicked: Option<BlowButton> = None;
-        for ev in plat.poll(input, keymap) {
-            match ev {
-                UiEvent::CloseRequested => return RitualExit::Quit,
-                UiEvent::Click(x, y) => {
-                    let (ox, oy) = cab.window_to_output(x, y);
-                    if cab.hit_close_button(ox, oy) {
-                        return RitualExit::Quit;
-                    } else if cab.hit_minimize_button(ox, oy) {
-                        cab.minimize();
-                    } else if let Some(b) = cab.hit_blow_button(ox, oy) {
-                        clicked = Some(b);
-                    } else if let Some(tv) = cab.hit_tv_controls(ox, oy) {
-                        match tv {
-                            sixteen_platform::TvControl::Power => cab.toggle_tv_power(),
-                            sixteen_platform::TvControl::VolUp => cab.nudge_volume(1),
-                            sixteen_platform::TvControl::VolDown => cab.nudge_volume(-1),
-                            sixteen_platform::TvControl::Channel => cab.toggle_channel(),
-                        }
-                    }
-                }
-                _ => {}
-            }
+        let inp = controls.poll(plat, cab, input, keymap);
+        if inp.quit {
+            return RitualExit::Quit;
         }
-        let held = |b: PadButton| (0..sixteen_platform::MAX_PORTS).any(|p| input.held(p, b));
-        let a_now = held(PadButton::A) || held(PadButton::Start);
-        let select_now = held(PadButton::Select);
-        if a_now && !prev_a {
-            clicked = Some(BlowButton::Insert);
-        }
-        if select_now && !prev_select {
-            clicked = Some(BlowButton::Shelf);
-        }
-        prev_a = a_now;
-        prev_select = select_now;
-
-        // Segurar o clique no tubo, fora dos botões (ou Y/B no controle), sopra.
-        let mouse = plat.left_mouse_held().is_some_and(|(x, y)| {
-            let (ox, oy) = cab.window_to_output(x, y);
-            cab.hit_screen_point(ox, oy).is_some() && cab.hit_blow_button(ox, oy).is_none()
-        });
         if let Some(m) = &mut mic {
-            let rate = m.rate;
+            let rate = m.source_rate;
             mic_blow.feed(m.read(), rate);
             blow.scene.mic = Some(mic_blow.level);
         }
-        let by_hand = mouse || held(PadButton::Y) || held(PadButton::B);
-        let holding = leaving.is_none() && (by_hand || mic_blow.blowing());
+        let holding = leaving.is_none() && (inp.by_hand || mic_blow.blowing());
 
         match leaving {
+            None if blow.scene.lift < 1.0 => {
+                blow.scene.lift = (blow.scene.lift + dt / FLY_IN).min(1.0);
+            }
             None => {
-                if blow.scene.lift < 1.0 {
-                    blow.scene.lift = (blow.scene.lift + dt / FLY_IN).min(1.0);
-                } else if let Some(b) = clicked {
-                    leaving = Some(match b {
-                        BlowButton::Insert => RitualExit::Reinsert {
-                            clean: blow.scene.clean,
-                            fog: blow.scene.fog,
-                        },
-                        BlowButton::Shelf => RitualExit::Shelf,
-                    });
-                }
+                leaving = inp.clicked.map(|b| match b {
+                    BlowButton::Insert => RitualExit::Reinsert {
+                        clean: blow.scene.clean,
+                        fog: blow.scene.fog,
+                    },
+                    BlowButton::Shelf => RitualExit::Shelf,
+                });
             }
             Some(exit) => {
                 blow.scene.lift = (blow.scene.lift - dt / FLY_OUT).max(0.0);
                 if blow.scene.lift <= 0.0 {
-                    if let Some(a) = &audio {
-                        a.clear();
-                    }
+                    hiss.frame(cab, false);
                     return exit;
                 }
             }
         }
         blow.step(dt, holding);
 
-        // O "ffff": ruído passado num passa-baixa, só enquanto sopra.
-        if let Some(a) = &audio {
-            // Soprando no microfone o som é o seu: o "ffff" sintetizado
-            // ficaria realimentando o próprio microfone.
-            if blow.scene.blowing && by_hand && cab.tv_on() && cab.volume() > 0 {
-                if a.queued_frames() < 22_050 / 15 {
-                    let n = 22_050 / 60;
-                    let amp = 5200.0 * cab.volume() as f32 / 16.0;
-                    let mut buf = Vec::with_capacity(n * 2);
-                    for _ in 0..n {
-                        let w = noise.next_f32() * 2.0 - 1.0;
-                        lp += (w - lp) * 0.18;
-                        let v = (lp * amp) as i16;
-                        buf.push(v);
-                        buf.push(v);
-                    }
-                    a.queue(&buf);
-                }
-            } else {
-                a.clear();
-            }
-        }
+        // Com o microfone aberto o som do sopro é o seu: o "ffff"
+        // sintetizado vazaria do alto-falante para o próprio microfone.
+        hiss.frame(cab, blow.scene.blowing && inp.by_hand && mic.is_none());
 
         cab.present_blow(crate::runner::OFF_STATIC_LEVEL, &blow.scene);
         crate::runner::pace_frame(&mut next, frame_time);
@@ -755,13 +828,7 @@ pub(crate) fn debug_shots(
     let vram = core.with_memory(sixteen_emulation::MEMORY_VIDEO_RAM, |_| {});
     log::info!("debug-blow: VRAM exposta pelo core: {vram}");
     for i in 1..=1200u32 {
-        f.frames += 1;
-        core.run();
-        f.corrupt_vram(core);
-        if let Some(frame) = core.take_frame() {
-            f.grab(&frame);
-            core.recycle_frame(frame);
-        }
+        f.step_core(core, 32_040);
         if i.is_multiple_of(300) {
             f.capture(ntsc, cab, rom, &dir.join(format!("falha_graficos_{i}.bmp")))?;
         }
@@ -903,6 +970,16 @@ mod tests {
         assert!(m.level > 0.5);
         m.feed(&tone(16_000, 0.4, 0.01, true), 16_000);
         assert!(!m.blowing(), "parou de soprar, solta");
+    }
+
+    #[test]
+    fn mic_still_hears_after_a_loud_start() {
+        let mut m = MicBlow::default();
+        // Soprando já na abertura: o piso não pode subir sem teto.
+        m.feed(&tone(16_000, 0.3, 0.9, true), 16_000);
+        m.feed(&tone(16_000, 0.3, 0.01, true), 16_000);
+        m.feed(&tone(16_000, 0.3, 0.6, true), 16_000);
+        assert!(m.blowing());
     }
 
     #[test]
