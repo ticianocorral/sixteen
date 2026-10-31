@@ -10,9 +10,9 @@ pub mod tr;
 pub use audio::{AudioIn, AudioOut};
 pub use cabinet::{
     prepare_art, BlowButton, BlowScene, Cabinet, Dust, FrameRef, HltbBar, HltbBars, IgdbSection,
-    PanelButton, PanelSection, PixelFormat, PreparedArt, RaStatus, RfAudio, Screen, SettingsButton,
-    SettingsPanelInfo, ShelfButton, ShelfPanelInfo, TvControl, TvPower, UpdateArrow, BRAND,
-    DEMO_BADGE_IMG, RA_LOGO_IMG,
+    PanelButton, PanelSection, Picture, PixelFormat, PreparedArt, RaStatus, RfAudio, Screen,
+    SettingsButton, SettingsPanelInfo, ShelfButton, ShelfPanelInfo, TvControl, TvPower, TvSound,
+    TvSpeaker, UpdateArrow, BRAND, DEMO_BADGE_IMG, RA_LOGO_IMG,
 };
 pub use input::{Input, KeyMap, PadButton, PadMap, UiEvent, MAX_PORTS};
 // The SDL gamepad button enum, for callers that hold a captured press

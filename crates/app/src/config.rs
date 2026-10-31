@@ -49,6 +49,21 @@ pub struct Config {
     /// Ally, notebook) — além do clique/Y. Desligado por padrão: o
     /// microfone só abre durante a cena, e só com isto ligado.
     pub blow_mic: bool,
+    /// O som do jogo pelo alto-falante da própria TV (mono, abafado) em
+    /// vez do 3 em 1 estéreo (o padrão). Seção de vídeo.
+    pub tv_speaker: bool,
+    /// O chiado agudo do flyback (~15 kHz) com a TV ligada. Desligado por
+    /// padrão — tem quem nem escute, tem quem não aguente.
+    pub flyback_whine: bool,
+    /// Burn-in leve: horas no mesmo jogo marcam o HUD no tubo, e a marca
+    /// some com o tempo. Desligado por padrão.
+    pub burn_in: bool,
+    /// A luz do quarto pela hora do dia (reflexo da janela de dia, quarto
+    /// escuro com o brilho azul do tubo à noite). Ligado por padrão.
+    pub room_light: bool,
+    /// O menu OSD da TV: brilho, contraste, cor e nitidez (0..100, 50 =
+    /// neutro), ajustados pelo MENU do queixo e salvos aqui ao sair.
+    pub tv_picture: [u8; 4],
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
     /// fase 1) — the username and the web-API token the user generates on
     /// retroachievements.org (Settings → Web API). Both empty (the default)
@@ -241,6 +256,16 @@ struct Raw {
     #[serde(default)]
     blow_mic: Option<bool>,
     #[serde(default)]
+    tv_speaker: Option<bool>,
+    #[serde(default)]
+    flyback_whine: Option<bool>,
+    #[serde(default)]
+    burn_in: Option<bool>,
+    #[serde(default)]
+    room_light: Option<bool>,
+    #[serde(default)]
+    tv_picture: Option<Vec<u8>>,
+    #[serde(default)]
     ra_user: Option<String>,
     #[serde(default)]
     ra_token: Option<String>,
@@ -275,6 +300,11 @@ impl Config {
             shelf_theme: ShelfTheme::Wood,
             bad_contact: BadContact::Off,
             blow_mic: false,
+            tv_speaker: false,
+            flyback_whine: false,
+            burn_in: false,
+            room_light: true,
+            tv_picture: [50; 4],
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -350,6 +380,26 @@ impl Config {
         if let Some(m) = raw.blow_mic {
             self.blow_mic = m;
         }
+        if let Some(v) = raw.tv_speaker {
+            self.tv_speaker = v;
+        }
+        if let Some(v) = raw.flyback_whine {
+            self.flyback_whine = v;
+        }
+        if let Some(v) = raw.burn_in {
+            self.burn_in = v;
+        }
+        if let Some(v) = raw.room_light {
+            self.room_light = v;
+        }
+        if let Some(p) = raw.tv_picture {
+            match <[u8; 4]>::try_from(p.as_slice()) {
+                Ok(p) => self.tv_picture = p.map(|v| v.min(100)),
+                Err(_) => log::warn!(
+                    "[config] tv_picture = {p:?}: want 4 values (brightness, contrast, color, sharpness)"
+                ),
+            }
+        }
         if let Some(u) = raw.ra_user {
             self.ra_user = u;
         }
@@ -412,6 +462,11 @@ impl Config {
              # shelf_theme: the shelf furniture — wood (default) or metal (rental-store rack).\n\
              # bad_contact: cartridge bad contact on first power-on — off (default), rare or 90s.\n\
              # blow_mic: blow into the real microphone to clean the cartridge (off by default).\n\
+             # tv_speaker: game sound through the TV's own small mono speaker (off = 3-in-1 stereo).\n\
+             # flyback_whine: the ~15 kHz flyback whine while the TV is on (off by default).\n\
+             # burn_in: hours on the same game lightly mark the HUD on the tube (off by default).\n\
+             # room_light: room lighting follows the clock — window by day, dark room at night.\n\
+             # tv_picture: TV menu [brightness, contrast, color, sharpness], 0-100, 50 = neutral.\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
@@ -428,7 +483,12 @@ impl Config {
         s.push_str(&format!("hiss_on_static = {}\n", self.hiss_on_static));
         s.push_str(&format!("shelf_theme = {:?}\n", self.shelf_theme.as_str()));
         s.push_str(&format!("bad_contact = {:?}\n", self.bad_contact.as_str()));
-        s.push_str(&format!("blow_mic = {}\n\n", self.blow_mic));
+        s.push_str(&format!("blow_mic = {}\n", self.blow_mic));
+        s.push_str(&format!("tv_speaker = {}\n", self.tv_speaker));
+        s.push_str(&format!("flyback_whine = {}\n", self.flyback_whine));
+        s.push_str(&format!("burn_in = {}\n", self.burn_in));
+        s.push_str(&format!("room_light = {}\n", self.room_light));
+        s.push_str(&format!("tv_picture = {:?}\n\n", self.tv_picture));
         s.push_str("# RetroAchievements\n");
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
         s.push_str(&format!("ra_token = {:?}\n", self.ra_token));
@@ -482,6 +542,11 @@ mod tests {
             shelf_theme: ShelfTheme::Wood,
             bad_contact: BadContact::Off,
             blow_mic: false,
+            tv_speaker: false,
+            flyback_whine: false,
+            burn_in: false,
+            room_light: true,
+            tv_picture: [50; 4],
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
@@ -606,6 +671,35 @@ mod tests {
             .apply(toml::from_str(&cfg.to_toml()).unwrap())
             .unwrap();
         assert!(round.blow_mic);
+    }
+
+    #[test]
+    fn tv_room_settings_round_trip() {
+        let mut cfg = defaults();
+        assert!(!cfg.tv_speaker && !cfg.flyback_whine && !cfg.burn_in);
+        assert!(cfg.room_light);
+        assert_eq!(cfg.tv_picture, [50; 4]);
+        cfg.apply(
+            toml::from_str(
+                "tv_speaker = true\nflyback_whine = true\nburn_in = true\n\
+                 room_light = false\ntv_picture = [70, 40, 55, 200]",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        // Valor fora de 0..100 encosta no máximo.
+        assert_eq!(cfg.tv_picture, [70, 40, 55, 100]);
+        // Lista do tamanho errado é ignorada.
+        cfg.apply(toml::from_str("tv_picture = [1, 2]").unwrap())
+            .unwrap();
+        assert_eq!(cfg.tv_picture, [70, 40, 55, 100]);
+        let mut round = defaults();
+        round
+            .apply(toml::from_str(&cfg.to_toml()).unwrap())
+            .unwrap();
+        assert!(round.tv_speaker && round.flyback_whine && round.burn_in);
+        assert!(!round.room_light);
+        assert_eq!(round.tv_picture, [70, 40, 55, 100]);
     }
 
     #[test]

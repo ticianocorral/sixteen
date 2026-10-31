@@ -1264,7 +1264,8 @@ fn preview_modal(
 /// som pelo alto-falante dela — a fila morre na hora (o corte, não o fade,
 /// é a mesma regra do hiss); ao religar, o áudio volta no tempo do jogo.
 /// No canal 4 o som vem como a imagem: abafado, com chiado e o zumbido do
-/// vertical ([`RfAudio`](sixteen_platform::RfAudio)).
+/// vertical ([`RfAudio`](sixteen_platform::RfAudio)); com o alto-falante da
+/// TV escolhido (em vez do 3 em 1), sai mono e abafado.
 pub(crate) fn queue_game_audio(
     audio: &sixteen_platform::AudioOut,
     cab: &Cabinet,
@@ -1276,26 +1277,29 @@ pub(crate) fn queue_game_audio(
         audio.clear();
         return;
     }
-    if let Some(signal) = cab.ch4_signal() {
-        if cab.volume() > 0 {
-            rf.process(samples, audio.source_rate, signal, cab.volume(), vol_buf);
-            audio.queue(vol_buf);
-        }
-        return;
-    }
     let vol = cab.volume() as i32;
-    if vol == 16 {
+    if vol == 0 {
+        return; // mudo, nada entra na fila
+    }
+    let speaker = cab.tv_sound() == sixteen_platform::TvSound::Speaker;
+    if let Some(signal) = cab.ch4_signal() {
+        rf.process(samples, audio.source_rate, signal, cab.volume(), vol_buf);
+    } else if vol == 16 && !speaker {
         audio.queue(samples);
-    } else if vol > 0 {
+        return;
+    } else {
         vol_buf.clear();
         vol_buf.extend(samples.as_chunks::<2>().0.iter().flat_map(|p| {
             let l = (p[0] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
             let r = (p[1] as i32 * vol / 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
             [l, r]
         }));
-        audio.queue(vol_buf);
     }
-    // vol == 0: mudo, nada entra na fila
+    // O alto-falante da TV em vez do 3 em 1: mono, sem grave nem agudo.
+    if speaker {
+        rf.speaker.process(vol_buf, audio.source_rate);
+    }
+    audio.queue(vol_buf);
 }
 
 /// Badges decodificados fora do laço do jogo: (id da imagem, (w, h, rgba)).
@@ -2493,6 +2497,9 @@ pub fn run_game(
                     );
                     last_dims = dims;
                 }
+                // O menu de imagem da TV mexe no filtro de verdade (só refaz
+                // a tabela quando o valor muda).
+                ntsc.set_picture(crate::ntsc_picture(cab.picture()));
                 // RF NTSC on RGB565 frames; anything else passes straight through.
                 let fref = if frame.format == EmuFormat::Rgb565 {
                     ntsc_frame(

@@ -7,6 +7,26 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+### Adicionado
+- **DEGAUSS** no queixo da TV: o "tum" grave da bobina e a imagem tremendo
+  com manchas coloridas que somem aos poucos. Apertar de novo logo em
+  seguida dá um Degauss mais fraco (a bobina precisa esfriar).
+- **Menu de imagem da TV** (tecla **MENU** no queixo): brilho, contraste,
+  cor e nitidez em letras verdes de TV dos anos 90, ajustados com VOL –/+
+  e aplicados no filtro NTSC de verdade. Salvos em `tv_picture`.
+- **Burn-in leve** (opcional, `burn_in`): horas no mesmo jogo marcam o HUD
+  de leve no tubo; a marca some com o tempo.
+- **Chiado do flyback** (opcional, `flyback_whine`): o apito de ~15 kHz da
+  TV ligada. E o vidro estala de leve nos primeiros minutos depois de
+  ligar.
+- **Som da TV vs. 3 em 1** (`tv_speaker`): o alto-falante da TV, pequeno,
+  mono e abafado, ou o estéreo cheio de sempre.
+- **Luz do quarto pela hora do dia** (`room_light`, ligada por padrão): o
+  reflexo da janela no vidro de dia, a luz alaranjada no fim da tarde e,
+  à noite, o quarto escuro com o brilho azul do tubo na moldura.
+
 ## [1.6.1] - 2026-10-31
 
 ### Alterado

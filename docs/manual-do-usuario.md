@@ -159,6 +159,23 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
   vizinho do modulador de verdade — imagem fraca e com neve, cor sumindo,
   a imagem rolando de vez em quando e o som abafado. Dá para jogar assim,
   se quiser a nostalgia completa.
+- **MENU** abre o menu de imagem da TV, em letras verdes: **brilho**,
+  **contraste**, **cor** e **nitidez**. Cada toque no MENU passa para o
+  próximo item (depois do último, fecha); com o menu aberto, **VOL –/+**
+  ajustam o item em vez do volume. Os ajustes mexem no filtro da imagem do
+  jogo de verdade e ficam salvos. O menu fecha sozinho depois de alguns
+  segundos parado.
+- **DEGAUSS** desmagnetiza o tubo: o "tum" grave e a imagem tremendo com
+  manchas coloridas que somem aos poucos. Apertar de novo logo em seguida
+  dá um Degauss mais fraco — a bobina precisa esfriar, como na TV de
+  verdade. (MENU e DEGAUSS ficam à esquerda da marca e só aparecem quando
+  a janela tem espaço no queixo.)
+- O vidro estala de leve algumas vezes nos primeiros minutos depois de
+  ligar a TV, enquanto esquenta.
+- A **luz do quarto** segue o relógio: de dia a janela reflete no vidro;
+  no fim da tarde a luz fica alaranjada; à noite o quarto escurece e a
+  moldura pega o brilho azul do tubo. Dá para desligar em Configurações →
+  vídeo.
 - O **nome do console** no queixo da TV, com a versão do app e do núcleo.
   **Setas verdes** acendem ao lado quando existe atualização do app ou do
   núcleo — clique nelas para atualizar (veja a [seção 13](#13-atualizações)).
@@ -448,6 +465,14 @@ cinco seções na coluna; tudo é salvo na hora.
 - **Tela cheia** — liga/desliga o modo tela cheia (padrão: ligada).
 - **Chiado da TV fora do ar** — o barulhinho de estática quando o console
   está desligado. Nostálgicos: ligado. Padrão: desligado.
+- **Estante** — o móvel da estante: madeira ou o expositor de metal.
+- **Som do jogo** — *3 em 1 estéreo* (padrão) ou *alto-falante da TV*:
+  pequeno, mono e abafado, como o som saía da própria TV.
+- **Chiado do flyback (~15 kHz)** — o apito agudo de TV de tubo ligada.
+  Tem quem nem escute e tem quem não aguente: padrão desligado.
+- **Burn-in do tubo** — horas no mesmo jogo marcam o HUD de leve no tubo,
+  e a marca some com o tempo jogando outra coisa. Padrão: desligado.
+- **Luz do quarto** — *pela hora do dia* (padrão) ou *desligada*.
 
 ### sistema
 - **Núcleo: baixar / atualizar** — instala ou atualiza o "cérebro" snes9x.

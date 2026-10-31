@@ -32,6 +32,50 @@ pub mod sfx;
 pub mod shelf;
 pub mod update_check;
 
+use sixteen_platform::{Cabinet, Picture, TvSound};
+
+/// Passa as opções da TV e do quarto para o gabinete — na abertura e a
+/// cada mudança na tela de configurações.
+pub fn apply_tv_settings(cfg: &config::Config, cab: &mut Cabinet) {
+    cab.set_tv_sound(if cfg.tv_speaker {
+        TvSound::Speaker
+    } else {
+        TvSound::Stereo
+    });
+    cab.set_flyback(cfg.flyback_whine);
+    cab.set_burn_in(cfg.burn_in);
+    cab.set_room_light(cfg.room_light);
+    let [brilho, contraste, cor, nitidez] = cfg.tv_picture;
+    cab.set_picture(Picture {
+        brilho,
+        contraste,
+        cor,
+        nitidez,
+    });
+}
+
+/// Traz o que o menu de imagem da TV ajustou para o `cfg`; `true` se
+/// mudou (aí vale gravar).
+pub fn sync_tv_picture(cfg: &mut config::Config, cab: &Cabinet) -> bool {
+    let p = cab.picture();
+    let now = [p.brilho, p.contraste, p.cor, p.nitidez];
+    let changed = cfg.tv_picture != now;
+    cfg.tv_picture = now;
+    changed
+}
+
+/// O menu de imagem da TV em ajustes do filtro NTSC: 50 = o preset puro,
+/// e os extremos vão até onde a imagem ainda é imagem.
+pub fn ntsc_picture(p: Picture) -> sixteen_ntsc::Picture {
+    let k = |v: u8, span: f64| (v as f64 - 50.0) / 50.0 * span;
+    sixteen_ntsc::Picture {
+        brightness: k(p.brilho, 0.45),
+        contrast: k(p.contraste, 0.45),
+        saturation: k(p.cor, 0.9),
+        sharpness: k(p.nitidez, 0.8),
+    }
+}
+
 /// A logo oficial do RetroAchievements (o favicon do site, embutida) — o
 /// runner/bin registra no `Cabinet` com [`sixteen_platform::RA_LOGO_IMG`]
 /// para o badge do queixo. Vermelho/dourado/azul: a marca lida na própria

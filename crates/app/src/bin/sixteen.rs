@@ -225,6 +225,8 @@ fn main() -> Result<()> {
     // The ambient static hiss (opt-in, settings "vídeo") — gate applied once
     // here and live on every settings toggle after.
     cab.set_static_hiss(cfg.hiss_on_static);
+    // A TV e o quarto: som, flyback, burn-in, luz e o menu de imagem.
+    sixteen_app::apply_tv_settings(&cfg, &mut cab);
     // RetroAchievements, uma vez para todas as telas (início, estante, jogo):
     // a logo oficial (favicon embutido) do badge e o badge em si — conta
     // configurada = "RA ATIVADO" no queixo do que for que a tela esteja na TV.
@@ -429,6 +431,13 @@ fn main() -> Result<()> {
         }
     }
 
+    // O menu de imagem da TV é ajustado no queixo, fora da tela de
+    // configurações: grava aqui, na saída, se mudou.
+    if sixteen_app::sync_tv_picture(&mut cfg, &cab) {
+        if let Err(e) = cfg.save() {
+            log::warn!("salvando o menu de imagem da TV: {e}");
+        }
+    }
     log::info!("bye");
     Ok(())
 }

@@ -422,8 +422,10 @@ fn to_u8(v: f32) -> u8 {
 
 /// O som do canal 4: o áudio do jogo mais baixo e abafado (a portadora de
 /// som do canal vizinho chega fraca), chiado e o zumbido de 60 Hz do
-/// vertical, seguindo a força do sinal da imagem.
+/// vertical, seguindo a força do sinal da imagem. Leva junto o
+/// alto-falante da TV ([`TvSpeaker`]), o outro filtro do som do canal.
 pub struct RfAudio {
+    pub speaker: super::TvSpeaker,
     rng: u32,
     lp_l: f32,
     lp_r: f32,
@@ -433,6 +435,7 @@ pub struct RfAudio {
 impl Default for RfAudio {
     fn default() -> Self {
         Self {
+            speaker: super::TvSpeaker::default(),
             rng: 0x7F4A_7C15,
             lp_l: 0.0,
             lp_r: 0.0,

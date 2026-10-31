@@ -32,9 +32,12 @@ mod panel_art;
 mod pause;
 mod rf;
 mod text;
+mod tv;
 
 pub use blow::{BlowButton, BlowScene, Dust};
 pub use rf::RfAudio;
+use tv::TvExtras;
+pub use tv::{Picture, TvSound, TvSpeaker};
 
 use blow::*;
 use chin::*;
@@ -443,6 +446,9 @@ pub struct Cabinet {
     /// the queued audio before the device ever plays it (the bug that made
     /// the first foley attempt silent).
     foley: Option<AudioOut>,
+    /// A TV e o quarto: Degauss, menu de imagem, burn-in, sons do tubo,
+    /// alto-falante e luz do quarto (`tv.rs`).
+    tvx: TvExtras,
     /// The "CH 3" channel banner's deadline during gameplay (plan revision:
     /// "quando ligar o console, mostrar por 3 segundos e remover da tela")
     /// — `None` means not showing. The static path (`present_static`)
@@ -550,6 +556,9 @@ pub enum TvControl {
     VolUp,
     VolDown,
     Channel,
+    /// O menu OSD de imagem (brilho, contraste, cor, nitidez).
+    Menu,
+    Degauss,
 }
 
 /// Os rects clicáveis do queixo da TV, registrados a cada frame (ver
@@ -561,6 +570,8 @@ pub struct TvChinControls {
     pub vol_up: Rect,
     pub ch: Rect,
     pub power: Rect,
+    pub menu: Rect,
+    pub degauss: Rect,
 }
 
 impl TvChinControls {
@@ -572,6 +583,8 @@ impl TvChinControls {
             vol_up: no,
             ch: no,
             power: no,
+            menu: no,
+            degauss: no,
         }
     }
 }
@@ -1327,6 +1340,7 @@ impl Cabinet {
             volume_osd_until: None,
             tv_power_buttons: None,
             foley: None,
+            tvx: TvExtras::new(),
             ch3_until: None,
             tv_channel: 3,
             canvas_rect,
@@ -1504,6 +1518,10 @@ impl Cabinet {
             Some(TvControl::VolDown)
         } else if c.ch.contains_point((ox, oy)) {
             Some(TvControl::Channel)
+        } else if c.menu.contains_point((ox, oy)) {
+            Some(TvControl::Menu)
+        } else if c.degauss.contains_point((ox, oy)) {
+            Some(TvControl::Degauss)
         } else {
             None
         }
@@ -1972,6 +1990,7 @@ impl Cabinet {
     /// 1`): present is where a GPU/compositor/display stall shows up — telling
     /// it apart from a slow app loop is the whole point of the trace.
     fn present_and_time(&mut self) {
+        self.feed_tv_sound();
         let _span = super::TraceSpan::new("present");
         self.canvas.present();
     }
@@ -2114,6 +2133,7 @@ impl Cabinet {
     /// Draw one frame to the window. `aspect_ratio <= 0` means "use 4:3".
     pub fn present_frame(&mut self, frame: &FrameRef, aspect_ratio: f32) {
         self.upload(frame);
+        self.tvx.sample_frame(frame);
 
         let (real_w, real_h) = self
             .canvas
@@ -2154,6 +2174,7 @@ impl Cabinet {
         // estático: faixas mortas, borda âmbar, ponto do afterglow, vidro
         // morto inteiro).
         self.draw_tv_phase_glass(&phase);
+        self.draw_glass_extras(&mesh, screen);
         let _ = self
             .canvas
             .render_geometry(&bezel.verts, None, &bezel.indices[..]);
@@ -2265,6 +2286,7 @@ impl Cabinet {
             .create_texture_target(SdlFormat::RGBA32, real_w, real_h)
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
 
+        self.prepare_glass();
         let src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
@@ -2283,6 +2305,7 @@ impl Cabinet {
         // TV desligada, vidro morto onde estaria a imagem do jogo.
         let phase = self.tv_phase_snapshot();
         let tv_on = self.tv_on();
+        let glass = self.tvx.glass_view(tv_on);
         // O flash do canal (plan revision: ligar a TV/console): o que a
         // janela real mostraria neste instante do começo do sinal.
         let ch3_show = tv_on && self.ch3_until.is_some_and(|until| Instant::now() < until);
@@ -2304,6 +2327,7 @@ impl Cabinet {
                 let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
             }
             draw_tv_glass_phase(c, screen, &phase);
+            tv::draw_glass(c, font, &mesh, screen, &glass);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
             let _ = draw_brand(c, font, screen, out_h, nameplate, nameplate_updates);
             // A marca prateada centralizada (a captura bate com a janela).
@@ -2419,10 +2443,20 @@ impl Cabinet {
 
     fn ensure_mesh(&mut self, dst: Rect) {
         let (w, h) = (dst.width(), dst.height());
-        if matches!(&self.mesh, Some(m) if m.w == w && m.h == h) {
+        // O Degauss deforma o mesh quadro a quadro; no fim, um limpo.
+        let fx = self.tvx.degauss_fx();
+        if fx.is_none()
+            && !self.tvx.mesh_fx
+            && matches!(&self.mesh, Some(m) if m.w == w && m.h == h)
+        {
             return;
         }
-        self.mesh = Some(build_crt_mesh(dst, 1.0));
+        let mut mesh = build_crt_mesh(dst, 1.0);
+        if let Some((amount, t)) = fx {
+            tv::apply_degauss(&mut mesh, dst, amount, t);
+        }
+        self.tvx.mesh_fx = fx.is_some();
+        self.mesh = Some(mesh);
     }
 
     /// Garante o `mesh` da tela atual e um `fade_mesh` igual a ele com o
@@ -2449,10 +2483,10 @@ impl Cabinet {
 
     fn ensure_bezel(&mut self, out_w: u32, out_h: u32, screen: Rect) {
         let key = (out_w, out_h, screen.width(), screen.height());
-        if matches!(&self.bezel, Some(b) if b.key == key) {
-            return;
+        if !matches!(&self.bezel, Some(b) if b.key == key) {
+            self.bezel = Some(build_bezel_mesh(out_w, out_h, screen, key));
         }
-        self.bezel = Some(build_bezel_mesh(out_w, out_h, screen, key));
+        self.light_bezel();
     }
 
     // --- 2D path (selector) --------------------------------------------
@@ -2813,9 +2847,25 @@ impl Cabinet {
     pub fn apply_tv_control(&mut self, control: TvControl) {
         match control {
             TvControl::Power => self.toggle_tv_power(),
-            TvControl::VolUp => self.nudge_volume(1),
-            TvControl::VolDown => self.nudge_volume(-1),
+            // Com o menu de imagem aberto, VOL-/VOL+ ajustam o item, como
+            // nas TVs de botão no painel.
+            TvControl::VolUp => {
+                if !self.tvx.menu_adjust(1) {
+                    self.nudge_volume(1)
+                }
+            }
+            TvControl::VolDown => {
+                if !self.tvx.menu_adjust(-1) {
+                    self.nudge_volume(-1)
+                }
+            }
             TvControl::Channel => self.toggle_channel(),
+            TvControl::Menu => {
+                if self.tv_on() {
+                    self.tvx.menu_press();
+                }
+            }
+            TvControl::Degauss => self.degauss(),
         }
     }
 
@@ -2835,6 +2885,7 @@ impl Cabinet {
             Some(TvPower::Warming { frames }) => {
                 if frames + 1 >= TV_WARM_FRAMES {
                     self.tv_power = None; // ligada
+                    self.tvx.schedule_ticks();
                 } else {
                     self.tv_power = Some(TvPower::Warming { frames: frames + 1 });
                 }
@@ -3074,6 +3125,9 @@ impl Cabinet {
         // A máscara da fase (raster abrindo/colapsando/vidro morto), por
         // cima da neve — a mesma passada do gameplay.
         self.draw_tv_phase_glass(&phase);
+        self.tvx.set_lum_target(0.05 + drawn_level * 0.4);
+        let screen = self.screen;
+        self.draw_glass_extras(&mesh, screen);
         let bezel = self.bezel.take().unwrap();
         let _ = self
             .canvas
@@ -3203,6 +3257,8 @@ impl Cabinet {
         let nt = self.noise_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
         let tv_on = self.tv_on();
+        self.prepare_glass();
+        let glass = self.tvx.glass_view(tv_on);
         let panel_info = self.panel.as_ref();
         let session = self.session;
         let idle_core_prompt = self.idle_core_prompt.as_deref();
@@ -3223,6 +3279,7 @@ impl Cabinet {
             c.clear();
             c.set_viewport(Some(canvas_rect));
             let _ = c.render_geometry(&mesh.verts, Some(&nt.tex), &mesh.indices[..]);
+            tv::draw_glass(c, font, &mesh, screen, &glass);
             let _ = c.render_geometry(&bezel.verts, None, &bezel.indices[..]);
             // TV desligada (mesma regra do present_static): o vidro morto
             // por cima da neve, sem CH 3 nem badge.
@@ -3580,6 +3637,10 @@ impl Cabinet {
         let _ = self
             .canvas
             .render_geometry(&mesh.verts, Some(&st.tex), &mesh.indices[..]);
+        // A estante é escura: pouca luz do tubo no quarto.
+        self.tvx.set_lum_target(0.15);
+        let screen = self.screen;
+        self.draw_glass_extras(&mesh, screen);
         self.mesh = Some(mesh);
         self.screen_tex = Some(st);
         let bezel = self.bezel.take().unwrap();

@@ -278,11 +278,43 @@ pub(super) fn draw_tv_chin_controls(
     let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w * 2;
     let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
 
+    // MENU e DEGAUSS: do outro lado da marca, à esquerda dela — entre a
+    // placa de versão (canto esquerdo, ~16 colunas) e o logo. Janela
+    // estreita demais: ficam de fora.
+    let logo_h = (chin_h as f32 * 0.25).round() as i32;
+    let logo_w = (logo_h as f32 * BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32).round() as i32;
+    let logo_left = screen.left() + (screen.width() as i32 - logo_w) / 2;
+    let plate_right = screen.left() + GLYPH_W as i32 * 16 + 24;
+    let text_key = |label: &str| GLYPH_W as i32 * label.chars().count() as i32 + 14;
+    let (menu_w, dg_w) = (text_key("MENU"), text_key("DEGAUSS"));
+    let menu_left = logo_left - 28 - menu_w;
+    let dg_left = menu_left - pair_gap - dg_w;
+    let off = TvChinControls::offscreen();
+    let (mut menu, mut degauss) = (off.menu, off.degauss);
+    if dg_left >= plate_right {
+        degauss = Rect::new(dg_left, cy - key_h / 2, dg_w as u32, key_h as u32);
+        menu = Rect::new(menu_left, cy - key_h / 2, menu_w as u32, key_h as u32);
+        for (r, label) in [(degauss, "DEGAUSS"), (menu, "MENU")] {
+            draw_silver_key(canvas, r, on);
+            draw_text_absolute(
+                canvas,
+                font,
+                r.x() + 7,
+                r.y() + (r.height() as i32 - GLYPH_H as i32) / 2,
+                TextStyle::new(1, key_ink),
+                label,
+                usize::MAX,
+            );
+        }
+    }
+
     TvChinControls {
         vol_down,
         vol_up,
         ch,
         power: prect,
+        menu,
+        degauss,
     }
 }
 

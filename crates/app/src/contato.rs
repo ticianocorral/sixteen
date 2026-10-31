@@ -258,6 +258,7 @@ impl FaultRun {
         vol_buf: &mut Vec<i16>,
         rf: &mut RfAudio,
     ) {
+        ntsc.set_picture(crate::ntsc_picture(cab.picture()));
         if !self.frozen {
             self.step_core(core, audio.source_rate);
             if audio.queued_frames() < audio_cap {

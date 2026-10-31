@@ -123,10 +123,21 @@ impl Preset {
     }
 }
 
+/// Os ajustes de imagem da TV (o menu OSD), somados por cima do preset:
+/// cada um de -1 a 1, 0 = como o preset deixa.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Picture {
+    pub brightness: f64,
+    pub contrast: f64,
+    pub saturation: f64,
+    pub sharpness: f64,
+}
+
 pub struct NtscFilter {
     /// The ~8 MiB kernel table. `u64`-backed for 8-byte alignment.
     table: Box<[u64]>,
     preset: Preset,
+    picture: Picture,
     phase: c_int,
     animate: bool,
     in_buf: Vec<u16>,
@@ -140,6 +151,7 @@ impl NtscFilter {
         let mut me = Self {
             table,
             preset,
+            picture: Picture::default(),
             phase: 0,
             animate: preset == Preset::Rf,
             in_buf: Vec::new(),
@@ -161,8 +173,27 @@ impl NtscFilter {
         }
     }
 
+    pub fn picture(&self) -> Picture {
+        self.picture
+    }
+
+    /// Troca os ajustes de imagem — refaz a tabela do filtro (alguns ms),
+    /// então só quando o valor muda de fato.
+    pub fn set_picture(&mut self, picture: Picture) {
+        if picture != self.picture {
+            self.picture = picture;
+            self.reinit();
+        }
+    }
+
     fn reinit(&mut self) {
-        let setup = self.preset.setup();
+        let mut setup = self.preset.setup();
+        let p = self.picture;
+        let clamp = |v: f64| v.clamp(-1.0, 1.0);
+        setup.brightness = clamp(setup.brightness + p.brightness);
+        setup.contrast = clamp(setup.contrast + p.contrast);
+        setup.saturation = clamp(setup.saturation + p.saturation);
+        setup.sharpness = clamp(setup.sharpness + p.sharpness);
         unsafe { snes_ntsc_init(self.table.as_mut_ptr() as *mut c_void, &setup) };
     }
 
@@ -258,6 +289,30 @@ mod tests {
             .0
             .to_vec();
         assert_eq!(out_a, out_b);
+    }
+
+    #[test]
+    fn brightness_really_brightens_and_is_fast() {
+        // Cinza médio: o ajuste de brilho do menu da TV tem que mudar a
+        // saída de verdade, e refazer a tabela não pode travar o quadro.
+        let (w, h) = (256u32, 4u32);
+        let gray = 0x8410u16.to_le_bytes();
+        let buf: Vec<u8> = (0..w * h).flat_map(|_| gray).collect();
+        let luma = |f: &mut NtscFilter| {
+            let (out, ow, _) = f.process(&buf, w, h, w as usize * 2);
+            let px = out[(ow * 2 + ow / 2) as usize];
+            ((px >> 11) & 31) as u32 + ((px >> 5) & 63) as u32 / 2 + (px & 31) as u32
+        };
+        let mut f = NtscFilter::new(Preset::Rgb);
+        let base = luma(&mut f);
+        let t = std::time::Instant::now();
+        f.set_picture(Picture {
+            brightness: 0.4,
+            ..Picture::default()
+        });
+        let took = t.elapsed();
+        assert!(luma(&mut f) > base + 4, "brilho não clareou");
+        assert!(took.as_millis() < 250, "reinit levou {took:?}");
     }
 
     #[test]

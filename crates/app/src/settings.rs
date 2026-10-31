@@ -67,8 +67,9 @@ const RA_ROW_SENHA: usize = 2;
 fn row_count(sec: usize, cfg: &Config) -> usize {
     match sec {
         SEC_JOGO => 3,
-        // tela cheia / chiado / estante
-        SEC_VIDEO => 3,
+        // tela cheia / chiado / estante / som da TV / flyback / burn-in /
+        // luz do quarto
+        SEC_VIDEO => 7,
         // núcleo / checar updates / idioma / renomear ROMs
         SEC_SISTEMA => 4,
         // usuário / token / senha / testar login / hardcore
@@ -117,6 +118,9 @@ enum LoginStatus {
 /// token do RetroAchievements continuam gravando na hora (credencial não
 /// espera a saída da tela).
 pub fn run(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Result<bool> {
+    // O menu de imagem da TV pode ter mudado desde a última gravação:
+    // entra no `cfg` antes, para esta gravação não salvar o valor velho.
+    crate::sync_tv_picture(cfg, cab);
     let before = cfg.to_toml();
     let result = run_screen(plat, cab, cfg);
     if cfg.to_toml() != before {
@@ -499,9 +503,10 @@ fn activate_row(
                 cfg.hiss_on_static = !cfg.hiss_on_static;
                 cab.set_static_hiss(cfg.hiss_on_static);
             }
-            _ => {
+            2 => {
                 cfg.shelf_theme = cfg.shelf_theme.cycle();
             }
+            _ => toggle_tv_row(cfg, i, cab),
         },
         SEC_SISTEMA => match i {
             0 => start_core_download(core_status, core_worker),
@@ -581,6 +586,7 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, right
         (SEC_VIDEO, 2) => {
             cfg.shelf_theme = cfg.shelf_theme.cycle();
         }
+        (SEC_VIDEO, i @ 3..=6) => toggle_tv_row(cfg, i, cab),
         (SEC_SISTEMA, 1) => {
             cfg.check_updates_on_start = !cfg.check_updates_on_start;
         }
@@ -593,6 +599,18 @@ fn adjust_row(cfg: &mut Config, sec: usize, sel: usize, cab: &mut Cabinet, right
         }
         _ => {}
     }
+}
+
+/// As linhas da TV e do quarto (vídeo 3..6): alternam e já valem na TV.
+fn toggle_tv_row(cfg: &mut Config, row: usize, cab: &mut Cabinet) {
+    match row {
+        3 => cfg.tv_speaker = !cfg.tv_speaker,
+        4 => cfg.flyback_whine = !cfg.flyback_whine,
+        5 => cfg.burn_in = !cfg.burn_in,
+        6 => cfg.room_light = !cfg.room_light,
+        _ => return,
+    }
+    crate::apply_tv_settings(cfg, cab);
 }
 
 /// Push the config's language into the string picker — at startup the bins
@@ -817,6 +835,15 @@ fn draw_jogo(d: &mut Screen, cfg: &Config, sel: usize) {
     );
 }
 
+/// "ligado"/"desligado" (ou on/off) para as linhas de liga-desliga.
+fn on_off(v: bool) -> &'static str {
+    if v {
+        tr!("on", "ligado")
+    } else {
+        tr!("off", "desligado")
+    }
+}
+
 fn draw_video(d: &mut Screen, cfg: &Config, sel: usize) {
     let x = MARGIN;
     d.text(x, MARGIN, 2, TEXT, tr!("video", "vídeo"));
@@ -861,6 +888,50 @@ fn draw_video(d: &mut Screen, cfg: &Config, sel: usize) {
         tr!(
             format!("Shelf: {}", shelf_theme_name(cfg.shelf_theme)),
             format!("Estante: {}", shelf_theme_name(cfg.shelf_theme)),
+        ),
+        tr!(
+            format!(
+                "Game sound: {}",
+                if cfg.tv_speaker {
+                    "TV speaker (mono)"
+                } else {
+                    "3-in-1 stereo"
+                }
+            ),
+            format!(
+                "Som do jogo: {}",
+                if cfg.tv_speaker {
+                    "alto-falante da TV (mono)"
+                } else {
+                    "3 em 1 estéreo"
+                }
+            )
+        ),
+        tr!(
+            format!("Flyback whine (~15 kHz): {}", on_off(cfg.flyback_whine)),
+            format!("Chiado do flyback (~15 kHz): {}", on_off(cfg.flyback_whine))
+        ),
+        tr!(
+            format!("Tube burn-in: {}", on_off(cfg.burn_in)),
+            format!("Burn-in do tubo: {}", on_off(cfg.burn_in))
+        ),
+        tr!(
+            format!(
+                "Room light: {}",
+                if cfg.room_light {
+                    "follows the clock"
+                } else {
+                    "off"
+                }
+            ),
+            format!(
+                "Luz do quarto: {}",
+                if cfg.room_light {
+                    "pela hora do dia"
+                } else {
+                    "desligada"
+                }
+            )
         ),
     ];
     for (i, row) in rows.iter().enumerate() {
