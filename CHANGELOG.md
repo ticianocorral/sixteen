@@ -7,6 +7,16 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.5.0] - 2026-10-30
+
+### Adicionado
+- **Expositor de metal da locadora** — alternativa ao móvel de madeira da
+  estante: chapa perfurada no fundo, montantes com cremalheira, prateleiras
+  de aço com canaleta e etiquetas de preço, e um arame cromado segurando as
+  caixas em pé. Escolha em Configurações → vídeo → Estante (gravado como
+  `shelf_theme = "wood" | "metal"` no `sixteen.cfg`); madeira segue o
+  padrão.
+
 ## [1.4.1] - 2026-10-29
 
 ### Corrigido
