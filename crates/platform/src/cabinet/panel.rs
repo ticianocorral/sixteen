@@ -12,6 +12,69 @@ pub(super) fn panel_rect(out_w: u32, out_h: u32) -> Rect {
     Rect::new((out_w - w) as i32, 0, w, out_h)
 }
 
+/// Space between the pinned photo and the pinned paper note.
+const NOTE_GAP: i32 = 10;
+/// The pinned photo's border and the paper note: light stock, dark ink —
+/// the one bright spot in the panel, so a glance mid-game finds it.
+const NOTE_PHOTO: (u8, u8, u8) = (228, 224, 214);
+const NOTE_PAPER: (u8, u8, u8) = (240, 226, 150);
+const NOTE_GLUE: (u8, u8, u8) = (222, 202, 118);
+const NOTE_INK: (u8, u8, u8) = (46, 40, 30);
+
+/// Wrap a note into `cols`-wide lines: greedy word packing, the player's
+/// own line breaks kept, any word longer than a line hard-split.
+fn note_lines(text: &str, cols: usize) -> Vec<String> {
+    let cols = cols.max(1);
+    let mut out = Vec::new();
+    for para in text.lines() {
+        let mut line = String::new();
+        for word in para.split_whitespace() {
+            let len = line.chars().count();
+            if len > 0 && len + 1 + word.chars().count() > cols {
+                out.push(std::mem::take(&mut line));
+            }
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+            while line.chars().count() > cols {
+                out.push(line.chars().take(cols).collect());
+                line = line.chars().skip(cols).collect();
+            }
+        }
+        if !line.is_empty() {
+            out.push(line);
+        }
+    }
+    out
+}
+
+/// The first `max` of `lines`, the last one ending in "..." when some had
+/// to be left out.
+fn fit_lines(lines: &[String], max: usize, cols: usize) -> Vec<String> {
+    if lines.len() <= max {
+        return lines.to_vec();
+    }
+    let mut out = lines[..max].to_vec();
+    if let Some(last) = out.last_mut() {
+        let keep = cols.saturating_sub(3).min(last.chars().count());
+        *last = format!(
+            "{}...",
+            last.chars().take(keep).collect::<String>().trim_end()
+        );
+    }
+    out
+}
+
+/// `s` cut to `max` chars, with "..." when it didn't fit.
+fn ellipsize(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max.saturating_sub(3)).collect();
+    format!("{head}...")
+}
+
 /// Draw the side panel: background, logo (or title) at top, session timer at
 /// the bottom. Plain widgets, not warped by the tube (plan §2, §3.2). `None`
 /// (no game loaded — the idle/root screen) draws just the "Inserir cartucho"
@@ -383,29 +446,18 @@ pub(super) fn draw_panel(
         );
     }
 
-    // 5. Notes — a pinned print's thumbnail + counter, and/or a pinned
-    // text-note slot's content (plan §3.2, item 5; §3.4; plan revision:
-    // the two are independent — either, both, or neither can be showing at
-    // once, "mostrar apenas uma nota e/ou uma imagem"). Used to show
-    // whatever was captured/viewed most recently regardless of pin, which
-    // was surprising; now it's opt-in on both sides. Absent entirely with
-    // nothing pinned either way, not a "no notes" filler. Same room-check
-    // shape as cheats, above — the thumbnail and the text block each add
-    // their own extra room when present.
-    let text_h = panel
-        .text_note
-        .as_ref()
-        .map_or(0, |t| wrapped_height(inner_w, 1, t) + 6);
-    let notes_h = 16
-        + (GLYPH_H as i32 + 6)
-        + if panel.has_note_thumb { 70 + 6 } else { 0 }
-        + if panel.note_count > 0 {
-            GLYPH_H as i32 + 6
-        } else {
-            0
-        }
-        + text_h;
-    if (panel.note_count > 0 || panel.text_note.is_some()) && cy + notes_h <= limit {
+    // 5. Notes — what the player pinned, shown to be read mid-game (plan
+    // §3.2, item 5; §3.4; plan revision: the two are independent — either,
+    // both, or neither can be showing at once, "mostrar apenas uma nota
+    // e/ou uma imagem"). The print is a framed photo at the column's full
+    // width with its caption under it, the text a paper note with the whole
+    // content wrapped — both sized to whatever room the column has left,
+    // the photo shrinking first so the note keeps a few lines, and the
+    // note cut with "..." only where the column runs out. Absent entirely
+    // with nothing pinned, not a "no notes" filler.
+    let text = panel.text_note.as_deref().filter(|t| !t.trim().is_empty());
+    let header_h = 16 + GLYPH_H as i32 + 6;
+    if (panel.has_note_thumb || text.is_some()) && cy + header_h + 48 <= limit {
         cy += 16;
         draw_text_absolute(
             canvas,
@@ -413,44 +465,98 @@ pub(super) fn draw_panel(
             x,
             cy,
             TextStyle::new(1, PANEL_DIM),
-            tr!("notes", "notas"),
+            tr!("pinned notes", "notas fixadas"),
             usize::MAX,
         );
         cy += GLYPH_H as i32 + 6;
-        if panel.has_note_thumb {
-            draw_image_absolute(canvas, images, PANEL_NOTE_IMG, x, cy, inner_w, 70);
-            cy += 70 + 6;
-        }
-        if panel.note_count > 0 {
-            let label = if panel.note_count == 1 {
-                tr!("1 slot pinned", "1 slot fixado").to_string()
+
+        let row = GLYPH_H as i32 + 2;
+        let card_pad = 8i32;
+        let cols = ((inner_w as i32 - card_pad * 2).max(GLYPH_W as i32) as u32 / GLYPH_W) as usize;
+        let lines = text.map(|t| note_lines(t, cols)).unwrap_or_default();
+        // What the paper note keeps for itself before the photo sizes up:
+        // all of it if it's short, else at least three lines or two fifths
+        // of the room left, whichever is more — so neither the photo nor
+        // the note crowds the other out of a small window.
+        let text_reserve = if lines.is_empty() {
+            0
+        } else {
+            let full = NOTE_GAP + card_pad * 2 + row * lines.len() as i32;
+            let min = NOTE_GAP + card_pad * 2 + row * lines.len().min(3) as i32;
+            full.min(min.max((limit - cy) * 2 / 5))
+        };
+
+        if let Some(img) = images.get(&PANEL_NOTE_IMG).filter(|_| panel.has_note_thumb) {
+            let frame = 5i32;
+            let caption = panel.note_caption.trim();
+            let caption_h = if caption.is_empty() {
+                0
             } else {
-                tr!(
-                    format!("{} slots pinned", panel.note_count),
-                    format!("{} slots fixados", panel.note_count)
-                )
+                GLYPH_H as i32 + 6
             };
-            draw_text_absolute(
-                canvas,
-                font,
-                x,
-                cy,
-                TextStyle::new(1, PANEL_TEXT),
-                &label,
-                usize::MAX,
-            );
-            cy += GLYPH_H as i32 + 6;
+            let max_w = inner_w as i32 - frame * 2;
+            let natural_h = max_w * img.h as i32 / img.w.max(1) as i32;
+            let room = limit - cy - text_reserve - frame * 2 - caption_h;
+            let img_h = natural_h.min(room);
+            if img_h >= 48 {
+                let img_w = img_h * img.w as i32 / img.h.max(1) as i32;
+                let fx = x + (inner_w as i32 - img_w - frame * 2) / 2;
+                let fw = img_w + frame * 2;
+                let fh = img_h + frame * 2 + caption_h;
+                canvas.set_draw_color(Color::RGB(NOTE_PHOTO.0, NOTE_PHOTO.1, NOTE_PHOTO.2));
+                let _ = canvas.fill_rect(Rect::new(fx, cy, fw as u32, fh as u32));
+                draw_image_absolute(
+                    canvas,
+                    images,
+                    PANEL_NOTE_IMG,
+                    fx + frame,
+                    cy + frame,
+                    img_w as u32,
+                    img_h as u32,
+                );
+                if !caption.is_empty() {
+                    let max_chars = ((fw - frame * 2) / GLYPH_W as i32).max(1) as usize;
+                    let shown = ellipsize(caption, max_chars);
+                    let tw = GLYPH_W as i32 * shown.chars().count() as i32;
+                    draw_text_absolute(
+                        canvas,
+                        font,
+                        fx + (fw - tw) / 2,
+                        cy + frame + img_h + 4,
+                        TextStyle::new(1, NOTE_INK),
+                        &shown,
+                        usize::MAX,
+                    );
+                }
+                cy += fh;
+            }
         }
-        if let Some(text) = &panel.text_note {
-            draw_text_wrapped_absolute(
-                canvas,
-                font,
-                x,
-                cy,
-                inner_w,
-                TextStyle::new(1, PANEL_TEXT),
-                text,
-            );
+
+        if !lines.is_empty() {
+            let top = cy + if panel.has_note_thumb { NOTE_GAP } else { 0 };
+            let max_lines = ((limit - top - card_pad * 2) / row).max(0) as usize;
+            if max_lines > 0 {
+                let shown = fit_lines(&lines, max_lines, cols);
+                let card_h = card_pad * 2 + row * shown.len() as i32 - 2;
+                canvas.set_draw_color(Color::RGB(NOTE_PAPER.0, NOTE_PAPER.1, NOTE_PAPER.2));
+                let _ = canvas.fill_rect(Rect::new(x, top, inner_w, card_h as u32));
+                // The sticky strip along the top edge.
+                canvas.set_draw_color(Color::RGB(NOTE_GLUE.0, NOTE_GLUE.1, NOTE_GLUE.2));
+                let _ = canvas.fill_rect(Rect::new(x, top, inner_w, 4));
+                let mut ly = top + card_pad;
+                for line in &shown {
+                    draw_text_absolute(
+                        canvas,
+                        font,
+                        x + card_pad,
+                        ly,
+                        TextStyle::new(1, NOTE_INK),
+                        line,
+                        usize::MAX,
+                    );
+                    ly += row;
+                }
+            }
         }
     }
 
@@ -1070,5 +1176,20 @@ pub(super) fn draw_panel_block(
             );
             cy + HLTB_ICON + 4
         }
+    }
+}
+
+#[cfg(test)]
+mod note_tests {
+    use super::{fit_lines, note_lines};
+
+    #[test]
+    fn note_wraps_keeps_breaks_and_cuts_with_dots() {
+        let lines = note_lines("pegar a lampada\nsenha: abc", 10);
+        assert_eq!(lines, ["pegar a", "lampada", "senha: abc"]);
+        assert_eq!(note_lines(&"x".repeat(12), 5), ["xxxxx", "xxxxx", "xx"]);
+        let cut = fit_lines(&lines, 2, 10);
+        assert_eq!(cut, ["pegar a", "lampada..."]);
+        assert_eq!(fit_lines(&lines, 5, 10), lines);
     }
 }

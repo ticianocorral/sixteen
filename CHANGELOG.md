@@ -24,6 +24,12 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   reflexo da janela no vidro de dia, a luz alaranjada no fim da tarde e,
   à noite, o quarto escuro com o brilho azul do tubo na moldura.
 
+### Alterado
+- **Notas fixadas no painel**: o print fixado aparece grande, na largura do
+  painel, numa moldura com o nome embaixo; o texto fixado aparece inteiro num
+  papel amarelo, não mais cortado em 120 caracteres. Sai o contador
+  "N slots fixados".
+
 ## [1.6.1] - 2026-10-31
 
 ### Alterado

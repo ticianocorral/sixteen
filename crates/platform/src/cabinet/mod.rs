@@ -950,15 +950,15 @@ struct PanelInfo {
     /// position is just `powered` itself (a real toggle, stays where left).
     reset_pressed: bool,
     cheats: Vec<(String, bool)>,
-    /// Notebook block (item 5, plan §3.4): absent entirely when this is 0 —
-    /// no "no notes" filler.
-    note_count: usize,
+    /// Notebook block (item 5, plan §3.4): a pinned print shown big, as a
+    /// framed photo with its caption under it (`note_caption`, empty for
+    /// none). Absent entirely with nothing pinned — no "no notes" filler.
     has_note_thumb: bool,
-    /// A pinned text-note slot's content (plan revision — independent of
-    /// the photo thumbnail above: either, both, or neither can be showing
-    /// at once, "mostrar apenas uma nota e/ou uma imagem"), already
-    /// snippet-length by the time it gets here (see `runner::
-    /// panel_text_snippet`) — the panel itself doesn't truncate anything.
+    note_caption: String,
+    /// A pinned text-note slot's full content (plan revision — independent
+    /// of the photo above: either, both, or neither can be showing at once,
+    /// "mostrar apenas uma nota e/ou uma imagem"). The panel wraps it and
+    /// cuts it with "..." only where the column actually runs out.
     text_note: Option<String>,
     /// Insert/eject progress for the panel's cartridge slot (plan revision)
     /// — `None` is the resting seated state every normal frame draws;
@@ -1668,8 +1668,8 @@ impl Cabinet {
             powered: false,
             reset_pressed: false,
             cheats: Vec::new(),
-            note_count: 0,
             has_note_thumb: false,
+            note_caption: String::new(),
             text_note: None,
             // Seated in the slot until `runner`'s insert animation says
             // otherwise (it runs right after this).
@@ -1741,20 +1741,16 @@ impl Cabinet {
         }
     }
 
-    /// Update the panel's notebook block (plan §3.4, item 5): `count` of the
-    /// 15 print slots that are pinned (plan revision — used to be however
-    /// many were filled, shown regardless of pin; now the panel only
-    /// features what the player deliberately pinned), `thumb` a pinned
-    /// slot's image (width, height, RGBA) if there's one to show, `text` a
-    /// pinned text-note slot's content if there's one of those to show —
-    /// independent of the photo side, so either, both, or neither can be
-    /// present at once. Call once at game start and again after every
-    /// capture, write, or pin toggle (either kind). A no-op before
-    /// `set_panel`.
+    /// Update the panel's notebook block (plan §3.4, item 5): `thumb` a
+    /// pinned print's image (width, height, RGBA) and its `caption`, `text`
+    /// a pinned text-note slot's content — independent of each other, so
+    /// either, both, or neither can be present at once. Call once at game
+    /// start and again after every capture, write, rename, or pin toggle
+    /// (either kind). A no-op before `set_panel`.
     pub fn set_notes(
         &mut self,
-        count: usize,
         thumb: Option<(u32, u32, &[u8])>,
+        caption: &str,
         text: Option<&str>,
     ) {
         let has_thumb = if let Some((w, h, rgba)) = thumb {
@@ -1764,8 +1760,12 @@ impl Cabinet {
             false
         };
         if let Some(panel) = &mut self.panel {
-            panel.note_count = count;
             panel.has_note_thumb = has_thumb;
+            panel.note_caption = if has_thumb {
+                caption.to_string()
+            } else {
+                String::new()
+            };
             panel.text_note = text.map(str::to_string);
         }
     }

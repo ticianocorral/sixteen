@@ -1089,35 +1089,17 @@ fn migrate_legacy_text_notes(notes_dir: &Path, title: &str) {
     log::info!("notas.txt: migrated {migrated} page(s) into numbered text-note slots");
 }
 
-/// Panel display cap for a pinned text note (plan revision) — the full
-/// slot can run up to `NOTE_CHAR_LIMIT`, way more than the side panel has
-/// comfortable room for alongside everything else already in it. Mirrors
-/// `note_thumb`'s own smaller size (200px) for the panel vs. the full
-/// 900px the pause book gets.
-const PANEL_NOTE_SNIPPET_CHARS: usize = 120;
-
-/// Truncate `text` to at most `max_chars`, with a trailing `...` if it
-/// didn't already fit — see `PANEL_NOTE_SNIPPET_CHARS`.
-fn panel_text_snippet(text: &str, max_chars: usize) -> String {
-    if text.chars().count() <= max_chars {
-        return text.to_string();
-    }
-    let head: String = text.chars().take(max_chars.saturating_sub(3)).collect();
-    format!("{head}...")
-}
-
-/// Recompute the panel's notebook block from what's actually on disk: how
-/// many of the 15 print slots are pinned (plan revision — used to be how
-/// many were filled, shown regardless of pin; a slot nobody deliberately
-/// featured showing up in the always-visible panel anyway was the actual
-/// complaint), a thumbnail if there's a pinned one to show, and a pinned
-/// text note's content if there's one of those too — independent of the
-/// photo side ("mostrar apenas uma nota e/ou uma imagem"), so either, both,
-/// or neither can end up in the panel. Both sides pick the same way: the
-/// currently-viewed slot if it's itself pinned, else the lowest-numbered
-/// pinned one, else none. Call at game start, after every capture/write,
-/// after cycling either slot, and after every pin toggle (either kind) —
-/// cheap, at most 30 file-exists checks.
+/// Recompute the panel's notebook block from what's actually on disk: a
+/// pinned print (with its caption) if there's one to show, and a pinned
+/// text note's full content if there's one of those too — independent of
+/// the photo side ("mostrar apenas uma nota e/ou uma imagem"), so either,
+/// both, or neither can end up in the panel. Only pinned slots ever show
+/// there (plan revision: a slot nobody deliberately featured showing up in
+/// the always-visible panel was the original complaint). Both sides pick
+/// the same way: the currently-viewed slot if it's itself pinned, else the
+/// lowest-numbered pinned one, else none. Call at game start, after every
+/// capture/write, after cycling either slot, and after every pin toggle or
+/// rename — cheap, at most 30 file-exists checks.
 fn refresh_notes(
     cab: &mut Cabinet,
     notes_dir: &Path,
@@ -1126,26 +1108,25 @@ fn refresh_notes(
     text_slot: u8,
     meta: &NotesMeta,
 ) {
-    let count = (1..=NOTE_SLOTS).filter(|&s| meta.slot(s).pinned).count();
     let thumb_slot = if meta.slot(slot).pinned {
         Some(slot)
     } else {
         (1..=NOTE_SLOTS).find(|&s| meta.slot(s).pinned)
     };
-    let thumb = thumb_slot.and_then(|s| note_thumb(notes_dir, title, s, 200));
+    // Big enough to stay sharp at the panel's full column width.
+    let thumb = thumb_slot.and_then(|s| note_thumb(notes_dir, title, s, 512));
+    let caption = thumb_slot.map(|s| meta.slot(s).label).unwrap_or_default();
 
     let text_pin_slot = if meta.text_slot(text_slot).pinned {
         Some(text_slot)
     } else {
         (1..=NOTE_SLOTS).find(|&s| meta.text_slot(s).pinned)
     };
-    let text = text_pin_slot
-        .and_then(|s| read_text_slot(notes_dir, title, s))
-        .map(|t| panel_text_snippet(&t, PANEL_NOTE_SNIPPET_CHARS));
+    let text = text_pin_slot.and_then(|s| read_text_slot(notes_dir, title, s));
 
     cab.set_notes(
-        count,
         thumb.as_ref().map(|(w, h, d)| (*w, *h, d.as_slice())),
+        &caption,
         text.as_deref(),
     );
 }
@@ -1783,6 +1764,15 @@ pub fn run_game(
                             note_draft.trim().to_string();
                         save_notes_meta(&spec.notes_dir, &title, &notes_meta);
                         show_note_slot(cab, &spec.notes_dir, &title, note_slot, &notes_meta);
+                        // A pinned print shows its caption in the panel too.
+                        refresh_notes(
+                            cab,
+                            &spec.notes_dir,
+                            &title,
+                            note_slot,
+                            text_slot,
+                            &notes_meta,
+                        );
                         log::info!("note slot {note_slot}: renamed");
                     }
                     NoteEdit::PrintName(print_slot) => {

@@ -359,7 +359,10 @@ dicas suas, senhas de fase, o que quiser:
 - **"Escrever"** (ou "Editar") abre a digitação — o teclado entra em ação;
   Enter salva, Esc cancela. Cada anotação cabe em 240 caracteres.
 - **"Fixar"** destaca uma anotação: o que está fixado aparece no painel
-  do console enquanto você joga.
+  do console enquanto você joga, em "notas fixadas" — o print grande, numa
+  moldura com o nome embaixo, e o texto inteiro num papel amarelo. Se o
+  painel não tiver espaço para tudo, a foto encolhe e o texto termina em
+  "...".
 - **"Apagar"** limpa o slot (um slot fixado não apaga — desfixe primeiro).
 
 **Página direita — álbum de prints.** Também são 15 slots, agora de
