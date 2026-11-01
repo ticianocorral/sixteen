@@ -475,15 +475,15 @@ pub(super) fn draw_panel(
         let cols = ((inner_w as i32 - card_pad * 2).max(GLYPH_W as i32) as u32 / GLYPH_W) as usize;
         let lines = text.map(|t| note_lines(t, cols)).unwrap_or_default();
         // What the paper note keeps for itself before the photo sizes up:
-        // all of it if it's short, else at least three lines or two fifths
-        // of the room left, whichever is more — so neither the photo nor
+        // all of it if it's short, else at least two lines or a third of
+        // the room left, whichever is more — so neither the photo nor
         // the note crowds the other out of a small window.
         let text_reserve = if lines.is_empty() {
             0
         } else {
             let full = NOTE_GAP + card_pad * 2 + row * lines.len() as i32;
-            let min = NOTE_GAP + card_pad * 2 + row * lines.len().min(3) as i32;
-            full.min(min.max((limit - cy) * 2 / 5))
+            let min = NOTE_GAP + card_pad * 2 + row * lines.len().min(2) as i32;
+            full.min(min.max((limit - cy) / 3))
         };
 
         if let Some(img) = images.get(&PANEL_NOTE_IMG).filter(|_| panel.has_note_thumb) {

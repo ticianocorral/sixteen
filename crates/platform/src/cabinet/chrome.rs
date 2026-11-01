@@ -53,9 +53,9 @@ pub(super) const OSD_GREEN: (u8, u8, u8) = (60, 230, 70);
 /// ... mostrar CH 3 na tv como era na tv antiga quando nao tinha sinal") —
 /// green, top-right of the tube. Drawn flat on the glass, deliberately NOT
 /// warped with the picture: an OSD is the TV's own overlay, not part of the
-/// A marca "SixteeN" centralizada no queixo — a arte prateada embutida
-/// (`BRAND_LOGO_*`), desenhada do mapa de imagens; sem ela registrada,
-/// nada a fazer.
+/// A marca "SixteeN" no queixo — a arte prateada embutida
+/// (`BRAND_LOGO_*`), desenhada do mapa de imagens onde `brand_logo_rect`
+/// manda; sem ela registrada, nada a fazer.
 pub(super) fn draw_brand_logo(
     canvas: &mut WindowCanvas,
     images: &HashMap<u64, ImgTex>,
@@ -65,16 +65,18 @@ pub(super) fn draw_brand_logo(
     if !images.contains_key(&BRAND_LOGO_ID) {
         return;
     }
-    let chin_top = screen.bottom();
-    let chin_h = out_h as i32 - chin_top;
-    if chin_h < 40 {
-        return;
+    let ratio = BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32;
+    if let Some(r) = super::controls::brand_logo_rect(screen, out_h, ratio) {
+        draw_image_absolute(
+            canvas,
+            images,
+            BRAND_LOGO_ID,
+            r.x(),
+            r.y(),
+            r.width(),
+            r.height(),
+        );
     }
-    let bh = (chin_h as f32 * 0.25).round() as u32;
-    let bw = (bh as f32 * (BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32)).round() as u32;
-    let x = screen.left() + (screen.width() as i32 - bw as i32) / 2;
-    let y = chin_top + (chin_h - bh as i32) / 2;
-    draw_image_absolute(canvas, images, BRAND_LOGO_ID, x, y, bw, bh);
 }
 
 /// signal (same reasoning as `draw_brand`'s chin text).

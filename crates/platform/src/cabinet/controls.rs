@@ -140,6 +140,66 @@ pub(super) fn draw_tv_glass_phase(canvas: &mut WindowCanvas, screen: Rect, phase
 /// Revision (a foto do painel real da TV): a fileira completa — TV/VIDEO
 /// (tecla redonda pequena), par VOL com rótulo gravado embaixo, par CH
 /// com rótulo embaixo, o dial POWER e o LED verde à direita dele.
+/// A geometria da fileira de controles do queixo, da esquerda do POWER
+/// até a borda esquerda do VOL — compartilhada pelo desenho dos controles
+/// e por `brand_logo_rect`, que precisa saber onde a fileira começa.
+struct ChinRow {
+    key_h: i32,
+    pw: i32,
+    ch_lw: i32,
+    ch_key_w: i32,
+    menu_w: i32,
+    vol_w: i32,
+    /// Da borda esquerda do POWER até a borda esquerda do VOL.
+    width: i32,
+}
+
+impl ChinRow {
+    fn new(chin_h: i32) -> Self {
+        let key_h = (chin_h as f32 * 0.34).round() as i32;
+        let pw = ((key_h + 12) as f32 * 0.58).round() as i32;
+        let key_w = (GLYPH_W as i32 * 3).max(38);
+        let ch_lw = GLYPH_W as i32 * 2;
+        let ch_key_w = GLYPH_W as i32 * 3 + 12;
+        let menu_w = GLYPH_W as i32 * 4 + 14;
+        let vol_w = GLYPH_W as i32 * 3 + 8 + 6 + key_w * 2;
+        let width = 14 + menu_w + 18 + ch_key_w + 8 + ch_lw + 18 + vol_w;
+        ChinRow {
+            key_h,
+            pw,
+            ch_lw,
+            ch_key_w,
+            menu_w,
+            vol_w,
+            width,
+        }
+    }
+}
+
+/// Onde a marca prateada mora no queixo: centralizada sob o vidro, ou
+/// empurrada para a esquerda quando a fileira de controles chega até ela
+/// (janela estreita) — e fora (`None`) se nem assim couber sem pisar na
+/// versão impressa no canto esquerdo.
+pub(super) fn brand_logo_rect(screen: Rect, out_h: u32, logo_w_per_h: f32) -> Option<Rect> {
+    let chin_top = screen.bottom();
+    let chin_h = out_h as i32 - chin_top;
+    if chin_h < 40 {
+        return None;
+    }
+    let bh = (chin_h as f32 * 0.25).round() as i32;
+    let bw = (bh as f32 * logo_w_per_h).round() as i32;
+    let mut x = screen.left() + (screen.width() as i32 - bw) / 2;
+    let row = ChinRow::new(chin_h);
+    if row.key_h >= 14 {
+        let pcx = screen.right() - row.pw / 2 - 26;
+        let controls_left = pcx - row.pw / 2 - row.width;
+        x = x.min(controls_left - 16 - bw);
+    }
+    // A versão do app e do núcleo, no canto esquerdo do queixo.
+    let version_right = screen.left() + GLYPH_W as i32 * 14;
+    (x >= version_right).then(|| Rect::new(x, chin_top + (chin_h - bh) / 2, bw as u32, bh as u32))
+}
+
 pub(super) fn draw_tv_chin_controls(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -207,39 +267,28 @@ pub(super) fn draw_tv_chin_controls(
         draw_led_color(canvas, led_cx, cy - 6, 12, true, LED_TV_ON, LED_TV_ON_HI);
     }
 
-    // MENU, colado à esquerda do POWER — se a fileira inteira (VOL, CH,
-    // MENU) ainda couber sem encostar na marca do centro do queixo; numa
-    // janela estreita ele fica de fora e o resto não se mexe.
-    let ch_label = "CH";
-    let ch_lw = GLYPH_W as i32 * ch_label.chars().count() as i32;
-    let ch_key_w = GLYPH_W as i32 * 3 + 12;
-    let vol_w = GLYPH_W as i32 * 3 + 8 + pair_gap + key_w * 2;
-    let logo_h = (chin_h as f32 * 0.25).round() as i32;
-    let logo_w = (logo_h as f32 * BRAND_LOGO_W as f32 / BRAND_LOGO_H as f32).round() as i32;
-    let logo_right = screen.left() + (screen.width() as i32 + logo_w) / 2;
-    let menu_w = GLYPH_W as i32 * 4 + 14;
-    let row_w = vol_w + group_gap + ch_lw + 8 + ch_key_w + group_gap + menu_w + 14;
-    let mut menu = TvChinControls::offscreen().menu;
-    let mut ch_right = pcx - pw / 2 - group_gap;
-    if pcx - pw / 2 - row_w >= logo_right + 12 {
-        menu = Rect::new(
-            pcx - pw / 2 - 14 - menu_w,
-            cy - key_h / 2,
-            menu_w as u32,
-            key_h as u32,
-        );
-        draw_silver_key(canvas, menu, on);
-        draw_text_absolute(
-            canvas,
-            font,
-            menu.x() + 7,
-            menu.y() + (menu.height() as i32 - GLYPH_H as i32) / 2,
-            TextStyle::new(1, key_ink),
-            "MENU",
-            usize::MAX,
-        );
-        ch_right = menu.x() - group_gap;
-    }
+    // MENU, colado à esquerda do POWER — sempre: é a única porta para o
+    // menu de imagem. Numa janela estreita quem cede é a marca do centro
+    // do queixo (`brand_logo_rect`), não um botão.
+    let g = ChinRow::new(chin_h);
+    let menu = Rect::new(
+        pcx - pw / 2 - 14 - g.menu_w,
+        cy - key_h / 2,
+        g.menu_w as u32,
+        key_h as u32,
+    );
+    draw_silver_key(canvas, menu, on);
+    draw_text_absolute(
+        canvas,
+        font,
+        menu.x() + 7,
+        menu.y() + (menu.height() as i32 - GLYPH_H as i32) / 2,
+        TextStyle::new(1, key_ink),
+        "MENU",
+        usize::MAX,
+    );
+    let ch_right = menu.x() - group_gap;
+    let (ch_label, ch_lw, ch_key_w) = ("CH", g.ch_lw, g.ch_key_w);
 
     // O botão único do canal: rótulo "CH" + a tecla "3-4" — um clique
     // alterna entre os dois canais que a TV tem.
@@ -306,7 +355,7 @@ pub(super) fn draw_tv_chin_controls(
             }
             (down, up)
         };
-    let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - vol_w, "VOL");
+    let (vol_down, vol_up) = draw_pair(canvas, font, ch_left - group_gap - g.vol_w, "VOL");
 
     TvChinControls {
         vol_down,
