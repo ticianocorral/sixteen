@@ -645,6 +645,9 @@ fn shelf_theme_name(theme: crate::config::ShelfTheme) -> &'static str {
         crate::config::ShelfTheme::Metal => {
             tr!("metal rental-store rack", "expositor de metal da locadora")
         }
+        crate::config::ShelfTheme::HiFi => tr!("black stereo rack", "rack de som preto"),
+        crate::config::ShelfTheme::Memphis => tr!("90s bedroom", "quarto anos 90"),
+        crate::config::ShelfTheme::Arcade => tr!("arcade", "fliperama"),
     }
 }
 

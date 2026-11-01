@@ -23,12 +23,21 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 - **Luz do quarto pela hora do dia** (`room_light`, ligada por padrão): o
   reflexo da janela no vidro de dia, a luz alaranjada no fim da tarde e,
   à noite, o quarto escuro com o brilho azul do tubo na moldura.
+- **Três temas novos para a estante** (Configurações → Estante):
+  - **rack de som preto**: laminado preto, frisos prateados e prateleiras de
+    vidro fumê;
+  - **quarto anos 90**: papel de parede Memphis, móvel laqueado branco e fita
+    turquesa;
+  - **fliperama**: carpete com desenho fluorescente e neon rosa e azul.
 
 ### Alterado
 - **Notas fixadas no painel**: o print fixado aparece grande, na largura do
   painel, numa moldura com o nome embaixo; o texto fixado aparece inteiro num
   papel amarelo, não mais cortado em 120 caracteres. Sai o contador
-  "N slots fixados".
+  "N slots fixados". Em janelas menores, a foto encolhe para dividir o espaço
+  com o texto.
+- **Queixo da TV**: o MENU aparece sempre; em janelas estreitas, a marca
+  SIXTEEN vai para a esquerda para dar lugar aos botões.
 
 ## [1.6.1] - 2026-10-31
 

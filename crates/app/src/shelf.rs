@@ -600,6 +600,14 @@ fn furniture_layer(
                 draw_rack_shelf(&mut r, MARGIN, board_w, y, 14, &tags);
             }
         }
+        ShelfTheme::HiFi | ShelfTheme::Memphis | ShelfTheme::Arcade => {
+            let look = CaseLook::of(theme);
+            draw_case(&mut r, scr_w, scr_h, grid.y0 + 1, &look);
+            for row in 0..grid.vis_rows {
+                let y = grid.y0 + row as i32 * grid.cell_h + grid.item_h;
+                draw_case_shelf(&mut r, MARGIN, board_w, y, 14, &look);
+            }
+        }
     }
     sixteen_platform::PreparedArt::raw(r.w, r.h, r.px)
 }
@@ -794,6 +802,377 @@ fn draw_rack_shelf(d: &mut impl Paint, x: i32, w: u32, y: i32, h: i32, tags: &[i
             dx as u32,
             1,
             (78, 82, 88, 255),
+        );
+    }
+}
+
+/// Os temas novos (rack de som, quarto, fliperama) dividem a mesma
+/// carpintaria — fundo, dois montantes, travessa e prateleiras — e mudam
+/// só o material: as cores de cada peça e o desenho do fundo.
+struct CaseLook {
+    wall: (u8, u8, u8),
+    pattern: Wallpaper,
+    post: (u8, u8, u8),
+    post_hi: (u8, u8, u8),
+    post_lo: (u8, u8, u8),
+    /// Um filete ao longo da travessa e da face interna dos montantes: o
+    /// friso prateado do rack, a fita colorida do quarto, o neon do
+    /// fliperama (com brilho na parede).
+    trim: (u8, u8, u8),
+    trim_glow: bool,
+    shelf: Shelf,
+}
+
+#[derive(Clone, Copy)]
+enum Wallpaper {
+    /// Fórmica preta com veio fino de "black ash" — o rack de som.
+    Ash,
+    /// Papel de parede Memphis: confete de rabiscos, triângulos e bolinhas.
+    Memphis,
+    /// O carpete preto de fliperama, com o desenho fluorescente de planetas,
+    /// estrelas e raios brilhando na luz negra.
+    Cosmic,
+}
+
+#[derive(Clone, Copy)]
+enum Shelf {
+    /// Vidro fumê com a quina verde do vidro de verdade.
+    Glass,
+    /// Laca branca com a borda de fita colorida.
+    Lacquer((u8, u8, u8)),
+    /// Tábua preta com um tubo de neon na frente.
+    Neon((u8, u8, u8)),
+}
+
+impl CaseLook {
+    fn of(theme: ShelfTheme) -> Self {
+        match theme {
+            ShelfTheme::Memphis => CaseLook {
+                wall: (38, 24, 56),
+                pattern: Wallpaper::Memphis,
+                post: (226, 222, 214),
+                post_hi: (250, 248, 242),
+                post_lo: (150, 144, 136),
+                trim: (236, 72, 140),
+                trim_glow: false,
+                shelf: Shelf::Lacquer((40, 190, 196)),
+            },
+            ShelfTheme::Arcade => CaseLook {
+                wall: (10, 8, 18),
+                pattern: Wallpaper::Cosmic,
+                post: (22, 20, 28),
+                post_hi: (54, 50, 64),
+                post_lo: (6, 5, 10),
+                trim: (255, 60, 190),
+                trim_glow: true,
+                shelf: Shelf::Neon((60, 230, 255)),
+            },
+            _ => CaseLook {
+                wall: (17, 17, 19),
+                pattern: Wallpaper::Ash,
+                post: (30, 30, 33),
+                post_hi: (66, 66, 72),
+                post_lo: (10, 10, 12),
+                trim: (176, 180, 188),
+                trim_glow: false,
+                shelf: Shelf::Glass,
+            },
+        }
+    }
+}
+
+/// Um gerador pseudoaleatório pequeno e fixo (o mesmo desenho a cada
+/// frame) para espalhar os enfeites do papel de parede.
+fn hash32(mut x: u32) -> u32 {
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x7feb_352d);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x846c_a68b);
+    x ^ (x >> 16)
+}
+
+/// O móvel dos temas novos em volta das capas, na geometria de
+/// `draw_cabinet`: fundo com o desenho do tema, vinheta, sombra da
+/// travessa, montantes e travessa no material do tema.
+fn draw_case(d: &mut impl Paint, scr_w: u32, scr_h: u32, top: i32, look: &CaseLook) {
+    const POST: i32 = 12;
+    let x0 = MARGIN - POST - 4;
+    let x1 = scr_w as i32 - MARGIN + 4;
+    let bottom = scr_h as i32;
+    let inner_w = (x1 - x0 - POST * 2).max(1) as u32;
+    let inner_h = (bottom - top).max(1) as u32;
+    let ix = x0 + POST;
+    let ix1 = x1 - POST;
+    let w = look.wall;
+    d.fill(ix, top, inner_w, inner_h, (w.0, w.1, w.2, 255));
+
+    match look.pattern {
+        Wallpaper::Ash => {
+            // Veio fino e reto, de tons quase iguais — o laminado do rack.
+            let mut gx = ix;
+            let mut k = 0u32;
+            while gx < ix1 {
+                let v = (hash32(k) % 5) as u8;
+                let wv = 2 + (hash32(k + 77) % 5) as i32;
+                d.fill(
+                    gx,
+                    top,
+                    wv.min(ix1 - gx) as u32,
+                    inner_h,
+                    (w.0 + v, w.1 + v, w.2 + v, 255),
+                );
+                gx += wv;
+                k += 1;
+            }
+        }
+        Wallpaper::Memphis => {
+            // Confete Memphis: cada célula da grade ganha um enfeite, numa
+            // das cores da época, em tom abafado para as capas mandarem.
+            const PALETTE: [(u8, u8, u8); 4] = [
+                (150, 60, 110),
+                (48, 132, 140),
+                (170, 140, 50),
+                (92, 84, 170),
+            ];
+            let cell = 46;
+            let mut i = 0u32;
+            let mut cy = top + 8;
+            while cy < bottom {
+                let mut cx = ix + 6;
+                while cx < ix1 - 10 {
+                    let h = hash32(i * 2654 + 17);
+                    let (c, a) = (PALETTE[(h % 4) as usize], 150u8);
+                    let px = cx + (h >> 8) as i32 % 24;
+                    let py = cy + (h >> 16) as i32 % 24;
+                    match (h >> 4) % 4 {
+                        // Rabisco em zigue-zague.
+                        0 => {
+                            for k in 0..5 {
+                                let up = if k % 2 == 0 { 0 } else { 4 };
+                                d.fill(px + k * 4, py + up, 5, 2, (c.0, c.1, c.2, a));
+                            }
+                        }
+                        // Triângulo cheio.
+                        1 => {
+                            for k in 0..8 {
+                                d.fill(
+                                    px + 8 - k,
+                                    py + k,
+                                    (k * 2 + 1) as u32,
+                                    1,
+                                    (c.0, c.1, c.2, a),
+                                );
+                            }
+                        }
+                        // Bolinha.
+                        2 => {
+                            for (dy, ww) in [(0, 2), (1, 4), (2, 6), (3, 6), (4, 4), (5, 2)] {
+                                d.fill(
+                                    px + (6 - ww) / 2,
+                                    py + dy,
+                                    ww as u32,
+                                    1,
+                                    (c.0, c.1, c.2, a),
+                                );
+                            }
+                        }
+                        // Tracinhos paralelos.
+                        _ => {
+                            for k in 0..3 {
+                                d.fill(px + k * 5, py + k * 2, 2, 9, (c.0, c.1, c.2, a));
+                            }
+                        }
+                    }
+                    cx += cell;
+                    i += 1;
+                }
+                cy += cell;
+            }
+        }
+        Wallpaper::Cosmic => {
+            // Estrelinhas por toda parte, e alguns planetas com anel e
+            // raios — o desenho fluorescente do carpete na luz negra.
+            const GLOW: [(u8, u8, u8); 4] = [
+                (255, 70, 200),
+                (70, 230, 255),
+                (250, 240, 80),
+                (140, 90, 255),
+            ];
+            let area = inner_w as i32 * inner_h as i32;
+            for k in 0..(area / 900).max(1) as u32 {
+                let h = hash32(k * 7 + 3);
+                let x = ix + (h % inner_w) as i32;
+                let y = top + ((h >> 12) % inner_h) as i32;
+                let c = GLOW[(h >> 28) as usize % 4];
+                d.fill(x, y, 2, 2, (c.0, c.1, c.2, 120));
+            }
+            for k in 0..(area / 26000).max(1) as u32 {
+                let h = hash32(k * 131 + 9);
+                let x = ix + 10 + (h % inner_w.saturating_sub(40).max(1)) as i32;
+                let y = top + 10 + ((h >> 10) % inner_h.saturating_sub(30).max(1)) as i32;
+                let c = GLOW[(h >> 26) as usize % 4];
+                if h & 1 == 0 {
+                    // Planeta com anel.
+                    for (dy, ww) in [(0, 4), (1, 8), (2, 10), (3, 10), (4, 8), (5, 4)] {
+                        d.fill(
+                            x + (10 - ww) / 2,
+                            y + dy,
+                            ww as u32,
+                            1,
+                            (c.0, c.1, c.2, 110),
+                        );
+                    }
+                    d.fill(x - 5, y + 3, 20, 1, (c.0, c.1, c.2, 150));
+                } else {
+                    // Raio em zigue-zague.
+                    for k in 0..4 {
+                        d.fill(
+                            x + if k % 2 == 0 { 0 } else { 4 },
+                            y + k * 4,
+                            6,
+                            4,
+                            (c.0, c.1, c.2, 110),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Vinheta: o fundo escurece para as laterais.
+    for i in 0..10 {
+        let a = (60 - i * 6) as u8;
+        d.fill(ix + i * 3, top, 3, inner_h, (0, 0, 0, a));
+        d.fill(ix1 - (i + 1) * 3, top, 3, inner_h, (0, 0, 0, a));
+    }
+    // Sombra da travessa no fundo, logo abaixo dela.
+    for i in 0..8 {
+        d.fill(
+            ix,
+            top + 10 + i * 2,
+            inner_w,
+            2,
+            (0, 0, 0, (90 - i * 11) as u8),
+        );
+    }
+
+    let t = look.trim;
+    for (px, light_left) in [(x0, true), (ix1, false)] {
+        d.fill(
+            px,
+            top - 10,
+            POST as u32,
+            inner_h + 10,
+            (look.post.0, look.post.1, look.post.2, 255),
+        );
+        let edge = if light_left { px } else { px + POST - 2 };
+        let hi = look.post_hi;
+        d.fill(edge, top - 10, 2, inner_h + 10, (hi.0, hi.1, hi.2, 255));
+        let inner = if light_left { px + POST - 2 } else { px };
+        d.fill(inner, top, 2, inner_h, (t.0, t.1, t.2, 255));
+        if look.trim_glow {
+            // O neon lava a parede ao lado do montante.
+            for k in 0..6 {
+                let gx = if light_left {
+                    px + POST + k * 2
+                } else {
+                    px - 2 - k * 2
+                };
+                d.fill(gx, top, 2, inner_h, (t.0, t.1, t.2, (34 - k * 5) as u8));
+            }
+        }
+    }
+    let (p, hi, lo) = (look.post, look.post_hi, look.post_lo);
+    let bw = (x1 - x0) as u32;
+    d.fill(x0, top - 10, bw, 10, (p.0, p.1, p.2, 255));
+    d.fill(x0, top - 10, bw, 2, (hi.0, hi.1, hi.2, 255));
+    d.fill(x0, top - 5, bw, 2, (t.0, t.1, t.2, 255));
+    d.fill(x0, top - 1, bw, 1, (lo.0, lo.1, lo.2, 255));
+}
+
+/// A prateleira dos temas novos sob uma fileira de capas — irmã de
+/// `draw_shelf_board`, no mesmo vão: o tampo visto de cima, a frente e a
+/// sombra na parede, cada material com o seu detalhe.
+fn draw_case_shelf(d: &mut impl Paint, x: i32, w: u32, y: i32, h: i32, look: &CaseLook) {
+    const DEPTH: i32 = 9;
+    let face_h = (h - 6).max(1);
+    match look.shelf {
+        Shelf::Glass => {
+            // Vidro fumê: o tampo deixa ver a parede, a quina da frente é
+            // a borda verde do vidro, e o trilho preto do rack segura.
+            d.fill(x, y - DEPTH, w, DEPTH as u32, (120, 140, 150, 46));
+            d.fill(x, y - DEPTH, w, 1, (200, 220, 225, 70));
+            d.fill(x, y - 1, w, 1, (220, 240, 236, 170));
+            d.fill(x, y, w, 3, (96, 150, 128, 210));
+            d.fill(x, y, w, 1, (200, 236, 220, 230));
+            d.fill(x, y + 3, w, (face_h - 1).max(1) as u32, (24, 24, 27, 255));
+            d.fill(x, y + 3, w, 1, (150, 154, 162, 255));
+            d.fill(x, y + h - 4, w, 4, (12, 12, 14, 255));
+        }
+        Shelf::Lacquer(edge) => {
+            d.fill(x, y - DEPTH, w, DEPTH as u32, (214, 210, 202, 255));
+            d.fill(x, y - DEPTH, w, 1, (120, 114, 108, 255));
+            d.fill(x, y - 1, w, 1, (252, 250, 246, 255));
+            d.fill(x, y, w, face_h as u32, (edge.0, edge.1, edge.2, 255));
+            d.fill(
+                x,
+                y,
+                w,
+                2,
+                (
+                    edge.0.saturating_add(50),
+                    edge.1.saturating_add(40),
+                    edge.2.saturating_add(40),
+                    255,
+                ),
+            );
+            d.fill(
+                x,
+                y + face_h,
+                w,
+                (h - face_h).max(1) as u32,
+                (edge.0 / 2, edge.1 / 2, edge.2 / 2, 255),
+            );
+        }
+        Shelf::Neon(c) => {
+            d.fill(x, y - DEPTH, w, DEPTH as u32, (30, 28, 36, 255));
+            d.fill(x, y - DEPTH, w, 1, (8, 6, 12, 255));
+            d.fill(x, y, w, face_h as u32, (18, 16, 24, 255));
+            // O tubo: núcleo quase branco, a cor em volta, e o brilho
+            // escorrendo na parede embaixo da prateleira.
+            let ty = y + face_h / 2 - 1;
+            d.fill(x + 6, ty - 1, w.saturating_sub(12), 4, (c.0, c.1, c.2, 255));
+            d.fill(x + 6, ty, w.saturating_sub(12), 2, (230, 250, 255, 255));
+            for k in 0..3 {
+                d.fill(
+                    x + 6,
+                    ty - 3 - k,
+                    w.saturating_sub(12),
+                    1,
+                    (c.0, c.1, c.2, (70 - k * 20) as u8),
+                );
+            }
+            d.fill(x, y + h - 4, w, 4, (10, 8, 14, 255));
+            for k in 0..8 {
+                d.fill(
+                    x + 8,
+                    y + h + k,
+                    w.saturating_sub(16),
+                    1,
+                    (c.0, c.1, c.2, (40 - k * 5) as u8),
+                );
+            }
+            return;
+        }
+    }
+    // Sombra do tampo na parede, embaixo.
+    for (i, a) in [120u8, 80, 40].into_iter().enumerate() {
+        d.fill(
+            x + 4,
+            y + h + i as i32,
+            w.saturating_sub(8),
+            1,
+            (0, 0, 0, a),
         );
     }
 }
@@ -1003,8 +1382,10 @@ fn draw_cover(
 
     if look.on_shelf {
         match look.theme {
-            ShelfTheme::Wood => draw_stand(d, (cx, cy, cw, ch), base),
-            ShelfTheme::Metal => draw_wire_rail(d, (cx, cy, cw, ch), base),
+            ShelfTheme::Wood | ShelfTheme::HiFi | ShelfTheme::Memphis => {
+                draw_stand(d, (cx, cy, cw, ch), base)
+            }
+            ShelfTheme::Metal | ShelfTheme::Arcade => draw_wire_rail(d, (cx, cy, cw, ch), base),
         }
     }
 

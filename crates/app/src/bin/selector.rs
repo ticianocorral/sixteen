@@ -32,9 +32,12 @@ fn main() -> Result<()> {
     let shot = arg(&args, "--shot").map(PathBuf::from);
     let preset_filter = arg(&args, "--filter").map(str::to_string);
     let debug_history = args.iter().any(|a| a == "--debug-history-shot");
-    // O móvel da estante: `--theme metal` mostra o expositor da locadora.
+    // O móvel da estante: `--theme metal|hifi|memphis|arcade`.
     let theme = match arg(&args, "--theme") {
         Some("metal") => ShelfTheme::Metal,
+        Some("hifi") => ShelfTheme::HiFi,
+        Some("memphis") => ShelfTheme::Memphis,
+        Some("arcade") => ShelfTheme::Arcade,
         _ => ShelfTheme::Wood,
     };
 

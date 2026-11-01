@@ -464,7 +464,10 @@ cinco seções na coluna; tudo é salvo na hora.
 - **Tela cheia** — liga/desliga o modo tela cheia (padrão: ligada).
 - **Chiado da TV fora do ar** — o barulhinho de estática quando o console
   está desligado. Nostálgicos: ligado. Padrão: desligado.
-- **Estante** — o móvel da estante: madeira ou o expositor de metal.
+- **Estante** — o móvel da estante: o móvel de madeira, o expositor de
+  metal da locadora, o rack de som preto (vidro fumê e frisos prateados), o
+  quarto anos 90 (papel de parede Memphis e móvel laqueado) ou o fliperama
+  (carpete fluorescente e neon).
 - **Som do jogo** — *3 em 1 estéreo* (padrão) ou *alto-falante da TV*:
   pequeno, mono e abafado, como o som saía da própria TV.
 - **Chiado do flyback (~15 kHz)** — o apito agudo de TV de tubo ligada.

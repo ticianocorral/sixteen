@@ -141,7 +141,8 @@ impl LangOpt {
 }
 
 /// O tema do móvel da estante — gravado como a palavra no `sixteen.cfg`
-/// (`shelf_theme = "wood"` / `"metal"`).
+/// (`shelf_theme = "wood"` / `"metal"` / `"hifi"` / `"memphis"` /
+/// `"arcade"`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShelfTheme {
     /// A estante de madeira: fundo com veios, prateleiras de tábua e
@@ -152,6 +153,15 @@ pub enum ShelfTheme {
     /// montantes com cremalheira, prateleiras de aço com canaleta de preço
     /// e um arame cromado segurando as caixas.
     Metal,
+    /// O rack de som preto da sala: laminado "black ash", frisos
+    /// prateados e prateleiras de vidro fumê.
+    HiFi,
+    /// O quarto dos anos 90: papel de parede Memphis, móvel laqueado
+    /// branco com fita colorida.
+    Memphis,
+    /// O fliperama: carpete com desenho fluorescente, neon rosa nos
+    /// montantes e neon azul nas prateleiras.
+    Arcade,
 }
 
 impl ShelfTheme {
@@ -159,14 +169,20 @@ impl ShelfTheme {
         match self {
             ShelfTheme::Wood => "wood",
             ShelfTheme::Metal => "metal",
+            ShelfTheme::HiFi => "hifi",
+            ShelfTheme::Memphis => "memphis",
+            ShelfTheme::Arcade => "arcade",
         }
     }
 
-    /// Click / left-right on the settings row: madeira ↔ metal.
+    /// Click / left-right on the settings row: the next furniture, in a loop.
     pub fn cycle(self) -> Self {
         match self {
             ShelfTheme::Wood => ShelfTheme::Metal,
-            ShelfTheme::Metal => ShelfTheme::Wood,
+            ShelfTheme::Metal => ShelfTheme::HiFi,
+            ShelfTheme::HiFi => ShelfTheme::Memphis,
+            ShelfTheme::Memphis => ShelfTheme::Arcade,
+            ShelfTheme::Arcade => ShelfTheme::Wood,
         }
     }
 
@@ -174,6 +190,9 @@ impl ShelfTheme {
         match s.trim().to_ascii_lowercase().as_str() {
             "wood" | "madeira" | "" => Some(ShelfTheme::Wood),
             "metal" => Some(ShelfTheme::Metal),
+            "hifi" | "rack" => Some(ShelfTheme::HiFi),
+            "memphis" | "quarto" => Some(ShelfTheme::Memphis),
+            "arcade" | "fliperama" => Some(ShelfTheme::Arcade),
             _ => None,
         }
     }
@@ -363,7 +382,7 @@ impl Config {
             match ShelfTheme::parse(&t) {
                 Some(v) => self.shelf_theme = v,
                 None => log::warn!(
-                    "[config] shelf_theme = {t:?}: not a theme (want wood|metal), keeping {}",
+                    "[config] shelf_theme = {t:?}: not a theme (want wood|metal|hifi|memphis|arcade), keeping {}",
                     self.shelf_theme.as_str()
                 ),
             }
@@ -459,7 +478,8 @@ impl Config {
              # lang: UI language — en (default) or pt (Brazilian Portuguese).\n\
              # check_updates_on_start: look for a newer release/snes9x core at launch.\n\
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
-             # shelf_theme: the shelf furniture — wood (default) or metal (rental-store rack).\n\
+             # shelf_theme: the shelf furniture — wood (default), metal (rental-store rack),\n\
+             # hifi (black stereo rack), memphis (90s bedroom) or arcade.\n\
              # bad_contact: cartridge bad contact on first power-on — off (default), rare or 90s.\n\
              # blow_mic: blow into the real microphone to clean the cartridge (off by default).\n\
              # tv_speaker: game sound through the TV's own small mono speaker (off = 3-in-1 stereo).\n\
@@ -642,6 +662,19 @@ mod tests {
         let mut round = defaults();
         round.apply(raw).unwrap();
         assert_eq!(round.shelf_theme, ShelfTheme::Metal);
+        // Every theme survives the round trip, and cycling visits them all.
+        let mut t = ShelfTheme::Wood;
+        let mut seen = Vec::new();
+        loop {
+            assert_eq!(ShelfTheme::parse(t.as_str()), Some(t));
+            seen.push(t);
+            t = t.cycle();
+            if t == ShelfTheme::Wood {
+                break;
+            }
+        }
+        assert_eq!(seen.len(), 5);
+        assert_eq!(ShelfTheme::parse("fliperama"), Some(ShelfTheme::Arcade));
     }
 
     #[test]
