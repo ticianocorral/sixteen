@@ -372,6 +372,29 @@ const MENU_PAD_MAP: [(PadBtn, MenuNav); 12] = [
 /// Gatilho analógico apertado além daqui (de 0..32767) conta como botão.
 const TRIGGER_PRESS: i16 = 16_000;
 
+/// Analógico esquerdo inclinado além daqui (de 0..32767, por eixo) conta
+/// como a seta do D-pad naquela direção — ~40%, folga para a zona morta de
+/// controles gastos sem exigir o curso todo; as diagonais saem de graça.
+const STICK_PRESS: i32 = 13_000;
+
+/// `btn` apertado em `pad` — as setas do D-pad também acendem com o
+/// analógico esquerdo, então quem joga no analógico (Xbox, PlayStation)
+/// anda no jogo e nos menus sem remapear nada.
+fn pad_held(pad: &Gamepad, btn: PadBtn) -> bool {
+    use sdl3::gamepad::Axis;
+    if pad.button(btn) {
+        return true;
+    }
+    let (axis, sign) = match btn {
+        PadBtn::DPadLeft => (Axis::LeftX, -1),
+        PadBtn::DPadRight => (Axis::LeftX, 1),
+        PadBtn::DPadUp => (Axis::LeftY, -1),
+        PadBtn::DPadDown => (Axis::LeftY, 1),
+        _ => return false,
+    };
+    i32::from(pad.axis(axis)) * sign > STICK_PRESS
+}
+
 /// A keydown's Konami step, when it has one — arrow keys for the directions,
 /// the letters B and A for the finish (the classic keyboard form of the
 /// code).
@@ -536,10 +559,10 @@ impl Platform {
             return;
         }
         let pressed = |pad: &Gamepad| {
-            MENU_PAD_MAP.iter().any(|(btn, _)| pad.button(*btn))
+            MENU_PAD_MAP.iter().any(|(btn, _)| pad_held(pad, *btn))
                 || [PadBtn::South, PadBtn::East, PadBtn::West, PadBtn::North]
                     .iter()
-                    .any(|b| pad.button(*b))
+                    .any(|b| pad_held(pad, *b))
         };
         if pressed(&self.gamepads[0].1) {
             return;
@@ -727,7 +750,7 @@ impl Platform {
         // Gamepad: rising edges only.
         let pad = self.gamepads.first().map(|(_, pad)| pad);
         for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
-            let down = pad.map(|p| p.button(*btn)).unwrap_or(false);
+            let down = pad.map(|p| pad_held(p, *btn)).unwrap_or(false);
             if down && !self.menu_prev[i] {
                 // The pad's Konami steps ride the same buttons the menus use:
                 // the d-pad is inert on the idle screen, but the closing B/A
@@ -894,7 +917,7 @@ impl Platform {
     pub fn gamepad_button_held(&self, port: usize, btn: GamepadBtn) -> bool {
         self.gamepads
             .get(port)
-            .map(|(_, pad)| pad.button(btn))
+            .map(|(_, pad)| pad_held(pad, btn))
             .unwrap_or(false)
     }
 
@@ -911,7 +934,7 @@ impl Platform {
         let mut v = Vec::new();
         let pad = self.gamepads.first().map(|(_, pad)| pad);
         for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
-            let down = pad.map(|p| p.button(*btn)).unwrap_or(false);
+            let down = pad.map(|p| pad_held(p, *btn)).unwrap_or(false);
             if down && !self.menu_prev[i] {
                 v.push(*nav);
             }
@@ -1036,7 +1059,7 @@ impl Platform {
         let mut bits = 0;
         for (_, pad) in &self.gamepads {
             for (btn, b) in MAP {
-                if pad.button(btn) {
+                if pad_held(pad, btn) {
                     bits |= b;
                 }
             }
@@ -1100,7 +1123,7 @@ impl Platform {
         }
         for (port, (_, pad)) in self.gamepads.iter().take(MAX_PORTS).enumerate() {
             for (btn, mapped) in self.pad_maps[port].pairs() {
-                if pad.button(*btn) {
+                if pad_held(pad, *btn) {
                     out[1 + port][*mapped as usize] = true;
                 }
             }
@@ -1120,7 +1143,7 @@ impl Platform {
         input.clear_pads();
         for (port, (_, pad)) in self.gamepads.iter().take(MAX_PORTS).enumerate() {
             for (btn, mapped) in self.pad_maps[port].pairs() {
-                if pad.button(*btn) {
+                if pad_held(pad, *btn) {
                     input.set_pad(port, *mapped, true);
                 }
             }
