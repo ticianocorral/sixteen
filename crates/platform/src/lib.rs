@@ -73,6 +73,40 @@ impl Drop for TraceSpan {
 /// Left-button-down position, in window coordinates, or `None` for anything
 /// else. Shared between `poll` and `poll_menu` so the SDL event match isn't
 /// duplicated.
+/// Se `event` é o jogador mexendo em algo — o que acorda as telas paradas
+/// do ritmo ocioso ([`Platform::idle_for`]). Eixos analógicos e sensores
+/// ficam DE FORA: o ruído do stick/giroscópio chega sem parar e manteria a
+/// tela "ativa" para sempre; o stick inclinado de verdade entra pelo
+/// `pad_bits` (que já aplica a deadzone) em [`Platform::note_held_input`].
+fn is_player_input(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Window { .. }
+            | Event::KeyDown { .. }
+            | Event::KeyUp { .. }
+            | Event::TextEditing { .. }
+            | Event::TextInput { .. }
+            | Event::MouseMotion { .. }
+            | Event::MouseButtonDown { .. }
+            | Event::MouseButtonUp { .. }
+            | Event::MouseWheel { .. }
+            | Event::JoyButtonDown { .. }
+            | Event::JoyButtonUp { .. }
+            | Event::JoyHatMotion { .. }
+            | Event::GamepadButtonDown { .. }
+            | Event::GamepadButtonUp { .. }
+            | Event::GamepadAdded { .. }
+            | Event::GamepadRemoved { .. }
+            | Event::GamepadTouchpadDown { .. }
+            | Event::GamepadTouchpadMotion { .. }
+            | Event::FingerDown { .. }
+            | Event::FingerMotion { .. }
+            | Event::FingerUp { .. }
+            | Event::PenDown { .. }
+            | Event::PenMotion { .. }
+    )
+}
+
 fn left_click_at(event: &Event) -> Option<(i32, i32)> {
     match event {
         Event::MouseButtonDown {
@@ -352,6 +386,9 @@ pub struct Platform {
     /// só aparece por padrão quando isto é verdade. Teclado e mouse
     /// zeram.
     last_input_pad: bool,
+    /// O último input do jogador (evento ou botão segurado) — as telas de
+    /// menu caem para meio quadro depois de um tempo parado.
+    last_activity: Instant,
 }
 
 const MENU_PAD_MAP: [(PadBtn, MenuNav); 12] = [
@@ -513,6 +550,7 @@ impl Platform {
             scheduled_clicks: Vec::new(),
             trig_prev: [false; 2],
             last_input_pad: false,
+            last_activity: Instant::now(),
         };
         me.sync_gamepads();
         Ok(me)
@@ -674,7 +712,11 @@ impl Platform {
         self.fire_due_clicks();
         let _span = TraceSpan::new("poll_menu");
         let mut out = MenuInput::default();
+        self.note_held_input();
         for event in self.event_pump.poll_iter() {
+            if is_player_input(&event) {
+                self.last_activity = Instant::now();
+            }
             match event {
                 Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
                 Event::FingerDown { .. } => self.last_input_pad = true,
@@ -836,7 +878,11 @@ impl Platform {
         use sdl3::keyboard::{Keycode, Mod};
         let _span = TraceSpan::new("poll_text_entry");
         let mut out = TextEntryInput::default();
+        self.note_held_input();
         for event in self.event_pump.poll_iter() {
+            if is_player_input(&event) {
+                self.last_activity = Instant::now();
+            }
             match event {
                 Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
                 Event::FingerDown { .. } => self.last_input_pad = true,
@@ -929,6 +975,22 @@ impl Platform {
         self.last_input_pad
     }
 
+    /// Há quanto tempo o jogador não mexe em nada (teclado, mouse, toque,
+    /// botão ou stick inclinado). As telas paradas usam isto para cair para
+    /// meio quadro — a bateria do Steam Deck agradece.
+    pub fn idle_for(&self) -> Duration {
+        self.last_activity.elapsed()
+    }
+
+    /// Botão (ou stick, via `pad_held`) segurado conta como atividade: um
+    /// D-pad parado no lugar não gera evento, mas o auto-repeat do menu
+    /// está andando. Lê o estado do pump anterior — um quadro de atraso.
+    fn note_held_input(&mut self) {
+        if self.pad_bits() != 0 {
+            self.last_activity = Instant::now();
+        }
+    }
+
     /// Gamepad rising edges for the text-entry side (no Konami, no mouse).
     fn pad_edges(&mut self) -> Vec<MenuNav> {
         let mut v = Vec::new();
@@ -1002,7 +1064,11 @@ impl Platform {
     pub fn poll(&mut self, input: &mut Input, keymap: &KeyMap) -> Vec<UiEvent> {
         let _span = TraceSpan::new("poll");
         let mut out = Vec::new();
+        self.note_held_input();
         for event in self.event_pump.poll_iter() {
+            if is_player_input(&event) {
+                self.last_activity = Instant::now();
+            }
             if let Some((x, y)) = left_click_at(&event) {
                 out.push(UiEvent::Click(x, y));
                 continue;

@@ -275,6 +275,35 @@ fn load_slot_rows(save_dir: &Path, title: &str) -> Vec<(String, bool)> {
 /// enough to not look stuck.
 const FLASH_DURATION: Duration = Duration::from_millis(900);
 
+/// O quadro das telas de menu e animações: 60 Hz de verdade. Era 16 ms
+/// (62,5 Hz) — 2,5 quadros por segundo desenhados a mais que a tela de
+/// 60 Hz mostra (energia à toa no Steam Deck), e as animações que enfileiram
+/// `RATE / 60` amostras por quadro empilhavam ~4% de áudio a mais.
+pub(crate) const UI_FRAME: Duration = Duration::from_nanos(16_666_667);
+
+/// Sem input do jogador por este tempo (e sem transição do tubo), as telas
+/// paradas — ociosa, estante, configurações, livro de pausa, console
+/// desligado — caem para meio quadro (~30 Hz). A neve da TV já só muda a
+/// ~33 Hz (`update_noise_tex`), então visualmente é igual; metade dos
+/// quadros a menos é CPU/GPU dormindo mais no Steam Deck. O primeiro input
+/// volta aos 60 Hz no quadro seguinte.
+const IDLE_AFTER: Duration = Duration::from_secs(2);
+
+/// O quadro de uma tela parada: `frame`, ou o dobro dele com o jogador
+/// parado (ver [`IDLE_AFTER`]).
+pub(crate) fn idle_paced(frame: Duration, plat: &Platform, cab: &Cabinet) -> Duration {
+    if plat.idle_for() >= IDLE_AFTER && !cab.animating() {
+        frame * 2
+    } else {
+        frame
+    }
+}
+
+/// `pace_frame` com o ritmo ocioso — o fim de quadro das telas de menu.
+pub(crate) fn pace_ui(next: &mut Instant, frame: Duration, plat: &Platform, cab: &Cabinet) {
+    pace_frame(next, idle_paced(frame, plat, cab));
+}
+
 /// Advance `next` by one frame and wait for it: sleep the bulk of the wait,
 /// then spin the last ~0.5ms (a plain `thread::sleep` can overshoot by more
 /// than a frame's worth of jitter). The spin window is a CPU-vs-precision
@@ -299,6 +328,13 @@ pub(crate) fn pace_frame(next: &mut Instant, frame_time: Duration) {
         return;
     }
     let wait = *next - now;
+    // Linux (Steam Deck): o `nanosleep` com hrtimers erra por ~50–100 µs
+    // (timer slack padrão), então 0,5 ms de spin era CPU acordada à toa a
+    // cada frame — o núcleo nunca descia de C-state nesse trecho. 150 µs
+    // cobre o erro típico; nos outros sistemas o sleep é mais grosso.
+    #[cfg(target_os = "linux")]
+    const SPIN_WINDOW: Duration = Duration::from_micros(150);
+    #[cfg(not(target_os = "linux"))]
     const SPIN_WINDOW: Duration = Duration::from_micros(500);
     if wait > SPIN_WINDOW {
         std::thread::sleep(wait - SPIN_WINDOW);
@@ -433,11 +469,15 @@ impl FpsMeter {
 fn flush_sram(path: &Path, last: &mut Option<Vec<u8>>, cur: Option<Vec<u8>>) {
     if let Some(cur) = cur {
         if last.as_ref() != Some(&cur) {
+            // Só marca como gravado quando gravou: com disco cheio ou SD
+            // somente leitura o próximo flush (e o da saída) tenta de novo.
             match write_atomic(path, &cur) {
-                Ok(_) => log::info!("SRAM flushed -> {}", path.display()),
+                Ok(_) => {
+                    log::info!("SRAM flushed -> {}", path.display());
+                    *last = Some(cur);
+                }
                 Err(e) => log::warn!("SRAM flush failed: {e}"),
             }
-            *last = Some(cur);
         }
     }
 }
@@ -452,7 +492,7 @@ fn power_off_burst(plat: &Platform, cab: &mut Cabinet) -> f32 {
     // revision); the visual burst plays either way.
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::PowerOff);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
-    let frame = Duration::from_millis(16);
+    let frame = UI_FRAME;
     let mut rng = crate::contato::Rng::new(0x1234_5678);
     let mut buf = Vec::new();
     let start = Instant::now();
@@ -489,7 +529,7 @@ fn power_on_burst(plat: &Platform, cab: &mut Cabinet) {
     const SPAN: Duration = Duration::from_millis(450);
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::PowerOn);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
-    let frame = Duration::from_millis(16);
+    let frame = UI_FRAME;
     let mut rng = crate::contato::Rng::new(0x8765_4321);
     let mut buf = Vec::new();
     let start = Instant::now();
@@ -649,7 +689,7 @@ fn cartridge_insert_animation(plat: &Platform, cab: &mut Cabinet) {
     // of the way; the foley already carries the whole motion.
     let has_sfx = crate::sfx::play(cab, crate::sfx::Sfx::Insert);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
-    let frame = Duration::from_millis(16);
+    let frame = UI_FRAME;
     let mut rng = crate::contato::Rng::new(0x2468_ace0);
     let mut buf = Vec::new();
     let start = Instant::now();
@@ -692,7 +732,7 @@ fn cartridge_eject_animation(plat: &Platform, cab: &mut Cabinet) {
     const RATE: u32 = 22_050;
     const SPAN: Duration = Duration::from_millis(430);
     let audio = (!has_sfx).then(|| plat.open_audio(RATE).ok()).flatten();
-    let frame = Duration::from_millis(16);
+    let frame = UI_FRAME;
     let mut rng = crate::contato::Rng::new(0x0ff1_ce00);
     let mut buf = Vec::new();
     let start = Instant::now();
@@ -1992,7 +2032,7 @@ pub fn run_game(
                 None if in_modal => cab.present_modal(),
                 None => cab.present_pause(),
             }
-            pace_frame(&mut next, frame_time);
+            pace_ui(&mut next, frame_time, plat, cab);
             continue;
         }
 
@@ -2611,7 +2651,7 @@ pub fn run_game(
         if let (Some(_), true) = (&fault, modal != Modal::None) {
             // O Menu do jogo aberto sobre a falha: só o modal.
             cab.present_modal();
-            pace_frame(&mut next, frame_time);
+            pace_ui(&mut next, frame_time, plat, cab);
             continue;
         }
         if let Some(f) = &mut fault {
@@ -2634,11 +2674,11 @@ pub fn run_game(
             if modal != Modal::None {
                 // Menu do jogo com o console desligado (Ligar/Ejetar/Sair).
                 cab.present_modal();
-                pace_frame(&mut next, frame_time);
+                pace_ui(&mut next, frame_time, plat, cab);
                 continue;
             }
             cab.present_static(OFF_STATIC_LEVEL);
-            pace_frame(&mut next, frame_time);
+            pace_ui(&mut next, frame_time, plat, cab);
             continue;
         }
 
@@ -2837,7 +2877,13 @@ pub fn run_game(
             cab.present_modal();
         }
 
-        pace_frame(&mut next, frame_time);
+        // Jogo rodando: o ritmo do core, sempre. Pausado ou com o Menu do
+        // jogo aberto, a tela está parada — o ritmo ocioso vale.
+        if paused || modal != Modal::None {
+            pace_ui(&mut next, frame_time, plat, cab);
+        } else {
+            pace_frame(&mut next, frame_time);
+        }
     };
 
     // Saiu no meio de uma falha (janela fechada): o core volta ao encaixe

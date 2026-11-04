@@ -240,7 +240,12 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
     })?;
     let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
     let mut out = Vec::new();
-    entry.read_to_end(&mut out).map_err(|e| e.to_string())?;
+    // Descompressão com teto: o zip baixado tem até 32 MB, mas expandido
+    // poderia ir a GBs antes do hash ser comparado.
+    (&mut entry)
+        .take(MAX_CORE_DOWNLOAD as u64 * 4)
+        .read_to_end(&mut out)
+        .map_err(|e| e.to_string())?;
 
     // Nada é gravado (muito menos `dlopen`ado) sem o SHA-256 bater com o
     // hash homologado desta release.

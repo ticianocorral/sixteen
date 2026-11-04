@@ -27,6 +27,9 @@ const CUST_SIZE: usize = 128;
 
 /// Entradas que cabem (3840) e quantos códigos novos a ROM aceita por sessão.
 pub const MAX_ENTRIES: usize = 3840;
+/// A WRAM inteira que `encode`/`decode` endereçam (`ENTRIES + MAX_ENTRIES *
+/// ENTRY_SIZE` fecha exatamente em 128 KB).
+const WRAM_LEN: usize = 0x20000;
 pub const MAX_NEW: usize = 8;
 /// Caracteres de descrição que a ROM desenha por linha.
 const DESC_COLS: usize = 26;
@@ -81,6 +84,10 @@ fn put_str(ram: &mut [u8], at: usize, s: &str) {
 
 /// Preenche a caixa de correio em `ram` (WRAM inteira, 128 KB).
 pub fn encode(ram: &mut [u8], title: &str, entries: &[Entry]) {
+    if ram.len() < WRAM_LEN {
+        log::warn!("cheat genius: WRAM de {} bytes, esperava 128 KB", ram.len());
+        return;
+    }
     let n = entries.len().min(MAX_ENTRIES);
     if entries.len() > MAX_ENTRIES {
         log::warn!(
@@ -105,6 +112,9 @@ pub fn encode(ram: &mut [u8], title: &str, entries: &[Entry]) {
 /// Lê o resultado; `None` enquanto a ROM ainda não terminou. `sent` é o
 /// número de entradas que [`encode`] mandou.
 pub fn decode(ram: &[u8], sent: usize) -> Option<Verdict> {
+    if ram.len() < WRAM_LEN {
+        return None;
+    }
     let status = ram[MB_STATUS];
     if status == 0 {
         return None;
@@ -126,7 +136,9 @@ pub fn decode(ram: &[u8], sent: usize) -> Option<Verdict> {
     let mut new_codes = Vec::new();
     for k in 0..ncust {
         let idx = sent + k;
-        if idx >= count {
+        // `count` vem da RAM: sem o teto, `sent` perto do máximo indexava
+        // além dos 128 KB da WRAM (panic).
+        if idx >= count || idx >= MAX_ENTRIES {
             break;
         }
         let f = ram[ENTRIES + idx * ENTRY_SIZE];

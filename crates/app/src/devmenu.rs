@@ -8,7 +8,7 @@
 //! root, so a fresh install has something on the shelf — no network.
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use sixteen_platform::{Cabinet, MenuMode, MenuNav, Platform, Screen};
@@ -95,7 +95,7 @@ fn in_rect(x: i32, y: i32, r: (i32, i32, u32, u32)) -> bool {
 /// app should quit altogether (window closed here), `Ok(false)` to return to
 /// the idle screen — same contract as the settings screen's `run`.
 pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
     let mut next = Instant::now() + frame;
 
     // Status line under the button — hint while idle, outcome afterwards
@@ -240,7 +240,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
             );
         };
         cab.frame_2d(BG, render);
-        crate::runner::pace_frame(&mut next, frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 

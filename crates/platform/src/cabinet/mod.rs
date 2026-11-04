@@ -2794,7 +2794,16 @@ impl Cabinet {
                 }
             }
         }
-        let n = (RATE / 60) as usize;
+        // Enche a fila até ~90 ms em vez de um quadro fixo de amostras: o
+        // chiado não depende do ritmo da tela (as telas paradas caem para
+        // 30 Hz e um bloco de 1/60 s por quadro engasgaria) nem empilha
+        // latência quando o loop corre um pouco mais rápido que o áudio.
+        let want = (RATE / 16) as usize;
+        let queued = self.hiss.as_ref().map_or(0, |a| a.queued_frames());
+        if queued >= want {
+            return;
+        }
+        let n = want * 3 / 2 - queued;
         let amp = (level.clamp(0.0, 1.0) * 1800.0) as i32;
         let mut buf = Vec::with_capacity(n * 2);
         for _ in 0..n {
@@ -2815,6 +2824,16 @@ impl Cabinet {
 
     /// A TV está ligada (ou virando)? `false` no `Off`/`Collapsing` — o
     /// idle usa para saber o que desenhar (painel vivo ou vidro morto).
+    /// Uma transição do tubo em curso (aquecer/colapsar) — contada em
+    /// quadros, então quem pace pelo ritmo ocioso segura os 60 Hz até ela
+    /// acabar.
+    pub fn animating(&self) -> bool {
+        matches!(
+            self.tv_power,
+            Some(TvPower::Warming { .. } | TvPower::Collapsing { .. })
+        )
+    }
+
     pub fn tv_on(&self) -> bool {
         !matches!(
             self.tv_power,

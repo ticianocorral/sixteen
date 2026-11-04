@@ -18,7 +18,11 @@ mod mac {
     /// RAM residente do processo, MB — proc_pid_rusage (libproc), chamada
     /// direta de kernel, sem fork e sem IOKit.
     pub fn proc_rss_mb() -> Option<f32> {
+        // Espelho EXATO de `struct rusage_info_v2` (sys/resource.h, 160
+        // bytes): o kernel grava a struct inteira — uma versão menor aqui
+        // estourava a pilha da thread `ram-readout` e lia o campo errado.
         #[repr(C)]
+        #[allow(dead_code)]
         struct RUsageInfoV2 {
             uuid: [u8; 16],
             user_time: u64,
@@ -26,11 +30,21 @@ mod mac {
             pkg_idle_wkups: u64,
             interrupt_wkups: u64,
             pageins: u64,
-            wired_fraction: u64,
-            resident_fraction: u64,
+            wired_size: u64,
             resident_size: u64,
             phys_footprint: u64,
+            proc_start_abstime: u64,
+            proc_exit_abstime: u64,
+            child_user_time: u64,
+            child_system_time: u64,
+            child_pkg_idle_wkups: u64,
+            child_interrupt_wkups: u64,
+            child_pageins: u64,
+            child_elapsed_abstime: u64,
+            diskio_bytesread: u64,
+            diskio_byteswritten: u64,
         }
+        const _: () = assert!(std::mem::size_of::<RUsageInfoV2>() == 160);
         #[link(name = "c")]
         extern "C" {
             fn getpid() -> i32;

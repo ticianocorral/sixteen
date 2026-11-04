@@ -430,7 +430,7 @@ pub fn run(
     crate::console_art::load_brand_images(cab);
     // The idle screen is where this app spends most of its life — pace it
     // (it used to spin unthrottled, redrawing 60fps+ of static forever).
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
     let mut next = Instant::now() + frame;
 
     // First-run setup (plan revision: see module docs): the TV shows the
@@ -628,7 +628,7 @@ pub fn run(
                 }
             }
             cab.frame_idle_2d(SETUP_BG, draw_quit_confirm);
-            crate::runner::pace_frame(&mut next, frame);
+            crate::runner::pace_ui(&mut next, frame, plat, cab);
             continue;
         }
 
@@ -725,7 +725,7 @@ pub fn run(
                     )
                 };
                 cab.frame_idle_2d(SETUP_BG, render);
-                crate::runner::pace_frame(&mut next, frame);
+                crate::runner::pace_ui(&mut next, frame, plat, cab);
                 continue;
             }
             // Just dismissed: the same click/Confirm that dismissed the
@@ -734,7 +734,7 @@ pub fn run(
             cab.set_idle_core_prompt(
                 core_missing.then_some(tr!("Download the snes9x core", "Baixar núcleo snes9x")),
             );
-            crate::runner::pace_frame(&mut next, frame);
+            crate::runner::pace_ui(&mut next, frame, plat, cab);
             continue;
         }
 
@@ -786,7 +786,7 @@ pub fn run(
                 };
                 cab.frame_idle_2d(SETUP_BG, render);
                 man.rects = rects;
-                crate::runner::pace_frame(&mut next, frame);
+                crate::runner::pace_ui(&mut next, frame, plat, cab);
                 continue;
             }
         }
@@ -875,7 +875,7 @@ pub fn run(
                 );
             };
             cab.frame_idle_2d(SETUP_BG, render);
-            crate::runner::pace_frame(&mut next, frame);
+            crate::runner::pace_ui(&mut next, frame, plat, cab);
             continue;
         }
 
@@ -948,7 +948,7 @@ pub fn run(
                     None => {}
                 }
                 cab.present_static(static_level);
-                crate::runner::pace_frame(&mut next, frame);
+                crate::runner::pace_ui(&mut next, frame, plat, cab);
                 continue;
             }
             match cab.hit_panel_button(ox, oy) {
@@ -1083,7 +1083,7 @@ pub fn run(
         };
         cab.set_core_status(core_status.as_deref());
         cab.present_static(static_level);
-        crate::runner::pace_frame(&mut next, frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 

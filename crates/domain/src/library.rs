@@ -80,9 +80,20 @@ fn extract_rom_from_zip(bytes: &[u8], path: &Path) -> Result<Vec<u8>, String> {
     // The declared size comes from the zip header and cannot be trusted for
     // a big allocation — cap the head start and let the Vec grow as data is
     // actually read.
+    // Teto na LEITURA também (zip bomb: poucos KB que expandem a GBs davam
+    // OOM em todo arranque, já que o scan relê a pasta). A maior ROM de SNES
+    // tem ~6 MB; 32 MiB folga para hacks ExHiROM.
+    const MAX_ROM: u64 = 32 * 1024 * 1024;
     let mut out = Vec::with_capacity((file.size() as usize).min(16 * 1024 * 1024));
-    file.read_to_end(&mut out)
+    (&mut file)
+        .take(MAX_ROM + 1)
+        .read_to_end(&mut out)
         .map_err(|e| format!("lendo {name} dentro do zip: {e}"))?;
+    if out.len() as u64 > MAX_ROM {
+        return Err(format!(
+            "{name} dentro do zip passa de 32 MB — não é rom de snes"
+        ));
+    }
     Ok(out)
 }
 

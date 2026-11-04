@@ -10,7 +10,7 @@
 //! nothing to lose by backing out.
 
 use std::sync::mpsc::{self, Receiver};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 #[allow(unused_imports)]
@@ -214,7 +214,7 @@ fn run_screen(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Resul
     // O worker em andamento é o login Connect (senha → token)? Se sim, o
     // `Ok` guarda o token no cfg em vez de só exibir.
     let mut login_connect = false;
-    let frame_time = Duration::from_millis(16);
+    let frame_time = crate::runner::UI_FRAME;
     let mut next = Instant::now();
     cab.set_close_button(true);
 
@@ -331,7 +331,7 @@ fn run_screen(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Resul
                 controls: Some((&controls, &*plat)),
             };
             cab.frame_settings(BG, |d| draw_section(d, cfg, &view));
-            crate::runner::pace_frame(&mut next, frame_time);
+            crate::runner::pace_ui(&mut next, frame_time, plat, cab);
             continue;
         }
 
@@ -513,7 +513,7 @@ fn run_screen(plat: &mut Platform, cab: &mut Cabinet, cfg: &mut Config) -> Resul
         };
         cab.frame_settings(BG, |d| draw_section(d, cfg, &view));
 
-        crate::runner::pace_frame(&mut next, frame_time);
+        crate::runner::pace_ui(&mut next, frame_time, plat, cab);
     }
 }
 

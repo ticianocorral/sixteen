@@ -150,7 +150,7 @@ pub fn list_prints(notes_dir: &Path) -> Vec<Print> {
 /// Os jogos que têm print, em ordem alfabética (sem diferenciar caixa).
 fn games_of(prints: &[Print]) -> Vec<String> {
     let mut g: Vec<String> = prints.iter().map(|p| p.game.clone()).collect();
-    g.sort_by_key(|s| s.to_lowercase());
+    g.sort_by_cached_key(|s| s.to_lowercase());
     g.dedup();
     g
 }
@@ -736,7 +736,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, notes_dir: &Path) -> Result<P
     let mut loader = Loader::new();
     cab.set_shelf_panel(empty_panel());
     cab.set_close_button(true);
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
 
     loop {
         let (w, h) = cab.shelf_screen_size();

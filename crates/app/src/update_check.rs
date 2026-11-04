@@ -189,18 +189,52 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
         .header("Content-Length")
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
-    let file_name = url.rsplit('/').next().unwrap_or("update.bin").to_string();
+    // O nome vem da URL da API: só o último segmento, sem `\\` (separador
+    // no Windows) nem `..`, e só caracteres de nome de arquivo comuns.
+    let file_name = url
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|n| {
+            !n.is_empty()
+                && !n.starts_with('.')
+                && n.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._-+".contains(c))
+        })
+        .unwrap_or("update.bin")
+        .to_string();
     std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
     let dest = dest_dir.join(&file_name);
-    let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
-    let mut reader = resp.into_reader();
+    // Baixa para `.part` e só renomeia completo: um download interrompido
+    // (rede caiu, app fechado) nunca deixa um `.dmg`/`.AppImage` truncado
+    // que o `apply_pending_update` tentaria aplicar sobre o executável.
+    let part = dest_dir.join(format!("{file_name}.part"));
+    let result = download_into(resp.into_reader(), &part, total, tx);
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
+    std::fs::rename(&part, &dest).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        e.to_string()
+    })?;
+    Ok(dest)
+}
+
+/// O corpo do `download_asset`: grava em `part`, confere o tamanho contra o
+/// Content-Length (quando veio) e força o conteúdo ao disco antes do rename.
+fn download_into(
+    mut reader: impl std::io::Read,
+    part: &Path,
+    total: u64,
+    tx: &Sender<u32>,
+) -> Result<(), String> {
+    let mut file = std::fs::File::create(part).map_err(|e| e.to_string())?;
     let mut buf = [0u8; 64 * 1024];
     let mut got: u64 = 0;
     // AppImages/DMGs ficam entre 20–150 MB; 512 MB é teto anti-disco-cheio,
     // não um tamanho esperado.
     const MAX_ASSET_DOWNLOAD: u64 = 512 * 1024 * 1024;
     loop {
-        use std::io::Read;
         let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
         if n == 0 {
             break;
@@ -208,7 +242,6 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
         std::io::Write::write_all(&mut file, &buf[..n]).map_err(|e| e.to_string())?;
         got += n as u64;
         if got > MAX_ASSET_DOWNLOAD {
-            let _ = std::fs::remove_file(&dest);
             return Err(tr!(
                 "download larger than expected — aborted",
                 "download maior que o esperado — abortado"
@@ -219,7 +252,14 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
             let _ = tx.send(pct.min(100) as u32);
         }
     }
-    Ok(dest)
+    if total > 0 && got != total {
+        return Err(tr!(
+            format!("incomplete download ({got} of {total} bytes)"),
+            format!("download incompleto ({got} de {total} bytes)")
+        ));
+    }
+    file.sync_all().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Aplica um arquivo já baixado em `saves/update/` — no arranque (o loop de
@@ -349,10 +389,20 @@ fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
 #[cfg(target_os = "linux")]
 fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    // Rodando de um AppImage, `current_exe()` aponta para o squashfs
+    // montado (somente leitura) — o arquivo a trocar é o `$APPIMAGE`.
+    let exe = match std::env::var_os("APPIMAGE") {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::env::current_exe().map_err(|e| e.to_string())?,
+    };
     let tmp = exe.with_extension("new");
     std::fs::copy(appimage, &tmp).map_err(|e| e.to_string())?;
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| e.to_string())?;
+    // No disco antes do rename: uma queda de energia (bateria do Deck)
+    // logo depois não pode deixar o executável vazio.
+    std::fs::File::open(&tmp)
+        .and_then(|f| f.sync_all())
         .map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, &exe).map_err(|e| e.to_string())?;
     Ok(())

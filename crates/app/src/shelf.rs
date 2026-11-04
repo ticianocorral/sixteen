@@ -2049,7 +2049,7 @@ impl StripLayout {
 /// an empty ROMs folder is the expected first-launch state for a portable,
 /// autoexecutável app, not a misconfiguration.
 fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
     cab.set_shelf_panel(empty_shelf_panel());
     cab.set_close_button(true);
     let refresh_rect = refresh_button_rect(cab.shelf_screen_size().0);
@@ -3169,7 +3169,7 @@ pub fn run(
             .unwrap_or(1)
     });
     let mut filt = ShelfFilter::new(opts.preset_filter.clone().unwrap_or_default());
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
     let mut next = Instant::now() + frame;
     let mut frame_no = 0u64;
     // The filtered/sorted listings are rebuilt only when the applied filter
@@ -3233,7 +3233,7 @@ pub fn run(
                 .filter(|e| e.title().to_lowercase().contains(&query_lc))
                 .cloned()
                 .collect();
-            view.sort_by_key(|e| e.title().to_lowercase());
+            view.sort_by_cached_key(|e| e.title().to_lowercase());
             // Favorites sit above the grid (plan revision) — only while
             // browsing the unfiltered shelf, alphabetical
             // (plan revision: "organizar favoritos em ordem alfabetica"),
@@ -3241,7 +3241,7 @@ pub fn run(
             favorites = if filt.query.is_empty() {
                 let mut f: Vec<CatalogEntry> =
                     all.iter().filter(|e| e.rom.favorite).cloned().collect();
-                f.sort_by_key(|e| e.title().to_lowercase());
+                f.sort_by_cached_key(|e| e.title().to_lowercase());
                 f.truncate(STRIP_CAP);
                 f
             } else {
@@ -3925,7 +3925,7 @@ pub fn run(
             }
         }
 
-        crate::runner::pace_frame(&mut next, frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 
@@ -4107,7 +4107,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
 
     let mut sel: usize = 0;
     let mut top: usize = 0;
-    let frame = Duration::from_millis(16);
+    let frame = crate::runner::UI_FRAME;
 
     cab.set_shelf_panel(empty_shelf_panel());
     cab.set_close_button(true);
