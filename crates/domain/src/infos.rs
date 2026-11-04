@@ -111,4 +111,13 @@ mod tests {
             assert!(!data.name.is_empty(), "{chave}: sem nome");
         }
     }
+
+    #[test]
+    fn generated_table_casa_titulos_com_possessivo_da_licenca() {
+        // IGDB e HLTB chamam de "Disney's Aladdin", o No-Intro de
+        // "Aladdin (USA)" — o gerador tira o possessivo para casar
+        let aladdin = lookup("124D8E4D").expect("Aladdin (USA) fora da tabela");
+        assert!(aladdin.nota.is_some(), "Aladdin sem nota da IGDB");
+        assert!(aladdin.hltb_main.is_some(), "Aladdin sem tempo do HLTB");
+    }
 }

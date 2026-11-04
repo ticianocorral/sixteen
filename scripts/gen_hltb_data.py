@@ -54,6 +54,18 @@ GAME_BLOCK = re.compile(r"^game \(\s*$")
 QUOTED = re.compile(r'^\s*(name|region)\s+"(.*)"\s*$')
 ROM_CRC = re.compile(r"^\s*rom \( .*\bcrc ([0-9A-Fa-f]{8})\b.*\)\s*$")
 PARENTESE = re.compile(r"\([^)]*\)")
+# "Disney's Aladdin", "Ivan 'Ironman' Stewart's Super Off Road" — o dono da
+# licença com possessivo na frente do título (ver `sem_possessivo`)
+POSSESSIVO = re.compile(r"^.{2,30}?['’]s\s+(.+)$")
+# Títulos que o lançamento ocidental trocou: o "Final Fantasy II" do SNES
+# americano é o IV japonês, o "III" é o VI; o "Bust-A-Move" é o "Puzzle
+# Bobble". IGDB e HLTB usam o nome/numeração original — sem isto o FF II
+# (USA) pegava a nota do FF II do NES e o Bust-A-Move ficava sem tempos.
+TITULOS_EUA = {
+    "Final Fantasy II": "Final Fantasy IV",
+    "Final Fantasy III": "Final Fantasy VI",
+    "Bust-A-Move": "Puzzle Bobble",
+}
 # No-Intro inverte o artigo ("Addams Family, The"; também no MEIO do
 # título: "Legend of Zelda, The - A Link to the Past"); o HLTB usa natural
 # ("The Legend of Zelda: A Link to the Past") — reordena antes de
@@ -93,10 +105,27 @@ def minutos(h: str) -> str:
     return str(round(float(h) * 60))
 
 
+def sem_possessivo(s: str) -> str | None:
+    """O nome sem o dono da licença na frente — "Disney's Aladdin" →
+    "Aladdin", "Saban's Power Rangers Zeo" → "Power Rangers Zeo". O HLTB e
+    a IGDB usam o título da caixa; o No-Intro, o da tela de título, que em
+    geral não tem o possessivo. Sem isso o Aladdin (e Goof Troop, Jungle
+    Book, Toy Story, Lion King…) ficava sem nota e sem tempos. `None` se o
+    nome não começa com possessivo ou se o que sobra é curto demais para
+    identificar um jogo sozinho."""
+    m = POSSESSIVO.match(s.strip())
+    if not m or len(normaliza(sem_sufixos(m.group(1)))) < 5:
+        return None
+    return m.group(1)
+
+
 def de_hltb(caminho: str) -> dict[str, dict]:
     """Linhas do CSV com "Super Nintendo" na lista de plataformas, por nome
-    normalizado; empate vence a entrada mais votada."""
+    normalizado; empate vence a entrada mais votada. O nome sem o
+    possessivo da licença (`sem_possessivo`) entra como chave secundária —
+    nunca por cima de um nome exato."""
     jogos: dict[str, dict] = {}
+    apelidos: dict[str, dict] = {}
     with open(caminho, encoding="utf-8", newline="") as arq:
         for linha in csv.DictReader(arq):
             plats = [p.strip() for p in linha["platform"].split(",")]
@@ -109,16 +138,30 @@ def de_hltb(caminho: str) -> dict[str, dict]:
             reg = normaliza(sem_sufixos(linha["name"]))
             if not reg:
                 continue
+            jogo = {
+                "nome": linha["name"].strip(),
+                "main": minutos(linha["main_story"]),
+                "extra": minutos(linha["main_plus_sides"]),
+                "comp": minutos(linha["completionist"]),
+                "todos": minutos(linha["all_styles"]),
+                "votos": votos,
+            }
             atual = jogos.get(reg)
             if atual is None or votos > atual["votos"]:
-                jogos[reg] = {
-                    "nome": linha["name"].strip(),
-                    "main": minutos(linha["main_story"]),
-                    "extra": minutos(linha["main_plus_sides"]),
-                    "comp": minutos(linha["completionist"]),
-                    "todos": minutos(linha["all_styles"]),
-                    "votos": votos,
-                }
+                jogos[reg] = jogo
+            resto = sem_possessivo(linha["name"])
+            # o No-Intro troca o "&" de dupla de títulos por hífen
+            # ("Battletoads & Double Dragon" → "Battletoads-Double Dragon")
+            sem_e = linha["name"].replace("&", " ") if " & " in linha["name"] else None
+            for outro in (resto, sem_e):
+                if not outro:
+                    continue
+                ali = normaliza(sem_sufixos(outro))
+                atual = apelidos.get(ali)
+                if atual is None or votos > atual["votos"]:
+                    apelidos[ali] = jogo
+    for ali, jogo in apelidos.items():
+        jogos.setdefault(ali, jogo)
     return jogos
 
 
@@ -185,9 +228,25 @@ def main() -> int:
     achados: dict[str, dict] = {}
     por_regiao: dict[str, int] = {}
     total_regiao: dict[str, int] = {}
+    subtitulos: dict[str, set[str]] = {}
+    for titulo, _ in roms.values():
+        if " - " in titulo:
+            base, sub = titulo.split(" - ", 1)
+            subtitulos.setdefault(base, set()).add(normaliza(sub))
     for crc, (titulo, regiao) in sorted(roms.items()):
         total_regiao[regiao] = total_regiao.get(regiao, 0) + 1
-        jogo = hltb_do(titulo, hltb)
+        jogo = None
+        if titulo in TITULOS_EUA:
+            jogo = hltb_do(TITULOS_EUA[titulo], hltb)
+        jogo = jogo or hltb_do(titulo, hltb)
+        if not jogo and " - " in titulo and len(subtitulos[titulo.split(" - ")[0]]) == 1:
+            # o subtítulo que só a caixa americana tem ("Choplifter III -
+            # Rescue-Survive" é "Choplifter III" no HLTB): o título
+            # principal, só por casamento EXATO — prefixo aqui pegaria
+            # outro jogo da série. Título principal com 2+ subtítulos no
+            # DAT é série ("Super Star Wars - Jedi no Fukushuu" /
+            # "- Teikoku no Gyakushuu"), não subtítulo de caixa: fica fora.
+            jogo = hltb.get(normaliza(titulo.split(" - ")[0]))
         if jogo:
             achados[crc] = jogo
             por_regiao[regiao] = por_regiao.get(regiao, 0) + 1

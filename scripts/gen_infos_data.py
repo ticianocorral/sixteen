@@ -14,7 +14,8 @@ Fontes (arquivos locais em `scripts/dados/`):
 3. `hltb_snes.txt` — os tempos do HowLongToBeat já casados por CRC32
    (saída do `gen_hltb_data.py`).
 4. `igdb_snes.json` — índice {nome normalizado: {nota, ano}} extraído da
-   IGDB (plataforma 58, do espelho GameDB do LizardByte).
+   IGDB (plataformas 19 e 58 — SNES e Super Famicom; espelho GameDB do
+   LizardByte, completado pela API oficial quando há credenciais).
 
 Casamento com a IGDB: nome normalizado (minúsculas, só alfanuméricos,
 artigo reordenado, sufixos "(...)" de ambos os lados fora) — exato
@@ -43,6 +44,17 @@ DAT_BLOCK = re.compile(r"^game \(\s*$")
 DAT_QUOTED = re.compile(r'^\s*(name|region)\s+"(.*)"\s*$')
 DAT_CRC = re.compile(r"^\s*rom \( .*\bcrc ([0-9A-Fa-f]{8})\b.*\)\s*$")
 PARENTESE = re.compile(r"\([^)]*\)")
+# "Disney's Aladdin" — o dono da licença com possessivo na frente do título
+POSSESSIVO = re.compile(r"^.{2,30}?['’]s\s+(.+)$")
+# Títulos que o lançamento ocidental trocou: o "Final Fantasy II" do SNES
+# americano é o IV japonês, o "III" é o VI; o "Bust-A-Move" é o "Puzzle
+# Bobble". IGDB e HLTB usam o nome/numeração original — sem isto o FF II
+# (USA) pegava a nota do FF II do NES e o Bust-A-Move ficava sem tempos.
+TITULOS_EUA = {
+    "Final Fantasy II": "Final Fantasy IV",
+    "Final Fantasy III": "Final Fantasy VI",
+    "Bust-A-Move": "Puzzle Bobble",
+}
 
 
 def des_inverte_artigo(s: str) -> str:
@@ -127,7 +139,7 @@ def de_hltb(caminho: str) -> dict[str, tuple[str, str]]:
 
 
 
-def igdb_api_atualiza_indice(caminho_indice: str, platform_id: int) -> dict:
+def igdb_api_atualiza_indice(caminho_indice: str, plataformas: tuple[int, ...]) -> dict:
     """Com credenciais da IGDB/Twitch no ambiente (`IGDB_CLIENT_ID` e
     `IGDB_CLIENT_SECRET` — gratuitas em dev.twitch.tv), baixa TODOS os jogos
     da plataforma direto da API oficial e atualiza o índice — cobertura
@@ -153,8 +165,12 @@ def igdb_api_atualiza_indice(caminho_indice: str, platform_id: int) -> dict:
     while True:
         pedido = (
             "fields name,total_rating,rating,aggregated_rating,"
-            "first_release_date; where platforms = ({}); limit 500; offset {};"
-        ).format(platform_id, offset)
+            "first_release_date; where platforms = ({}); sort id asc;"
+            # sem `sort` a IGDB pagina em ordem instável: jogos repetem
+            # entre páginas e outros (Bubsy II, Battletoads & Double
+            # Dragon) nunca aparecem
+            " limit 500; offset {};"
+        ).format(",".join(map(str, plataformas)), offset)
         req = urllib.request.Request(
             "https://api.igdb.com/v4/games",
             data=pedido.encode(),
@@ -170,7 +186,10 @@ def igdb_api_atualiza_indice(caminho_indice: str, platform_id: int) -> dict:
         for g in lote:
             nota = g.get("total_rating") or g.get("rating") or g.get("aggregated_rating")
             key = normaliza(g.get("name") or "")
-            if key and key not in idx:
+            if not key:
+                continue
+            # entra o que falta e completa a nota que o índice tinha vazia
+            if key not in idx or (nota and not idx[key].get("nota")):
                 idx[key] = {"nota": round(nota) if nota else None, "ano": None}
         offset += 500
         print(f"  igdb api: {offset} jogos baixados...", file=sys.stderr)
@@ -205,6 +224,7 @@ def de_wikidata(caminho: str) -> dict[str, int]:
     except Exception:
         return {}
     notas: dict[str, int] = {}
+    apelidos: dict[str, int] = {}
     for b in d.get("results", {}).get("bindings", []):
         label = b["gameLabel"]["value"]
         if re.fullmatch(r"Q\d+", label):
@@ -215,13 +235,41 @@ def de_wikidata(caminho: str) -> dict[str, int]:
         key = normaliza(label)
         if key and key not in notas:
             notas[key] = nota
+        m = POSSESSIVO.match(label.strip())
+        if m and len(normaliza(m.group(1))) >= 5:
+            apelidos.setdefault(normaliza(m.group(1)), nota)
+    # "Disney's Aladdin" também responde por "Aladdin" — nunca por cima
+    # de um rótulo exato
+    for key, nota in apelidos.items():
+        notas.setdefault(key, nota)
     return notas
+
+
+# Donos de licença que a IGDB põe na frente do título ("Disney's Aladdin")
+# e o No-Intro não ("Aladdin") — já normalizados, como as chaves do índice.
+# Sem isso o Aladdin, Goof Troop, Jungle Book, Toy Story… ficavam sem nota.
+PREFIXOS_LICENCA = (
+    "disneys",
+    "waltdisneys",
+    "sabans",
+    "hannabarberas",
+    "davidcranes",
+    "rogerclemens",
+    "ivanironmanstewarts",
+    "tomclancys",
+    "sidmeiers",
+    "jimhensons",
+    "stevenspielbergs",
+)
 
 
 def nota_igdb(titulo: str, igdb: dict) -> str:
     reg = normaliza(titulo)
     if reg in igdb:
         return str(igdb[reg]["nota"] or "")
+    for prefixo in PREFIXOS_LICENCA:
+        if prefixo + reg in igdb:
+            return str(igdb[prefixo + reg]["nota"] or "")
     if len(reg) < 4:
         return ""
     for cand, info in igdb.items():
@@ -234,7 +282,9 @@ def nota_igdb(titulo: str, igdb: dict) -> str:
 
 
 def main() -> int:
-    igdb = igdb_api_atualiza_indice("scripts/dados/igdb_snes.json", 58)
+    # 19 = Super Nintendo (os cartuchos ocidentais), 58 = Super Famicom —
+    # só o 58 deixava de fora Batman & Robin, Boogerman, Biker Mice…
+    igdb = igdb_api_atualiza_indice("scripts/dados/igdb_snes.json", (19, 58))
     dat = de_dat("scripts/dados/nointro_snes.dat")
     wikidata = de_wikidata("scripts/dados/wikidata_snes.json")
     tosec = de_tosec("scripts/dados/tosec_snes.txt")
@@ -246,7 +296,11 @@ def main() -> int:
         nome = info["nome"]
         regiao = info["regiao"] or "outra"
         # o casamento com a IGDB usa o nome sem os sufixos "(...)"
-        nota = nota_igdb(sem_sufixos(des_inverte_artigo(nome)), igdb)
+        titulo = sem_sufixos(des_inverte_artigo(nome))
+        nota = ""
+        if titulo in TITULOS_EUA:
+            nota = nota_igdb(TITULOS_EUA[titulo], igdb)
+        nota = nota or nota_igdb(titulo, igdb)
         # a crítica do Wikidata cobre o que a IGDB não tem
         critica = ""
         if not nota:
