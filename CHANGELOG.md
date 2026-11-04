@@ -7,7 +7,7 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
-## [Não lançado]
+## [1.8.0] - 2026-11-04
 
 ### Adicionado
 - **Sugestão da noite** (opcional): Configurações → estante → "Sugestão da
@@ -102,6 +102,10 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
   Prévia headless do teclado: `sixteen --debug-settings osk --shot
   out.bmp` e `selector --debug-pad osk:texto --frames 30 --shot out.bmp`
   (também `header:filter` e `panel:N` para os focos).
+- **Analógico como direcional**: o analógico esquerdo anda como o D-pad
+  (além de ~40% de inclinação por eixo, com diagonais) no jogo, nos menus e
+  no testador da tela de controles — controles de Xbox e PlayStation
+  funcionam no analógico sem remapear nada.
 
 ### Alterado
 - **Configurações reorganizadas** em seis seções: controles (agora a
