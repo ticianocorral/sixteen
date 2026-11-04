@@ -691,6 +691,12 @@ unsafe extern "C" fn environment_cb(cmd: c_uint, data: *mut c_void) -> bool {
             with_cb(|s| {
                 s.variables.clear();
                 while !(*p).key.is_null() {
+                    // Um núcleo que manda `value` nulo seria UB no `from_ptr`:
+                    // a variável é pulada.
+                    if (*p).value.is_null() {
+                        p = p.add(1);
+                        continue;
+                    }
                     let key = CStr::from_ptr((*p).key).to_owned();
                     // value looks like "Description; opt_a|opt_b|opt_c"
                     let raw = CStr::from_ptr((*p).value).to_string_lossy();

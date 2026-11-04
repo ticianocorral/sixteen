@@ -187,6 +187,24 @@ fn sram_file(save_dir: &Path, title: &str) -> PathBuf {
     game_dir(save_dir, title).join("sram.srm")
 }
 
+/// Lê a SRAM do disco: `Ok(None)` quando ainda não existe (jogo novo);
+/// `Err` para qualquer outra falha — EIO no microSD, permissão, arquivo
+/// travado por antivírus/OneDrive. Separar os dois é o que impede uma
+/// leitura que falhou de virar "SRAM vazia" e ser gravada por cima do save.
+fn read_sram(path: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Para onde a SRAM da sessão vai quando o `sram.srm` existe mas não pôde
+/// ser lido: um arquivo ao lado, para o save original nunca ser tocado.
+fn sram_aside_path(sram: &Path) -> PathBuf {
+    sram.with_file_name("sram-sessao-sem-leitura.srm")
+}
+
 /// `save_dir/<title>/cheats.txt` — plain text either way, so the extension
 /// might as well say so (plan revision — used to be `<hash>.cheats`).
 fn cheat_state_path(save_dir: &Path, title: &str) -> PathBuf {
@@ -292,7 +310,10 @@ const IDLE_AFTER: Duration = Duration::from_secs(2);
 /// O quadro de uma tela parada: `frame`, ou o dobro dele com o jogador
 /// parado (ver [`IDLE_AFTER`]).
 pub(crate) fn idle_paced(frame: Duration, plat: &Platform, cab: &Cabinet) -> Duration {
-    if plat.idle_for() >= IDLE_AFTER && !cab.animating() {
+    if plat.window_hidden() {
+        // Ninguém vendo: ~10 Hz basta para ouvir os eventos da volta.
+        frame * 6
+    } else if plat.idle_for() >= IDLE_AFTER && !cab.animating() {
         frame * 2
     } else {
         frame
@@ -852,8 +873,20 @@ fn restore_game(
         log::error!("recarregar o jogo falhou: {e}");
         return;
     }
-    if let Ok(bytes) = fs::read(sram_path) {
-        core.load_sram(&bytes);
+    match read_sram(sram_path) {
+        Ok(Some(bytes)) => {
+            core.load_sram(&bytes);
+        }
+        Ok(None) => {}
+        // A releitura falhou: a SRAM que acabou de ser gravada ainda está
+        // na memória — volta ela, e não uma SRAM zerada que o próximo
+        // flush gravaria por cima do save.
+        Err(e) => {
+            log::warn!("SRAM: releitura falhou ({e}); usando a cópia em memória");
+            if let Some(bytes) = last_sram.as_deref() {
+                core.load_sram(bytes);
+            }
+        }
     }
     *last_sram = core.sram();
 }
@@ -1546,7 +1579,7 @@ pub fn run_game(
     // keyed by ROM hash: unreadable next to a folder a player might actually
     // open, and the hash bought rename-proofing nobody asked for here).
     fs::create_dir_all(game_dir(&spec.save_dir, &title)).ok();
-    let sram_path = sram_file(&spec.save_dir, &title);
+    let mut sram_path = sram_file(&spec.save_dir, &title);
     // Note slot (fixed 1..=15, not save-state's 0..=9) — which of the 15
     // the notebook's right page shows; Prev/Next move it while paused
     // there, and picking a print's destination in the Printscreen modal
@@ -1558,9 +1591,37 @@ pub fn run_game(
     // other way around.
     let mut text_slot: u8 = 1;
 
-    if let Ok(bytes) = fs::read(&sram_path) {
-        let n = core.load_sram(&bytes);
-        log::info!("SRAM: loaded {n} bytes from {}", sram_path.display());
+    match read_sram(&sram_path) {
+        Ok(Some(bytes)) => {
+            let n = core.load_sram(&bytes);
+            log::info!("SRAM: loaded {n} bytes from {}", sram_path.display());
+        }
+        Ok(None) => {}
+        Err(e) => {
+            // O save existe mas não leu: o jogo roda, mas grava AO LADO —
+            // nunca por cima do `sram.srm` que pode estar bom.
+            let aside = sram_aside_path(&sram_path);
+            log::error!(
+                "SRAM: {} não pôde ser lido ({e}); esta sessão grava em {}",
+                sram_path.display(),
+                aside.display()
+            );
+            cab.push_osd(
+                &[
+                    tr!(
+                        "Could not read this game's save.",
+                        "Não deu para ler o save deste jogo."
+                    ),
+                    tr!(
+                        "Your old save is untouched; this session saves beside it.",
+                        "O save antigo fica intacto; esta sessão grava ao lado."
+                    ),
+                ],
+                None,
+                Duration::from_secs(10),
+            );
+            sram_path = aside;
+        }
     }
 
     // We do our own NTSC (vendored blargg snes_ntsc, RF preset) on the raw
@@ -1796,9 +1857,12 @@ pub fn run_game(
     }
 
     // --- audio -----------------------------------------------------------
-    let audio = plat
-        .open_audio(av.sample_rate.round().max(8000.0) as u32)
-        .map_err(|e| anyhow!(e.to_string()))?;
+    // Sem dispositivo de áudio o jogo roda mudo em vez de não abrir.
+    let audio_rate = av.sample_rate.round().max(8000.0) as u32;
+    let audio = plat.open_audio(audio_rate).unwrap_or_else(|e| {
+        log::warn!("áudio do jogo não abriu, seguindo mudo: {e}");
+        sixteen_platform::AudioOut::muted(audio_rate)
+    });
     let mut input = plat.new_input();
 
     let mut paused = false;
@@ -2152,6 +2216,22 @@ pub fn run_game(
             events
         };
         let mut events: std::collections::VecDeque<UiEvent> = events.into();
+        plat.set_playing(powered && !paused && modal == Modal::None && !plat.window_hidden());
+        // Janela minimizada com o jogo correndo: pausa — emular, filtrar e
+        // desenhar o que ninguém vê é bateria jogada fora. Na volta o livro
+        // de pausa está esperando, como se o jogador tivesse pausado.
+        if plat.window_hidden()
+            && powered
+            && !paused
+            && modal == Modal::None
+            && note_edit == NoteEdit::None
+            && genius_run.is_none()
+            && fault.is_none()
+            && !events.iter().any(|e| matches!(e, UiEvent::TogglePause))
+        {
+            log::info!("janela escondida: pausando o jogo");
+            events.push_back(UiEvent::TogglePause);
+        }
         // Mouse na jogada: o destaque do pad sai dos modais.
         if events.iter().any(|e| matches!(e, UiEvent::Click(..))) {
             pad_flow = false;
@@ -3195,5 +3275,27 @@ mod tests {
         assert!(!d.file_name().unwrap().to_string_lossy().contains('/'));
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_sram_tells_missing_from_unreadable() {
+        use crate::runner::{read_sram, sram_aside_path};
+        let dir = std::env::temp_dir().join(format!("sixteen-sram-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let srm = dir.join("sram.srm");
+        assert!(
+            matches!(read_sram(&srm), Ok(None)),
+            "ainda não existe = jogo novo"
+        );
+        std::fs::write(&srm, [1u8, 2, 3]).unwrap();
+        assert_eq!(read_sram(&srm).unwrap(), Some(vec![1, 2, 3]));
+        // Um diretório no lugar do arquivo: existe e não lê — é erro, nunca
+        // "SRAM vazia".
+        let as_dir = dir.join("pasta.srm");
+        std::fs::create_dir_all(&as_dir).unwrap();
+        assert!(read_sram(&as_dir).is_err());
+        assert_ne!(sram_aside_path(&srm), srm);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -43,8 +43,9 @@ pub struct AppUpdate {
     pub tag: String,
     /// O `body` do release (o changelog em markdown — mostrado como texto).
     pub changelog: String,
-    /// URL do asset desta plataforma (dmg/AppImage/zip), se houver.
-    pub asset_url: Option<String>,
+    /// O asset desta plataforma (dmg/AppImage/zip), se houver — só um que
+    /// venha do próprio repositório e com o SHA-256 publicado pelo GitHub.
+    pub asset_url: Option<UpdateAsset>,
 }
 
 fn agent() -> ureq::Agent {
@@ -86,7 +87,7 @@ fn latest_snes9x_commit() -> Option<String> {
         .set("User-Agent", "sixteen-update-check")
         .call()
         .ok()?;
-    let head: GhCommit = resp.into_json().ok()?;
+    let head: GhCommit = read_json(resp)?;
     let short = head.sha.get(..7)?;
     short
         .chars()
@@ -112,12 +113,34 @@ struct GhRelease {
 struct GhAsset {
     name: String,
     browser_download_url: String,
+    /// `"sha256:<hex>"` — o GitHub calcula no upload e publica na API.
+    #[serde(default)]
+    digest: Option<String>,
+}
+
+/// Onde baixar o update e o hash que o arquivo TEM de ter.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpdateAsset {
+    pub url: String,
+    /// SHA-256 em hex minúsculo.
+    pub sha256: String,
+}
+
+/// Só assets publicados nos releases deste repositório são aceitos — uma
+/// resposta da API adulterada não aponta o update para outro lugar.
+const RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/ticianocorral/sixteen/releases/download/";
+
+/// `"sha256:<64 hex>"` → o hex minúsculo; qualquer outra coisa, `None`.
+fn parse_sha256_digest(digest: &str) -> Option<String> {
+    let hex = digest.strip_prefix("sha256:")?;
+    (hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+        .then(|| hex.to_ascii_lowercase())
 }
 
 /// O asset do release para a plataforma em que roda — `-macos.dmg`,
 /// `-linux-*.AppImage` ou `-win.zip` pelo nome (o CI publica exatamente
 /// esses sufixos).
-fn asset_for_platform(assets: &[GhAsset]) -> Option<String> {
+fn asset_for_platform(assets: &[GhAsset]) -> Option<UpdateAsset> {
     let (needle, ext): (&str, &str) = if cfg!(target_os = "macos") {
         ("-macos", ".dmg")
     } else if cfg!(target_os = "linux") {
@@ -125,10 +148,26 @@ fn asset_for_platform(assets: &[GhAsset]) -> Option<String> {
     } else {
         ("-win", ".zip")
     };
-    assets
+    let a = assets
         .iter()
-        .find(|a| a.name.contains(needle) && a.name.ends_with(ext))
-        .map(|a| a.browser_download_url.clone())
+        .find(|a| a.name.contains(needle) && a.name.ends_with(ext))?;
+    if !a.browser_download_url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
+        log::warn!(
+            "update: asset fora do repositório, ignorado: {}",
+            a.browser_download_url
+        );
+        return None;
+    }
+    // Sem o hash publicado não há como conferir o que chegou — o update
+    // não é oferecido (baixar à mão continua possível).
+    let Some(sha256) = a.digest.as_deref().and_then(parse_sha256_digest) else {
+        log::warn!("update: asset {} sem digest sha256, ignorado", a.name);
+        return None;
+    };
+    Some(UpdateAsset {
+        url: a.browser_download_url.clone(),
+        sha256,
+    })
 }
 
 /// `Some(tag)` if GitHub's latest release is newer than `current` — `None`
@@ -142,7 +181,7 @@ fn newer_release(current: &str) -> Option<AppUpdate> {
         .set("User-Agent", "sixteen-update-check")
         .call()
         .ok()?;
-    let release: GhRelease = resp.into_json().ok()?;
+    let release: GhRelease = read_json(resp)?;
     let tag = release.tag_name.trim_start_matches('v');
     if parse_version(tag) <= parse_version(current) {
         return None;
@@ -152,6 +191,12 @@ fn newer_release(current: &str) -> Option<AppUpdate> {
         changelog: release.body,
         asset_url: asset_for_platform(&release.assets),
     })
+}
+
+/// JSON da API com teto de 4 MiB (o `into_json` do ureq 2 não tem limite).
+fn read_json<T: serde::de::DeserializeOwned>(resp: ureq::Response) -> Option<T> {
+    use std::io::Read;
+    serde_json::from_reader(resp.into_reader().take(4 << 20)).ok()
 }
 
 fn parse_version(v: &str) -> Vec<u32> {
@@ -179,7 +224,15 @@ pub fn check(core_dir: PathBuf, app_version: String, tx: Sender<UpdateNotice>) {
 
 /// Baixa o asset da atualização para `dest_dir` (o update view chama em
 /// worker; progresso em percentual no canal). Devolve o caminho do arquivo.
-pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<PathBuf, String> {
+pub fn download_asset(
+    asset: &UpdateAsset,
+    dest_dir: &Path,
+    tx: &Sender<u32>,
+) -> Result<PathBuf, String> {
+    let url = asset.url.as_str();
+    if !url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
+        return Err(format!("update: url fora do repositório: {url}"));
+    }
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
         .timeout(Duration::from_secs(600))
@@ -208,7 +261,7 @@ pub fn download_asset(url: &str, dest_dir: &Path, tx: &Sender<u32>) -> Result<Pa
     // (rede caiu, app fechado) nunca deixa um `.dmg`/`.AppImage` truncado
     // que o `apply_pending_update` tentaria aplicar sobre o executável.
     let part = dest_dir.join(format!("{file_name}.part"));
-    let result = download_into(resp.into_reader(), &part, total, tx);
+    let result = download_into(resp.into_reader(), &part, total, &asset.sha256, tx);
     if let Err(e) = result {
         let _ = std::fs::remove_file(&part);
         return Err(e);
@@ -226,8 +279,11 @@ fn download_into(
     mut reader: impl std::io::Read,
     part: &Path,
     total: u64,
+    expected_sha256: &str,
     tx: &Sender<u32>,
 ) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
     let mut file = std::fs::File::create(part).map_err(|e| e.to_string())?;
     let mut buf = [0u8; 64 * 1024];
     let mut got: u64 = 0;
@@ -240,6 +296,7 @@ fn download_into(
             break;
         }
         std::io::Write::write_all(&mut file, &buf[..n]).map_err(|e| e.to_string())?;
+        hasher.update(&buf[..n]);
         got += n as u64;
         if got > MAX_ASSET_DOWNLOAD {
             return Err(tr!(
@@ -256,6 +313,15 @@ fn download_into(
         return Err(tr!(
             format!("incomplete download ({got} of {total} bytes)"),
             format!("download incompleto ({got} de {total} bytes)")
+        ));
+    }
+    // O arquivo tem de ser exatamente o que o GitHub publicou: nada é
+    // renomeado para `.dmg`/`.AppImage` (e aplicado) sem o hash bater.
+    let got_sha = hex::encode(hasher.finalize());
+    if got_sha != expected_sha256 {
+        return Err(tr!(
+            format!("update file does not match the published hash ({got_sha})"),
+            format!("o arquivo do update não bate com o hash publicado ({got_sha})")
         ));
     }
     file.sync_all().map_err(|e| e.to_string())?;
@@ -525,5 +591,68 @@ mod tests {
         let head = latest_snes9x_commit().expect("HEAD do libretro/snes9x");
         assert_eq!(head.len(), 7);
         assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    fn gh(name: &str, url: &str, digest: Option<&str>) -> GhAsset {
+        GhAsset {
+            name: name.into(),
+            browser_download_url: url.into(),
+            digest: digest.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn sha256_digest_parses_only_the_real_shape() {
+        let hex = "7d3936bc9d414f22f4a9b2357de52ad0aaa9a5b3c1639c95aff643acb2e139e9";
+        assert_eq!(
+            parse_sha256_digest(&format!("sha256:{hex}")).as_deref(),
+            Some(hex)
+        );
+        assert_eq!(
+            parse_sha256_digest(&format!("sha256:{}", hex.to_uppercase())).as_deref(),
+            Some(hex)
+        );
+        assert_eq!(parse_sha256_digest(hex), None);
+        assert_eq!(parse_sha256_digest("sha256:abc"), None);
+        assert_eq!(parse_sha256_digest(&format!("sha1:{hex}")), None);
+    }
+
+    #[test]
+    fn update_asset_needs_repo_origin_and_digest() {
+        let (name, ext) = if cfg!(target_os = "macos") {
+            ("SixteeN-9.9.9-macos", ".dmg")
+        } else if cfg!(target_os = "linux") {
+            ("SixteeN-9.9.9-linux-x86_64", ".AppImage")
+        } else {
+            ("SixteeN-9.9.9-windows-x86_64", ".zip")
+        };
+        let file = format!("{name}{ext}");
+        let good_url = format!("{RELEASE_DOWNLOAD_PREFIX}v9.9.9/{file}");
+        let digest = format!("sha256:{}", "a".repeat(64));
+
+        let ok = asset_for_platform(&[gh(&file, &good_url, Some(&digest))]).unwrap();
+        assert_eq!(ok.url, good_url);
+        assert_eq!(ok.sha256, "a".repeat(64));
+        // Sem digest, ou de outro lugar: nada é oferecido.
+        assert!(asset_for_platform(&[gh(&file, &good_url, None)]).is_none());
+        let evil = format!("https://example.com/{file}");
+        assert!(asset_for_platform(&[gh(&file, &evil, Some(&digest))]).is_none());
+    }
+
+    #[test]
+    fn download_rejects_wrong_hash_and_short_body() {
+        let dir = std::env::temp_dir().join(format!("sixteen-upd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("x.part");
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let body: &[u8] = b"conteudo do update";
+        use sha2::{Digest, Sha256};
+        let right = hex::encode(Sha256::digest(body));
+
+        assert!(download_into(body, &part, body.len() as u64, &right, &tx).is_ok());
+        assert!(download_into(body, &part, body.len() as u64, &"0".repeat(64), &tx).is_err());
+        assert!(download_into(body, &part, body.len() as u64 + 1, &right, &tx).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

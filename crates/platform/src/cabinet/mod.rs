@@ -2154,7 +2154,9 @@ impl Cabinet {
 
     /// Draw one frame to the window. `aspect_ratio <= 0` means "use 4:3".
     pub fn present_frame(&mut self, frame: &FrameRef, aspect_ratio: f32) {
-        self.upload(frame);
+        if !self.upload(frame) {
+            return;
+        }
         self.tvx.sample_frame(frame);
 
         let (real_w, real_h) = self
@@ -2291,7 +2293,9 @@ impl Cabinet {
         aspect_ratio: f32,
         path: &std::path::Path,
     ) -> Result<(), PlatformError> {
-        self.upload(frame);
+        if !self.upload(frame) {
+            return Err(PlatformError::Sdl("upload do quadro falhou".into()));
+        }
 
         let (real_w, real_h) = self
             .canvas
@@ -2422,7 +2426,11 @@ impl Cabinet {
     /// Sobe o quadro do core para a textura do tubo. No canal 4 o quadro
     /// passa antes pelo sinal degradado ([`rf::RfDetune`]) — a janela e as
     /// capturas usam este mesmo caminho, então batem.
-    fn upload(&mut self, frame: &FrameRef) {
+    ///
+    /// `false` quando a textura não pôde ser criada ou atualizada (perda do
+    /// dispositivo de vídeo ao voltar da suspensão, VRAM esgotada): o quadro
+    /// é pulado com um aviso em vez de derrubar o app no meio do jogo.
+    fn upload(&mut self, frame: &FrameRef) -> bool {
         if self.tv_on() && self.tv_channel == 4 {
             self.rf.process(
                 frame.pixels,
@@ -2432,23 +2440,30 @@ impl Cabinet {
                 frame.format,
             );
             self.ensure_src(frame.width, frame.height, PixelFormat::Xrgb8888);
-            let src = self.src.as_mut().unwrap();
-            src.tex
-                .update(None, &self.rf.out, frame.width as usize * 4)
-                .expect("upload frame");
-            return;
+            let Some(src) = self.src.as_mut() else {
+                return false;
+            };
+            if let Err(e) = src.tex.update(None, &self.rf.out, frame.width as usize * 4) {
+                log::warn!("upload do quadro falhou: {e}");
+                return false;
+            }
+            return true;
         }
         self.ensure_src(frame.width, frame.height, frame.format);
         let expected_pitch = frame.width as usize * frame.format.bytes_per_pixel();
-        let src = self.src.as_mut().unwrap();
+        let Some(src) = self.src.as_mut() else {
+            return false;
+        };
         let pitch = if frame.pitch == 0 {
             expected_pitch
         } else {
             frame.pitch
         };
-        src.tex
-            .update(None, frame.pixels, pitch)
-            .expect("upload frame");
+        if let Err(e) = src.tex.update(None, frame.pixels, pitch) {
+            log::warn!("upload do quadro falhou: {e}");
+            return false;
+        }
+        true
     }
 
     /// A força do sinal no canal 4 (0..1), para o áudio acompanhar a
@@ -2463,12 +2478,18 @@ impl Cabinet {
             None => true,
         };
         if stale {
-            let mut tex = self
-                .canvas
-                .create_texture_streaming(format.sdl(), w, h)
-                .expect("create streaming texture");
-            tex.set_scale_mode(SdlScaleMode::Linear);
-            self.src = Some(SrcTexture { tex, w, h, format });
+            match self.canvas.create_texture_streaming(format.sdl(), w, h) {
+                Ok(mut tex) => {
+                    tex.set_scale_mode(SdlScaleMode::Linear);
+                    self.src = Some(SrcTexture { tex, w, h, format });
+                }
+                Err(e) => {
+                    // Sem textura nova, nada de desenhar com a velha (tamanho
+                    // ou formato errado): `upload` vê `None` e pula o quadro.
+                    log::warn!("textura do quadro não foi criada: {e}");
+                    self.src = None;
+                }
+            }
         }
     }
 

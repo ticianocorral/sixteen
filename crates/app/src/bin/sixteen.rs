@@ -156,6 +156,7 @@ their canonical No-Intro name.";
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    install_panic_hook();
     // O app mudou de nome (SNES Xperience → SixteeN) — a raiz de dados e o
     // cfg seguem primeiro, antes de qualquer leitura/criação nos caminhos
     // novos (criar pasta bloquearia o rename da raiz).
@@ -436,7 +437,40 @@ fn main() -> Result<()> {
                 debug_cart_anim: None,
                 debug_blow: None,
             };
-            match run_game(&mut plat, &mut cab, &spec, &cfg)? {
+            // Um jogo que não abre (ROM sumiu — microSD tirado no Deck —,
+            // ROM corrompida ou recusada pelo núcleo, núcleo estragado, sem
+            // saída de áudio) não derruba o app: avisa na tela e volta à
+            // tela inicial, que limpa o painel do cartucho.
+            plat.set_game_session(true);
+            let result = run_game(&mut plat, &mut cab, &spec, &cfg);
+            plat.set_game_session(false);
+            plat.set_playing(false);
+            let outcome = match result {
+                Ok(outcome) => outcome,
+                Err(e) => {
+                    log::error!("o jogo não abriu: {e:#}");
+                    let body = format!(
+                        "{}\n\n{e:#}",
+                        sixteen_platform::tr!(
+                            "this cartridge could not be started. check that the rom file \
+                             is still there and is a valid snes rom.",
+                            "não deu para ligar este cartucho. confira se o arquivo da rom \
+                             continua lá e é uma rom de snes válida."
+                        )
+                    );
+                    if message_screen(
+                        &mut plat,
+                        &mut cab,
+                        sixteen_platform::tr!("the game did not start", "o jogo não abriu"),
+                        &body,
+                    )? {
+                        break 'app;
+                    }
+                    idle_static = idle::RESTING_STATIC;
+                    break 'shelf;
+                }
+            };
+            match outcome {
                 // The power-off ritual (desligar, snow, wait for eject)
                 // already ran inside run_game — the idle screen just eases
                 // in over what it left (plan §3.3, "a estante entra por
@@ -487,54 +521,82 @@ fn refresh_ra(cfg: &Config, cab: &mut Cabinet, shelf_opts: &mut ShelfOpts) {
 }
 
 fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
+    message_screen(
+        plat,
+        cab,
+        sixteen_platform::tr!("core not found", "núcleo não encontrado"),
+        sixteen_platform::tr!(
+            "to play, the console needs the snes9x core: back out and click \
+             \"download the snes9x core\" — or get it from settings, or \
+             drop the file into core/ yourself.",
+            "para jogar, o console precisa do núcleo snes9x: volte à tela \
+             inicial e clique em \"Baixar núcleo snes9x\" — ou baixe nas \
+             configurações, ou coloque o arquivo em core/ à mão."
+        ),
+    )
+}
+
+/// Uma tela de aviso (título + texto) até o jogador confirmar ou voltar —
+/// teclado, mouse ou controle. Devolve `true` se o app inteiro deve sair.
+fn message_screen(plat: &mut Platform, cab: &mut Cabinet, title: &str, body: &str) -> Result<bool> {
+    let frame = std::time::Duration::from_nanos(16_666_667);
     loop {
         let m = plat.poll_menu(MenuMode::Nav);
         if m.quit {
             return Ok(true);
         }
-        if m.nav
-            .iter()
-            .any(|n| matches!(n, MenuNav::Confirm | MenuNav::Back))
+        if m.click.is_some()
+            || m.nav
+                .iter()
+                .any(|n| matches!(n, MenuNav::Confirm | MenuNav::Back))
         {
             return Ok(false);
         }
         let render = |d: &mut Screen| {
-            d.text(
-                40,
-                40,
-                2,
-                (232, 232, 232),
-                sixteen_platform::tr!("core not found", "núcleo não encontrado"),
-            );
-            d.text_wrapped(
-                40,
-                90,
-                700,
-                1,
-                (150, 150, 158),
-                sixteen_platform::tr!(
-                    "to play, the console needs the snes9x core: back out and click \
-                     \"download the snes9x core\" — or get it from settings, or \
-                     drop the file into core/ yourself.",
-                    "para jogar, o console precisa do núcleo snes9x: volte à tela \
-                     inicial e clique em \"Baixar núcleo snes9x\" — ou baixe nas \
-                     configurações, ou coloque o arquivo em core/ à mão."
-                ),
-            );
+            d.text(40, 40, 2, (232, 232, 232), title);
+            d.text_wrapped(40, 90, 700, 1, (150, 150, 158), body);
             d.text(
                 40,
                 d.size().1 as i32 - 40,
                 1,
                 (150, 150, 158),
-                sixteen_platform::tr!(
-                    "enter or esc: back to the shelf",
-                    "enter ou esc: voltar pra estante"
-                ),
+                sixteen_platform::tr!("A, B, enter or esc: back", "A, B, enter ou esc: voltar"),
             );
         };
         cab.frame_2d((18, 18, 20), render);
-        std::thread::sleep(std::time::Duration::from_millis(16));
+        // Tela parada: meio quadro depois de um tempo sem input.
+        let idle = plat.idle_for() >= std::time::Duration::from_secs(2);
+        std::thread::sleep(if idle { frame * 2 } else { frame });
     }
+}
+
+/// Um panic vai para o log E para `<raiz>/crash.log` (no Game Mode do Steam
+/// Deck ninguém vê o stderr): o app que "sumiu" deixa o porquê. O hook
+/// padrão roda depois, igual a antes.
+fn install_panic_hook() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        log::error!("panic: {info}\n{bt}");
+        let path = sixteen_app::dirs::app_root().join("crash.log");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            use std::io::Write;
+            let when = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let _ = writeln!(
+                f,
+                "--- SixteeN (unix {when}) v{}\n{info}\n{bt}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+        default(info);
+    }));
 }
 
 /// Plan revision: "colocar o update na raiz das pastas do app nao dentro

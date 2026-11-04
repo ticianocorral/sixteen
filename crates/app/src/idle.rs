@@ -75,7 +75,12 @@ impl ConsoleManual {
             ("console-manual-en", CONSOLE_MANUAL_EN),
             ("console-manual-pt", CONSOLE_MANUAL_PT)
         );
-        let path = std::env::temp_dir().join(format!("sixteen-{key}.pdf"));
+        // Na pasta do app, não no temp: no Linux o `/tmp` é compartilhado e
+        // um arquivo de mesmo nome e tamanho deixado por outro usuário seria
+        // aberto pelo renderizador de PDF.
+        let dir = crate::dirs::app_root().join("cache");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(format!("{key}.pdf"));
         // Já gravado numa abertura anterior (mesmo tamanho): não regrava os
         // ~1,6 MB na thread de UI a cada clique.
         let fresh = std::fs::metadata(&path).is_ok_and(|m| m.len() == bytes.len() as u64);
@@ -836,8 +841,10 @@ pub fn run(
                         );
                     }
                 }
-            } else if press_btn && update_rx.is_none() && apply_rx.is_none() && asset_url.is_some()
-            {
+            } else if let (true, Some(asset)) = (
+                press_btn && update_rx.is_none() && apply_rx.is_none(),
+                asset_url.as_ref(),
+            ) {
                 // "Atualizar": baixa o asset da plataforma para o
                 // diretório de updates e aplica em seguida (plan
                 // revision: "ao clicar em atualizar o app, ele faz
@@ -845,15 +852,16 @@ pub fn run(
                 // acontecia no arranque seguinte, sem sinal nenhum).
                 let (tx, rx) = mpsc::channel();
                 let (ptx, prx) = mpsc::channel();
-                let url = asset_url.unwrap_or_default();
+                let asset = asset.clone();
                 let dest = crate::dirs::update_dir();
                 std::thread::spawn(move || {
-                    let result = crate::update_check::download_asset(&url, &dest, &ptx).map(|p| {
-                        p.file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .into_owned()
-                    });
+                    let result =
+                        crate::update_check::download_asset(&asset, &dest, &ptx).map(|p| {
+                            p.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned()
+                        });
                     let _ = tx.send(result);
                 });
                 update_rx = Some(rx);

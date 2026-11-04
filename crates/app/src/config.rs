@@ -320,7 +320,13 @@ impl Config {
                 None => (Some(crate::dirs::config_path()), false),
             },
         };
+        Self::load_at(path, required)
+    }
 
+    /// O miolo do [`Config::load`]: `required` = o caminho veio do jogador
+    /// (`--config`/`SIXTEEN_CONFIG`) e um erro nele é erro; o padrão se
+    /// recupera sozinho.
+    fn load_at(path: Option<PathBuf>, required: bool) -> Result<Self> {
         let mut cfg = Config {
             // Plan revision: "sempre abrir em fullscreen como padrao" — a
             // fresh install (no `sixteen.cfg` yet) starts fullscreen; the
@@ -355,9 +361,25 @@ impl Config {
 
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                let raw: Raw =
-                    toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-                cfg.apply(raw)?;
+                let parsed = toml::from_str::<Raw>(&text)
+                    .with_context(|| format!("parsing {}", path.display()))
+                    .and_then(|raw| cfg.apply(raw));
+                if let Err(e) = parsed {
+                    if required {
+                        return Err(e);
+                    }
+                    // O cfg padrão (editado à mão e quebrado) não pode impedir o
+                    // app de abrir: vai para `.bad` — guardado, não apagado —
+                    // e o app sobe com os padrões gravados de novo.
+                    let bad = path.with_extension("cfg.bad");
+                    log::error!(
+                        "{e:#} — o arquivo vai para {} e o app segue com os padrões",
+                        bad.display()
+                    );
+                    std::fs::rename(&path, &bad)
+                        .with_context(|| format!("renomeando {}", path.display()))?;
+                    return Self::load_at(Some(path), required);
+                }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && !required => {
                 if let Some(dir) = path.parent() {
@@ -903,5 +925,26 @@ mod tests {
         let mut round = defaults();
         round.apply(raw).unwrap();
         assert_eq!(round.padmap2, cfg.padmap2);
+    }
+
+    #[test]
+    fn broken_default_cfg_moves_aside_and_loads_defaults() {
+        let dir = std::env::temp_dir().join(format!("sixteen-cfg-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sixteen.cfg");
+        std::fs::write(&path, "isto [não é toml").unwrap();
+
+        let cfg = Config::load_at(Some(path.clone()), false).unwrap();
+        assert!(cfg.fullscreen, "padrões de volta");
+        let bad = dir.join("sixteen.cfg.bad");
+        assert_eq!(std::fs::read_to_string(&bad).unwrap(), "isto [não é toml");
+        assert!(path.exists(), "um cfg padrão novo foi gravado");
+
+        // Explícito: o erro continua sendo erro, e nada sai do lugar.
+        std::fs::write(&path, "isto [não é toml").unwrap();
+        assert!(Config::load_at(Some(path.clone()), true).is_err());
+        assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -28,6 +28,17 @@ fn agent() -> ureq::Agent {
         .build()
 }
 
+/// Teto do corpo JSON de uma resposta — o `into_json` do ureq 2 lê sem
+/// limite, e um servidor com bug (ou hostil) não pode encher a memória.
+/// As respostas reais ficam em dezenas de KB; 8 MiB sobra.
+const MAX_JSON_BYTES: u64 = 8 << 20;
+
+/// `into_json` com teto: desserializa no máximo [`MAX_JSON_BYTES`] do corpo
+/// (um corpo maior chega truncado e falha como JSON inválido).
+fn read_json<T: serde::de::DeserializeOwned>(resp: ureq::Response) -> serde_json::Result<T> {
+    serde_json::from_reader(resp.into_reader().take(MAX_JSON_BYTES))
+}
+
 /// Percent-encode the few characters a username/token can carry that would
 /// break a query string — full urlencoding machinery isn't a dependency
 /// worth adding for two fields.
@@ -61,9 +72,8 @@ pub fn test_login(user: &str, token: &str) -> Result<String, String> {
         .set("User-Agent", USER_AGENT)
         .call()
         .map_err(net_err)?;
-    let body: serde_json::Value = resp
-        .into_json()
-        .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
+    let body: serde_json::Value =
+        read_json(resp).map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
     // Failure shapes: {"Success": false} or an error code object; success
     // carries the profile with at least "User".
     if body.get("Success").is_some_and(|s| s == false) {
@@ -245,7 +255,7 @@ pub fn fetch_game(
             ("m", hash),
         ])
         .map_err(net_err)?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+    let body: serde_json::Value = read_json(resp).map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
             .get("Error")
@@ -277,7 +287,7 @@ pub fn fetch_game(
                 .set("User-Agent", USER_AGENT)
                 .call()
             {
-                if let Ok(meta) = meta.into_json::<serde_json::Value>() {
+                if let Ok(meta) = read_json::<serde_json::Value>(meta) {
                     let mut cached: serde_json::Value =
                         serde_json::from_str(&text).unwrap_or_else(|_| body.clone());
                     // Indexar um Value que não é objeto (array/null de um
@@ -412,7 +422,7 @@ pub fn award(
             ("v", &award_signature(achievement_id, user, hardcore)),
         ])
         .map_err(net_err)?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+    let body: serde_json::Value = read_json(resp).map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
             .get("Error")
@@ -433,8 +443,7 @@ pub fn award(
 /// password comes back as 401 with JSON).
 fn net_err(e: ureq::Error) -> String {
     match e {
-        ureq::Error::Status(code, resp) => resp
-            .into_json::<serde_json::Value>()
+        ureq::Error::Status(code, resp) => read_json::<serde_json::Value>(resp)
             .ok()
             .and_then(|b| b.get("Error").and_then(|v| v.as_str()).map(str::to_string))
             .unwrap_or_else(|| format!("HTTP {code}")),
@@ -456,9 +465,8 @@ pub fn connect_login(user: &str, password: &str) -> Result<String, String> {
         .set("User-Agent", USER_AGENT)
         .send_form(&[("r", "login2"), ("u", user), ("p", password)])
         .map_err(net_err)?;
-    let body: serde_json::Value = resp
-        .into_json()
-        .map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
+    let body: serde_json::Value =
+        read_json(resp).map_err(|e| tr!(format!("response: {e}"), format!("resposta: {e}")))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
             .get("Error")
@@ -517,7 +525,7 @@ fn save_earned(hash: &str, earned: &EarnedMap) {
         let _ = std::fs::create_dir_all(dir);
     }
     if let Ok(t) = serde_json::to_string(earned) {
-        let _ = std::fs::write(path, t);
+        let _ = sixteen_domain::fsutil::write_atomic(&path, t);
     }
 }
 
@@ -557,6 +565,9 @@ impl Active {
         token: &str,
         hardcore: bool,
     ) -> Result<Option<Active>, String> {
+        // Sessão logada: o que ficou pendente de uma execução anterior
+        // (app fechado no meio do envio, rede fora) vai em segundo plano.
+        resubmit_pending(user, token);
         let hash = hash_rom(path)?;
         let Some(cached) = cached_game(&hash) else {
             return Ok(None);
@@ -651,7 +662,7 @@ impl Active {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            let _ = std::fs::write(path, blob);
+            let _ = sixteen_domain::fsutil::write_atomic(&path, blob);
         }
     }
 
@@ -694,52 +705,218 @@ impl Active {
         self.earned.values().filter(|&&hardcore| hardcore).count()
     }
 
-    /// Fire-and-forget submit of one unlock (worker thread, 2 retries).
-    /// Persisted failures go to `pending` for a later manual retry.
+    /// Envio de um desbloqueio (worker thread, 3 tentativas). O registro vai
+    /// para `ra-pending.jsonl` ANTES de qualquer rede e só sai de lá quando o
+    /// servidor aceita (ou diz que já tinha): se o app fechar no meio, ou as
+    /// tentativas acabarem, o próximo login reenvia ([`resubmit_pending`]).
     pub fn submit_unlock(&self, unlock: &Unlock) {
-        let (user, token, hash, hardcore) = (
-            self.user.clone(),
-            self.token.clone(),
-            self.hash.clone(),
-            self.hardcore,
-        );
-        let unlock = unlock.clone();
+        let entry = PendingAward {
+            user: self.user.clone(),
+            hash: self.hash.clone(),
+            id: unlock.id,
+            hardcore: self.hardcore,
+            title: unlock.title.clone(),
+        };
+        let token = self.token.clone();
+        // A pendência vai para o disco AQUI, antes da thread: se o app
+        // fechar logo depois do desbloqueio, a thread pode nem rodar — o
+        // registro já está salvo para o reenvio do próximo login. É uma
+        // escrita pequena e rara (um desbloqueio).
+        let path = pending_path();
+        if let Err(e) = pending_add(&path, &entry) {
+            log::warn!("ra: pendente {} não gravado ({e})", entry.id);
+        }
         std::thread::spawn(move || {
             for attempt in 0..3 {
-                match award(&user, &token, unlock.id, &hash, hardcore) {
+                match award(&entry.user, &token, entry.id, &entry.hash, entry.hardcore) {
                     Ok(msg) => {
                         log::info!(
                             "ra: conquista {} enviada ({msg}, tentativa {})",
-                            unlock.id,
+                            entry.id,
                             attempt + 1
                         );
+                        let _ = pending_remove(&path, &entry);
+                        return;
+                    }
+                    Err(e) if is_already_awarded(&e) => {
+                        log::info!("ra: conquista {} já estava no servidor ({e})", entry.id);
+                        let _ = pending_remove(&path, &entry);
                         return;
                     }
                     Err(e) => {
-                        log::warn!("ra: submit {} falhou ({e})", unlock.id);
+                        log::warn!("ra: submit {} falhou ({e})", entry.id);
                         std::thread::sleep(Duration::from_secs(2));
                     }
                 }
             }
-            // Out of retries: record for a future pass instead of dropping.
-            let path = crate::dirs::retroachievements_dir().join("ra-pending.jsonl");
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-            {
-                use std::io::Write;
-                let _ = writeln!(
-                    f,
-                    "{}\t{}\t{}\t{}",
-                    hash,
-                    unlock.id,
-                    if hardcore { 1 } else { 0 },
-                    unlock.title
-                );
-            }
+            // Sem mais tentativas: o registro fica no pendente para o
+            // reenvio do próximo login.
+            log::warn!("ra: conquista {} fica pendente", entry.id);
         });
     }
+}
+
+// ---- envios pendentes -------------------------------------------------
+
+/// Um desbloqueio ainda não confirmado pelo servidor — uma linha JSON de
+/// `retroachievements/ra-pending.jsonl`, com tudo o que o `award` precisa
+/// (o token não: vem da sessão logada no reenvio).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct PendingAward {
+    /// Vazio nas linhas do formato legado (TSV, sem usuário): reenviadas
+    /// com a conta logada.
+    #[serde(default)]
+    user: String,
+    hash: String,
+    id: u32,
+    hardcore: bool,
+    /// Só para o log / leitura humana do arquivo.
+    #[serde(default)]
+    title: String,
+}
+
+impl PendingAward {
+    /// Mesmo envio = mesmo usuário, jogo, conquista e modo (o título não
+    /// conta).
+    fn same_award(&self, other: &PendingAward) -> bool {
+        self.user == other.user
+            && self.hash == other.hash
+            && self.id == other.id
+            && self.hardcore == other.hardcore
+    }
+}
+
+fn pending_path() -> std::path::PathBuf {
+    crate::dirs::retroachievements_dir().join("ra-pending.jsonl")
+}
+
+/// Serializa toda mutação do arquivo de pendentes: o worker de cada
+/// desbloqueio e o reenvio do login fazem read-modify-write no mesmo
+/// arquivo, e sem a trava um sobrescreveria o que o outro acabou de pôr.
+static PENDING_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Uma linha do arquivo: JSON (formato atual) ou o TSV legado
+/// `hash\tid\thardcore\ttítulo`. Linha inválida = `None` (ignorada).
+fn parse_pending_line(line: &str) -> Option<PendingAward> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    if line.starts_with('{') {
+        return serde_json::from_str(line).ok();
+    }
+    let mut parts = line.splitn(4, '\t');
+    let hash = parts.next()?.to_string();
+    let id = parts.next()?.parse().ok()?;
+    let hardcore = match parts.next()? {
+        "1" => true,
+        "0" => false,
+        _ => return None,
+    };
+    let title = parts.next().unwrap_or_default().to_string();
+    (!hash.is_empty()).then_some(PendingAward {
+        user: String::new(),
+        hash,
+        id,
+        hardcore,
+        title,
+    })
+}
+
+/// Os pendentes do arquivo, na ordem; linhas inválidas são puladas.
+fn read_pending(path: &std::path::Path) -> Vec<PendingAward> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(parse_pending_line)
+        .collect()
+}
+
+/// O único caminho que muda o arquivo: trava, lê, aplica `f`, regrava
+/// atômico (só quando algo mudou). Linhas inválidas somem na regravação.
+fn mutate_pending(
+    path: &std::path::Path,
+    f: impl FnOnce(&mut Vec<PendingAward>),
+) -> std::io::Result<()> {
+    let _guard = PENDING_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let before = read_pending(path);
+    let mut entries = before.clone();
+    f(&mut entries);
+    if entries == before {
+        return Ok(());
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut text = String::new();
+    for e in &entries {
+        if let Ok(line) = serde_json::to_string(e) {
+            text.push_str(&line);
+            text.push('\n');
+        }
+    }
+    sixteen_domain::fsutil::write_atomic(path, text)
+}
+
+/// Põe um envio no pendente (sem duplicar o mesmo envio).
+fn pending_add(path: &std::path::Path, entry: &PendingAward) -> std::io::Result<()> {
+    mutate_pending(path, |all| {
+        if !all.iter().any(|e| e.same_award(entry)) {
+            all.push(entry.clone());
+        }
+    })
+}
+
+/// Tira um envio confirmado do pendente (todas as cópias dele).
+fn pending_remove(path: &std::path::Path, entry: &PendingAward) -> std::io::Result<()> {
+    mutate_pending(path, |all| all.retain(|e| !e.same_award(entry)))
+}
+
+/// O servidor recusou porque o usuário já tem a conquista ("User already
+/// has this achievement unlocked…") — para o pendente vale como sucesso.
+fn is_already_awarded(err: &str) -> bool {
+    err.to_ascii_lowercase().contains("already")
+}
+
+/// Um reenvio por vez no processo (cada cartucho inserido chama).
+static RESUBMIT_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Reenvia em segundo plano os pendentes do usuário logado (e os legados
+/// sem usuário), tirando do arquivo os que o servidor aceitar ou já tiver.
+/// Não bloqueia: worker thread, mesmo agent/timeouts do `award`.
+pub fn resubmit_pending(user: &str, token: &str) {
+    use std::sync::atomic::Ordering;
+    if user.is_empty() || token.is_empty() {
+        return;
+    }
+    if RESUBMIT_RUNNING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let (user, token) = (user.to_string(), token.to_string());
+    std::thread::spawn(move || {
+        let path = pending_path();
+        let todo: Vec<PendingAward> = read_pending(&path)
+            .into_iter()
+            .filter(|e| e.user.is_empty() || e.user == user)
+            .collect();
+        let mut sent = 0usize;
+        for entry in &todo {
+            match award(&user, &token, entry.id, &entry.hash, entry.hardcore) {
+                Ok(_) => {}
+                Err(e) if is_already_awarded(&e) => {}
+                Err(e) => {
+                    log::info!("ra: pendente {} segue pendente ({e})", entry.id);
+                    continue;
+                }
+            }
+            let _ = pending_remove(&path, entry);
+            sent += 1;
+        }
+        if sent > 0 {
+            log::info!("ra: {sent} conquista(s) pendente(s) reenviada(s)");
+        }
+        RESUBMIT_RUNNING.store(false, Ordering::Release);
+    });
 }
 
 // ---- shelf view (fase 2/4) -------------------------------------------
@@ -987,7 +1164,7 @@ pub fn fetch_completion(
             .set("User-Agent", USER_AGENT)
             .call()
             .map_err(net_err)?;
-        let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+        let body: serde_json::Value = read_json(resp).map_err(|e| format!("resposta: {e}"))?;
         let total = body.get("Total").and_then(|v| v.as_u64()).unwrap_or(0);
         let results = body
             .get("Results")
@@ -1139,14 +1316,14 @@ pub fn fetch_game_earned(user: &str, token: &str, game_id: u64) -> Result<Earned
         .set("User-Agent", USER_AGENT)
         .call()
         .map_err(net_err)?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
+    let body: serde_json::Value = read_json(resp).map_err(|e| format!("resposta: {e}"))?;
     let earned = earned_map_from_json(&body);
     let path = earned_ids_path(game_id);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
     if let Ok(t) = serde_json::to_string(&earned) {
-        let _ = std::fs::write(path, t);
+        let _ = sixteen_domain::fsutil::write_atomic(&path, t);
     }
     Ok(earned)
 }
@@ -1264,7 +1441,7 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         .join("badges");
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join(format!("{name}.png"));
-    std::fs::write(&path, &bytes).ok()?;
+    sixteen_domain::fsutil::write_atomic(&path, &bytes).ok()?;
     Some(path)
 }
 
@@ -1304,6 +1481,81 @@ pub fn prefetch_badges(rom_path: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pending_entry(id: u32, hardcore: bool) -> PendingAward {
+        PendingAward {
+            user: "UserA".into(),
+            hash: "abc123".into(),
+            id,
+            hardcore,
+            title: format!("Conquista {id}"),
+        }
+    }
+
+    fn pending_tmp(nome: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("sixteen-ra-pending-{nome}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir.join("ra-pending.jsonl")
+    }
+
+    #[test]
+    fn pending_add_remove_round_trip() {
+        let path = pending_tmp("roundtrip");
+        let (a, b) = (pending_entry(1, false), pending_entry(2, true));
+        pending_add(&path, &a).unwrap();
+        pending_add(&path, &b).unwrap();
+        // O mesmo envio não duplica; outro modo é outro envio.
+        pending_add(&path, &a).unwrap();
+        let hc = pending_entry(1, true);
+        pending_add(&path, &hc).unwrap();
+        assert_eq!(read_pending(&path), vec![a.clone(), b.clone(), hc.clone()]);
+
+        pending_remove(&path, &a).unwrap();
+        assert_eq!(read_pending(&path), vec![b.clone(), hc.clone()]);
+        pending_remove(&path, &b).unwrap();
+        pending_remove(&path, &hc).unwrap();
+        assert!(read_pending(&path).is_empty());
+        // Remover o que não está lá não falha.
+        pending_remove(&path, &a).unwrap();
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn pending_skips_malformed_lines_and_reads_legacy_tsv() {
+        let path = pending_tmp("malformed");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let good = pending_entry(7, true);
+        let text = format!(
+            "{}\nlixo\n{{\"hash\": 1}}\n\nabc123\tnão-número\t1\tx\nfff\t42\t0\tLegada\twith tab\n",
+            serde_json::to_string(&good).unwrap()
+        );
+        std::fs::write(&path, text).unwrap();
+        let legacy = PendingAward {
+            user: String::new(),
+            hash: "fff".into(),
+            id: 42,
+            hardcore: false,
+            title: "Legada\twith tab".into(),
+        };
+        assert_eq!(read_pending(&path), vec![good.clone(), legacy.clone()]);
+
+        // A regravação mantém só as válidas, já no formato JSON.
+        pending_remove(&path, &good).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(raw.lines().count(), 1);
+        assert!(raw.starts_with('{'));
+        assert_eq!(read_pending(&path), vec![legacy]);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn already_awarded_counts_as_success() {
+        assert!(is_already_awarded(
+            "User already has this achievement unlocked in hardcore mode."
+        ));
+        assert!(!is_already_awarded("Invalid token"));
+    }
 
     #[test]
     fn award_signature_is_md5_of_id_user_hardcore() {

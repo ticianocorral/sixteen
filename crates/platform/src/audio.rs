@@ -7,7 +7,9 @@ use sdl3::AudioSubsystem;
 use crate::PlatformError;
 
 pub struct AudioOut {
-    stream: AudioStreamOwner,
+    /// `None` = saída muda ([`AudioOut::muted`]): sem dispositivo de áudio o
+    /// jogo ainda roda, só sem som.
+    stream: Option<AudioStreamOwner>,
     /// Source rate the core declared; kept for diagnostics.
     pub source_rate: u32,
 }
@@ -23,9 +25,18 @@ impl AudioOut {
             .resume()
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         Ok(Self {
-            stream,
+            stream: Some(stream),
             source_rate: sample_rate,
         })
+    }
+
+    /// Uma saída que engole tudo — o caminho de quando o dispositivo de
+    /// áudio não abre (PipeWire caído, saída HDMI/Bluetooth que sumiu).
+    pub fn muted(sample_rate: u32) -> Self {
+        Self {
+            stream: None,
+            source_rate: sample_rate,
+        }
     }
 
     /// Interleaved L/R. Non-blocking; SDL buffers and resamples.
@@ -33,20 +44,25 @@ impl AudioOut {
         if interleaved_stereo.is_empty() {
             return;
         }
-        let _ = self.stream.put_data_i16(interleaved_stereo);
+        if let Some(s) = &self.stream {
+            let _ = s.put_data_i16(interleaved_stereo);
+        }
     }
 
     /// Stereo sample-frames still waiting to play. Used to pace the loop so the
     /// buffer neither starves nor grows without bound.
     pub fn queued_frames(&self) -> usize {
         self.stream
-            .queued_bytes()
+            .as_ref()
+            .and_then(|s| s.queued_bytes().ok())
             .map(|b| (b.max(0) as usize) / 4)
             .unwrap_or(0)
     }
 
     pub fn clear(&self) {
-        let _ = self.stream.clear();
+        if let Some(s) = &self.stream {
+            let _ = s.clear();
+        }
     }
 }
 

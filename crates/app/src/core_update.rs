@@ -272,9 +272,10 @@ fn try_download(url: &str, dest_dir: &Path, tx: &Sender<CoreUpdateMsg>) -> Resul
 /// whatever inode is mapped untouched.
 fn install_core_bytes(dest_dir: &Path, bytes: &[u8]) -> Result<(), String> {
     let dest = dest_dir.join(core_file_name());
-    let tmp = dest_dir.join(format!("{}.new", core_file_name()));
-    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
+    // `write_atomic` = temporário + `sync_all` + rename: o mesmo swap de
+    // entrada de diretório de antes, agora com o conteúdo no disco antes do
+    // rename — uma queda de energia logo depois não deixa um núcleo vazio.
+    sixteen_domain::fsutil::write_atomic(&dest, bytes).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

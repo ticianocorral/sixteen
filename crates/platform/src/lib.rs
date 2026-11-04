@@ -107,6 +107,22 @@ fn is_player_input(event: &Event) -> bool {
     )
 }
 
+/// Mudança de visibilidade da janela: `Some(true)` minimizada/escondida,
+/// `Some(false)` de volta. `Occluded` fica de fora de propósito: no
+/// gamescope do Steam Deck e com outra janela por cima no macOS ele chega
+/// em situações em que o jogador ainda está olhando para o app.
+fn window_hidden_change(event: &Event) -> Option<bool> {
+    use sdl3::event::WindowEvent as W;
+    match event {
+        Event::Window { win_event, .. } => match win_event {
+            W::Minimized | W::Hidden => Some(true),
+            W::Restored | W::Shown | W::Exposed | W::Maximized | W::FocusGained => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn left_click_at(event: &Event) -> Option<(i32, i32)> {
     match event {
         Event::MouseButtonDown {
@@ -389,6 +405,15 @@ pub struct Platform {
     /// O último input do jogador (evento ou botão segurado) — as telas de
     /// menu caem para meio quadro depois de um tempo parado.
     last_activity: Instant,
+    /// Janela minimizada/escondida (ver [`window_hidden_change`]).
+    window_hidden: bool,
+    /// Partida em curso ([`Platform::set_game_session`]): os pads que já
+    /// apertaram algo nela — esses não perdem a porta.
+    game_engaged: Option<Vec<JoystickId>>,
+    /// Jogo ligado e correndo (não pausado): a tela não pode apagar.
+    playing: bool,
+    /// O que foi pedido ao SDL por último (`true` = descanso bloqueado).
+    screensaver_blocked: bool,
 }
 
 const MENU_PAD_MAP: [(PadBtn, MenuNav); 12] = [
@@ -502,6 +527,12 @@ impl Platform {
         // `present` bloqueando em FIFO derruba o tick à metade e o jogo vai
         // em câmera lenta. Um SDL_RENDER_VSYNC no ambiente vence.
         sdl3::hint::set("SDL_RENDER_VSYNC", "0");
+        // O SDL, por padrão, impede o descanso de tela enquanto o app está
+        // aberto — horas na tela ociosa com a tela acesa. Aqui o descanso
+        // fica LIBERADO e o app só o segura quando precisa
+        // ([`Platform::set_playing`] e a navegação recente, ver
+        // `update_screensaver`).
+        sdl3::hint::set("SDL_VIDEO_ALLOW_SCREENSAVER", "1");
         // Pads clones de "Switch Pro Controller" (RetroFlag de SNES e
         // similares, VID/PID 057e:2009): o driver hidapi do SDL os reivindica
         // com handshake e um watchdog que, sem input por 100 ms, manda um
@@ -551,6 +582,10 @@ impl Platform {
             trig_prev: [false; 2],
             last_input_pad: false,
             last_activity: Instant::now(),
+            window_hidden: false,
+            game_engaged: None,
+            playing: false,
+            screensaver_blocked: false,
         };
         me.sync_gamepads();
         Ok(me)
@@ -602,6 +637,17 @@ impl Platform {
                     .iter()
                     .any(|b| pad_held(pad, *b))
         };
+        if let Some(engaged) = &mut self.game_engaged {
+            for (id, pad) in &self.gamepads {
+                if !engaged.contains(id) && pressed(pad) {
+                    engaged.push(*id);
+                }
+            }
+            // O pad da porta 0 já jogou nesta partida: a ordem fica.
+            if engaged.contains(&self.gamepads[0].0) {
+                return;
+            }
+        }
         if pressed(&self.gamepads[0].1) {
             return;
         }
@@ -716,6 +762,9 @@ impl Platform {
         for event in self.event_pump.poll_iter() {
             if is_player_input(&event) {
                 self.last_activity = Instant::now();
+            }
+            if let Some(hidden) = window_hidden_change(&event) {
+                self.window_hidden = hidden;
             }
             match event {
                 Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
@@ -883,6 +932,9 @@ impl Platform {
             if is_player_input(&event) {
                 self.last_activity = Instant::now();
             }
+            if let Some(hidden) = window_hidden_change(&event) {
+                self.window_hidden = hidden;
+            }
             match event {
                 Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
                 Event::FingerDown { .. } => self.last_input_pad = true,
@@ -982,6 +1034,61 @@ impl Platform {
         self.last_activity.elapsed()
     }
 
+    /// O jogo está correndo (ligado, sem pausa nem menu): enquanto `true`
+    /// o descanso de tela fica bloqueado. Botões de controle não contam como
+    /// atividade para o sistema em vários desktops Linux, então sem isto a
+    /// tela apagaria no meio da partida.
+    pub fn set_playing(&mut self, on: bool) {
+        self.playing = on;
+        self.update_screensaver();
+    }
+
+    /// Bloqueia o descanso de tela só com jogo correndo ou input recente
+    /// (navegar a estante só no controle também não conta para o sistema).
+    /// Parado num menu, a tela pode apagar e o Deck economiza a maior conta
+    /// de energia que há: o painel. Só chama o SDL quando o estado muda.
+    fn update_screensaver(&mut self) {
+        const NAV_GRACE: Duration = Duration::from_secs(120);
+        let block = self.playing || self.idle_for() < NAV_GRACE;
+        if block == self.screensaver_blocked {
+            return;
+        }
+        self.screensaver_blocked = block;
+        let r = if block {
+            self.video_subsystem.disable_screen_saver()
+        } else {
+            self.video_subsystem.enable_screen_saver()
+        };
+        if let Err(e) = r {
+            log::warn!("descanso de tela: {e}");
+        }
+    }
+
+    /// A janela está minimizada/escondida: ninguém vê o que se desenha.
+    pub fn window_hidden(&self) -> bool {
+        self.window_hidden
+    }
+
+    /// Liga/desliga o modo "partida em curso" da ordem dos controles. Fora
+    /// dele, o pad que aperta algo vai para a porta 0 (um pad Bluetooth
+    /// esquecido ligado não rouba o jogador 1 dos menus). Dentro dele, um
+    /// pad que já jogou nesta partida nunca perde a porta — senão, numa
+    /// partida a dois, bastava o P1 ficar um quadro sem segurar nada e o P2
+    /// apertar algo para os dois trocarem de personagem. O pad da porta 0 na
+    /// largada já conta como "jogou" quando os menus vinham sendo usados no
+    /// controle (foi ele quem escolheu o jogo).
+    pub fn set_game_session(&mut self, on: bool) {
+        self.game_engaged = on.then(|| {
+            let mut seed = Vec::new();
+            if self.last_input_pad {
+                if let Some((id, _)) = self.gamepads.first() {
+                    seed.push(*id);
+                }
+            }
+            seed
+        });
+    }
+
     /// Botão (ou stick, via `pad_held`) segurado conta como atividade: um
     /// D-pad parado no lugar não gera evento, mas o auto-repeat do menu
     /// está andando. Lê o estado do pump anterior — um quadro de atraso.
@@ -989,6 +1096,7 @@ impl Platform {
         if self.pad_bits() != 0 {
             self.last_activity = Instant::now();
         }
+        self.update_screensaver();
     }
 
     /// Gamepad rising edges for the text-entry side (no Konami, no mouse).
@@ -1068,6 +1176,9 @@ impl Platform {
         for event in self.event_pump.poll_iter() {
             if is_player_input(&event) {
                 self.last_activity = Instant::now();
+            }
+            if let Some(hidden) = window_hidden_change(&event) {
+                self.window_hidden = hidden;
             }
             if let Some((x, y)) = left_click_at(&event) {
                 out.push(UiEvent::Click(x, y));
