@@ -12,6 +12,9 @@
 # A ROM sintética do pacote de exemplo (gerada por scripts/gen_example_assets.py)
 # é embutida no binário por include_bytes! — precisa estar no repositório.
 !crates/app/assets/example/roms/*.sfc
+# A ROM do Cheat Genius (montada de crates/app/cheat_genius/cheat_genius.s por
+# scripts/build_cheat_genius.sh) também vai por include_bytes!.
+!crates/app/cheat_genius/cheat_genius.sfc
 *.smc
 *.fig
 *.swc
