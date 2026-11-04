@@ -120,10 +120,25 @@ fn parse_block(block: &'static str) -> Vec<CheatDef> {
         .collect()
 }
 
+/// The name as the libretro-database spells it in a file name: it swaps
+/// every character a file system might reject for `_` — "Adventures of
+/// Batman & Robin, The (USA)" lives there as "Adventures of Batman _
+/// Robin, The (USA).cht". Without this, every No-Intro title with an `&`
+/// (Joe & Mac, Pocky & Rocky, Lufia & the Fortress of Doom…) had no cheats.
+fn libretro_file_name(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            '&' | '*' | '/' | ':' | '`' | '<' | '>' | '?' | '\\' | '|' | '"' => '_',
+            c => c,
+        })
+        .collect()
+}
+
 /// Cheats for a ROM's `title` (see this module's doc comment for how the
 /// match works), or empty if nothing in the database lines up with it.
 pub fn for_title(title: &str) -> Vec<CheatDef> {
-    let query = title.trim();
+    let query = libretro_file_name(title.trim());
+    let query = query.as_str();
     if query.is_empty() {
         return Vec::new();
     }
@@ -179,6 +194,14 @@ pub fn is_valid_code(code: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn titles_with_ampersand_find_the_libretro_underscore_file() {
+        // the database's file name is "Adventures of Batman _ Robin, The
+        // (USA)" — the ROM's own name keeps the "&"
+        assert!(!for_title("Adventures of Batman & Robin, The (USA)").is_empty());
+        assert!(!for_title("Joe & Mac 2 - Lost in the Tropics (USA) (Rev 1)").is_empty());
+    }
 
     #[test]
     fn accepts_game_genie_and_ram_codes() {

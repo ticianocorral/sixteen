@@ -126,6 +126,18 @@ aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 - Na tela de controles, dar a uma ação a tecla de outra fazia a outra
   sumir da lista e desalinhava a coluna do controle, que passava a mostrar
   e gravar o botão da ação errada.
+- **Jogos sem nota da IGDB e sem tempos do HowLongToBeat no painel** — o
+  Aladdin era o caso mais visível. A tabela embutida agora usa a IGDB do
+  SNES (plataforma 19) além da do Super Famicom, e casa os títulos que a
+  caixa escreve diferente do No-Intro: o possessivo do licenciador
+  ("Disney's Aladdin"), o "&" ("Battletoads & Double Dragon"), o subtítulo
+  americano ("Choplifter III - Rescue-Survive") e os jogos renomeados no
+  ocidente (Final Fantasy II/III = IV/VI, Bust-A-Move = Puzzle Bobble).
+  São +627 jogos com nota e +124 com tempos.
+- **Jogos com "&" no nome sem cheats** (Adventures of Batman & Robin, Joe
+  & Mac, Pocky & Rocky, Lufia & the Fortress of Doom, Ren & Stimpy… 24 no
+  total): o libretro-database grava o "&" como "_" no nome do arquivo de
+  cheats, e a busca agora faz a mesma troca.
 
 ### Removido
 - **Luz do quarto pela hora do dia** (`room_light`): o reflexo da janela,
