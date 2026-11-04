@@ -20,12 +20,13 @@ use anyhow::Result;
 use sixteen_domain::{Catalog, CatalogEntry, Order};
 use sixteen_platform::tr;
 use sixteen_platform::{
-    Cabinet, MenuInput, MenuMode, MenuNav, PanelSection, Platform, Screen, ShelfButton,
-    ShelfPanelInfo,
+    Cabinet, MenuInput, MenuMode, MenuNav, Osk, OskOutcome, PadFocus, PanelSection, Platform,
+    Screen, ShelfButton, ShelfPanelInfo, TextField,
 };
 
 use crate::config::ShelfTheme;
 use crate::idle;
+use crate::night_pick::{self, Candidate, Reason};
 
 // Landscape, not portrait: the cover art dropped into `assets/cover/` is
 // horizontal (box-front scans, not spine-style portrait covers), so the tile
@@ -91,6 +92,8 @@ const HISTORY_BTN_W: u32 = 110;
 /// do lado do histórico") — same header row, to the "histórico" button's
 /// left; re-scans roms/ without leaving the shelf.
 const REFRESH_BTN_W: u32 = 110;
+/// O botão "sugestão" do cabeçalho (opcional).
+const NIGHT_BTN_W: u32 = 120;
 
 const BG: (u8, u8, u8) = (18, 18, 20);
 const HILITE: (u8, u8, u8, u8) = (240, 200, 80, 255);
@@ -111,6 +114,23 @@ const HILITE_TEXT: (u8, u8, u8) = (24, 20, 12);
 /// uma "borda cinza" contra a madeira. A estante agora assenta opaca; a
 /// neve segue viva na tela idle e na entrada (fade-in), que rampa até 1.0.
 const SHELF_ALPHA: f32 = 1.0;
+
+/// `--debug-pad <header:filter|panel:N|osk:texto>` — ver o laço da estante.
+static DEBUG_PAD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Liga o gancho de teste do foco do controle (screenshots headless).
+pub fn set_debug_pad(spec: &str) {
+    let _ = DEBUG_PAD.set(spec.to_string());
+}
+
+/// `--debug-night-shot`: abre o cartão da sugestão da noite no 2º quadro,
+/// com semente fixa (screenshot headless).
+static DEBUG_NIGHT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+
+/// Liga o gancho de teste do cartão da sugestão da noite.
+pub fn set_debug_night() {
+    let _ = DEBUG_NIGHT.set(());
+}
 
 /// What the player did on the shelf.
 pub enum Pick {
@@ -135,6 +155,9 @@ pub enum Pick {
     /// Clicked "Histórico" — open the all-time most-played list (plan
     /// revision), then come back to the shelf.
     History,
+    /// "Álbum" (button or Y on the pad) — open the print album, then come
+    /// back to the shelf.
+    Album,
     /// Clicked "Atualizar" (plan revision: "adicionar opção de atualizar a
     /// estante para buscar jogos novos sem precisar abrir e fechar o app")
     /// — the caller re-scans `roms/` and reopens the shelf with the fresh
@@ -166,6 +189,9 @@ pub struct ShelfOpts {
     /// O móvel em volta das capas — madeira ou o expositor de metal da
     /// locadora (`shelf_theme` no `sixteen.cfg`).
     pub theme: ShelfTheme,
+    /// "Sugestão da noite" ligada (`night_pick` no `sixteen.cfg`): o botão
+    /// no cabeçalho da estante.
+    pub night_pick: bool,
 }
 
 impl Default for ShelfOpts {
@@ -178,6 +204,7 @@ impl Default for ShelfOpts {
             preset_filter: None,
             ra: None,
             theme: ShelfTheme::Wood,
+            night_pick: false,
         }
     }
 }
@@ -1865,6 +1892,17 @@ fn refresh_button_rect(scr_w: u32) -> (i32, i32, u32, u32) {
     (hx - 8 - REFRESH_BTN_W as i32, hy, REFRESH_BTN_W, fh)
 }
 
+fn album_button_rect(scr_w: u32) -> (i32, i32, u32, u32) {
+    let (rx, ry, _, fh) = refresh_button_rect(scr_w);
+    (rx - 8 - HISTORY_BTN_W as i32, ry, HISTORY_BTN_W, fh)
+}
+
+/// O botão "sugestão" (opcional): à esquerda do álbum.
+fn night_button_rect(scr_w: u32) -> (i32, i32, u32, u32) {
+    let (ax, ay, _, fh) = album_button_rect(scr_w);
+    (ax - 8 - NIGHT_BTN_W as i32, ay, NIGHT_BTN_W, fh)
+}
+
 /// Geometry of the shelf's item grid — sempre a grade de capas: jogo sem
 /// arte vira o cartucho genérico com etiqueta escrita à mão, não uma lista.
 struct GridLayout {
@@ -2099,6 +2137,83 @@ struct ShelfNav {
     /// A aba ativa do painel — persiste entre jogos de propósito.
     panel_section: PanelSection,
     last_focus: Option<(u8, usize)>,
+    /// Onde o foco do controle está: a grade/favoritos, a fileira de botões
+    /// do topo (álbum, atualizar, histórico, filtro) ou o painel lateral.
+    zone: Zone,
+    /// O botão "sugestão" está no cabeçalho (opção ligada).
+    night: bool,
+}
+
+impl ShelfNav {
+    /// Os botões do cabeçalho agora, da esquerda para a direita.
+    fn header_items(&self) -> &'static [HeaderItem] {
+        if self.night {
+            &HEADER_ITEMS_NIGHT
+        } else {
+            &HEADER_ITEMS
+        }
+    }
+}
+
+/// A zona do foco do controle na estante (jogar só com o controle: d-pad
+/// passeia entre elas — Cima no topo da grade vai para o cabeçalho, Direita
+/// no fim da fileira vai para o painel).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Zone {
+    Grid,
+    Header(HeaderItem),
+    /// Índice na lista de botões do painel (ordem de desenho).
+    Panel(usize),
+}
+
+/// Os botões do cabeçalho, da esquerda para a direita na tela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeaderItem {
+    Night,
+    Album,
+    Refresh,
+    History,
+    Filter,
+}
+
+const HEADER_ITEMS: [HeaderItem; 4] = [
+    HeaderItem::Album,
+    HeaderItem::Refresh,
+    HeaderItem::History,
+    HeaderItem::Filter,
+];
+
+/// A mesma fileira com o botão "sugestão" (opcional) à esquerda de tudo.
+const HEADER_ITEMS_NIGHT: [HeaderItem; 5] = [
+    HeaderItem::Night,
+    HeaderItem::Album,
+    HeaderItem::Refresh,
+    HeaderItem::History,
+    HeaderItem::Filter,
+];
+
+/// O que um botão do controle pede ao laço da estante, já resolvido contra
+/// a zona do foco (lógica pura — `ShelfNav::pad_step`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShelfAct {
+    None,
+    /// A na grade/favoritos: jogar o jogo focado.
+    Play,
+    Back,
+    Night,
+    Album,
+    History,
+    Refresh,
+    Settings,
+    /// A no filtro: abre o teclado na tela.
+    OpenFilter,
+    /// X: favoritar/desfavoritar o jogo focado.
+    ToggleFavorite,
+    /// A num botão do painel (índice na lista).
+    PanelButton(usize),
+    /// LT/RT: aba anterior/próxima do painel.
+    TabPrev,
+    TabNext,
 }
 
 impl Default for ShelfNav {
@@ -2113,6 +2228,8 @@ impl Default for ShelfNav {
             // "na estante sempre abrir informações como padrão"
             panel_section: PanelSection::Informacoes,
             last_focus: None,
+            zone: Zone::Grid,
+            night: false,
         }
     }
 }
@@ -2213,6 +2330,157 @@ impl ShelfNav {
     }
 }
 
+/// Os botões do painel que o controle percorre: tudo o que o painel
+/// desenhou no último quadro, menos o "Atualizar" (que vive no cabeçalho).
+fn pad_panel_list(drawn: Vec<ShelfButton>) -> Vec<ShelfButton> {
+    drawn
+        .into_iter()
+        .filter(|b| !matches!(b, ShelfButton::Refresh))
+        .collect()
+}
+
+impl ShelfNav {
+    /// LT/RT: a aba do painel anterior/próxima — só entre as abas que o
+    /// painel está mostrando (os `PanelJump` desenhados).
+    fn cycle_section(&mut self, forward: bool, drawn: &[ShelfButton]) {
+        let tabs: Vec<PanelSection> = drawn
+            .iter()
+            .filter_map(|b| match b {
+                ShelfButton::PanelJump(s) => Some(*s),
+                _ => None,
+            })
+            .collect();
+        if tabs.is_empty() {
+            return;
+        }
+        let at = tabs.iter().position(|s| *s == self.panel_section);
+        let next = match (at, forward) {
+            (Some(i), true) => (i + 1) % tabs.len(),
+            (Some(i), false) => (i + tabs.len() - 1) % tabs.len(),
+            (None, _) => 0,
+        };
+        self.panel_section = tabs[next];
+        self.panel_scroll = 0;
+    }
+
+    /// Um botão do controle: move o foco entre as zonas ou devolve a ação
+    /// pedida. O mapa (documentado no manual):
+    /// d-pad move · A abre/joga · B volta · X favorito · Y álbum · Select
+    /// histórico · Start configurações · LB/RB página · LT/RT aba do painel.
+    /// `panel_len` é quantos botões o painel tem agora.
+    fn pad_step(
+        &mut self,
+        nav: MenuNav,
+        lens: ShelfLens,
+        grid: (usize, usize),
+        show_fav: bool,
+        panel_len: usize,
+    ) -> ShelfAct {
+        // Atalhos globais: valem em qualquer zona.
+        match nav {
+            MenuNav::Extra => return ShelfAct::Album,
+            MenuNav::Select => return ShelfAct::History,
+            MenuNav::Start => return ShelfAct::Settings,
+            MenuNav::Alt => return ShelfAct::ToggleFavorite,
+            MenuNav::TabPrev => return ShelfAct::TabPrev,
+            MenuNav::TabNext => return ShelfAct::TabNext,
+            _ => {}
+        }
+        let cols = grid.0.max(1);
+        match self.zone {
+            Zone::Grid => match nav {
+                MenuNav::Back => ShelfAct::Back,
+                MenuNav::Confirm => ShelfAct::Play,
+                MenuNav::Up => {
+                    let at_top = if self.in_fav {
+                        true
+                    } else {
+                        !show_fav && self.sel < cols
+                    };
+                    if at_top {
+                        // Sobe para o cabeçalho, na coluna proporcional.
+                        let col = if self.in_fav {
+                            self.fav_idx
+                        } else {
+                            self.sel % cols
+                        };
+                        let span = if self.in_fav {
+                            lens.favorites.max(1)
+                        } else {
+                            cols
+                        };
+                        let items = self.header_items();
+                        let i = (col * items.len() / span).min(items.len() - 1);
+                        self.zone = Zone::Header(items[i]);
+                    } else {
+                        self.step(nav, lens, grid, show_fav);
+                    }
+                    ShelfAct::None
+                }
+                MenuNav::Right => {
+                    let at_edge = if self.in_fav {
+                        self.fav_idx + 1 >= lens.favorites
+                    } else {
+                        self.sel % cols == cols - 1 || self.sel + 1 >= lens.grid
+                    };
+                    if at_edge && panel_len > 0 {
+                        self.zone = Zone::Panel(0);
+                    } else {
+                        self.step(nav, lens, grid, show_fav);
+                    }
+                    ShelfAct::None
+                }
+                other => {
+                    self.step(other, lens, grid, show_fav);
+                    ShelfAct::None
+                }
+            },
+            Zone::Header(item) => {
+                let items = self.header_items();
+                let at = items.iter().position(|h| *h == item).unwrap_or(0);
+                match nav {
+                    MenuNav::Left => {
+                        self.zone = Zone::Header(items[at.saturating_sub(1)]);
+                        ShelfAct::None
+                    }
+                    MenuNav::Right => {
+                        self.zone = Zone::Header(items[(at + 1).min(items.len() - 1)]);
+                        ShelfAct::None
+                    }
+                    MenuNav::Down | MenuNav::Back => {
+                        self.zone = Zone::Grid;
+                        ShelfAct::None
+                    }
+                    MenuNav::Confirm => match item {
+                        HeaderItem::Night => ShelfAct::Night,
+                        HeaderItem::Album => ShelfAct::Album,
+                        HeaderItem::Refresh => ShelfAct::Refresh,
+                        HeaderItem::History => ShelfAct::History,
+                        HeaderItem::Filter => ShelfAct::OpenFilter,
+                    },
+                    _ => ShelfAct::None,
+                }
+            }
+            Zone::Panel(i) => match nav {
+                MenuNav::Up => {
+                    self.zone = Zone::Panel(i.saturating_sub(1));
+                    ShelfAct::None
+                }
+                MenuNav::Down => {
+                    self.zone = Zone::Panel((i + 1).min(panel_len.saturating_sub(1)));
+                    ShelfAct::None
+                }
+                MenuNav::Left | MenuNav::Back => {
+                    self.zone = Zone::Grid;
+                    ShelfAct::None
+                }
+                MenuNav::Confirm => ShelfAct::PanelButton(i),
+                _ => ShelfAct::None,
+            },
+        }
+    }
+}
+
 /// Quantos jogos há em cada zona da estante.
 #[derive(Clone, Copy)]
 struct ShelfLens {
@@ -2226,7 +2494,10 @@ struct ShelfLens {
 /// era o maior custo por frame da estante.
 struct ShelfFilter {
     query: String,
-    draft: String,
+    draft: TextField,
+    /// O teclado na tela do filtro (aparece quando a última entrada foi do
+    /// controle — ver `Osk::begin`).
+    osk: Osk,
     editing: bool,
     applied: Option<String>,
 }
@@ -2235,10 +2506,24 @@ impl ShelfFilter {
     fn new(query: String) -> Self {
         Self {
             query,
-            draft: String::new(),
+            draft: TextField::new("", FILTER_LIMIT, false),
+            osk: Osk::new(),
             editing: false,
             applied: None,
         }
+    }
+
+    /// Começa a digitar o filtro: o rascunho parte do aplicado; `paste` já
+    /// entra colado (botão direito); o teclado na tela abre se a última
+    /// entrada foi do controle.
+    fn begin(&mut self, plat: &Platform, cab: &Cabinet, paste: Option<String>) {
+        self.editing = true;
+        self.draft = TextField::new(&self.query, FILTER_LIMIT, false);
+        if let Some(p) = paste {
+            self.draft.insert_str(&p);
+        }
+        self.osk.begin(plat.last_input_was_pad());
+        plat.start_text_input(cab);
     }
 }
 
@@ -2554,8 +2839,8 @@ impl ShelfManual {
         for nav in m.nav.iter() {
             if let Some(m) = self.reader.as_mut() {
                 match nav {
-                    MenuNav::Left => m.page = m.page.saturating_sub(1).max(1),
-                    MenuNav::Right if m.page < m.pages => m.page += 1,
+                    MenuNav::Left | MenuNav::PageUp => m.page = m.page.saturating_sub(1).max(1),
+                    MenuNav::Right | MenuNav::PageDown if m.page < m.pages => m.page += 1,
                     MenuNav::Back => {
                         self.reader = None;
                         self.tx = None;
@@ -2868,7 +3153,21 @@ pub fn run(
     // "colocar zoom igual ao backcover no cartucho" — agora os dois).
     let mut zoom_close: Option<u64> = None;
     let mut zoom_rect: (i32, i32, u32, u32) = (0, 0, 1, 1);
-    let mut cur = ShelfNav::default();
+    let mut cur = ShelfNav {
+        night: opts.night_pick,
+        ..ShelfNav::default()
+    };
+    // Sugestão da noite: o cartão aberto (se houver) e o sorteio com semente
+    // do relógio (fixa no screenshot de teste).
+    let mut night: Option<NightCard> = None;
+    let mut night_rng = night_pick::Rng::new(if DEBUG_NIGHT.get().is_some() {
+        7
+    } else {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(1)
+    });
     let mut filt = ShelfFilter::new(opts.preset_filter.clone().unwrap_or_default());
     let frame = Duration::from_millis(16);
     let mut next = Instant::now() + frame;
@@ -2894,6 +3193,34 @@ pub fn run(
         frame_no += 1;
         if opts.max_frames.is_some_and(|n| frame_no > n) {
             return Ok(Pick::Quit);
+        }
+        // Testing hook (`--debug-pad`): põe o foco do controle num lugar
+        // para o screenshot headless — aplicado no 2º quadro, quando o
+        // painel já desenhou e a lista de botões existe.
+        if frame_no == 2 {
+            if opts.night_pick && DEBUG_NIGHT.get().is_some() {
+                night = Some(night_roll(&all, None, &mut night_rng));
+            }
+            if let Some(spec) = DEBUG_PAD.get() {
+                match spec.split_once(':').unwrap_or((spec, "")) {
+                    ("header", w) => {
+                        cur.zone = Zone::Header(match w {
+                            "night" => HeaderItem::Night,
+                            "album" => HeaderItem::Album,
+                            "refresh" => HeaderItem::Refresh,
+                            "history" => HeaderItem::History,
+                            _ => HeaderItem::Filter,
+                        })
+                    }
+                    ("panel", i) => cur.zone = Zone::Panel(i.parse().unwrap_or(0)),
+                    ("osk", text) => {
+                        filt.editing = true;
+                        filt.draft = TextField::new(text, FILTER_LIMIT, false);
+                        filt.osk.begin(true);
+                    }
+                    _ => {}
+                }
+            }
         }
 
         // The general listing is always alphabetical (plan revision) — "o
@@ -2955,6 +3282,8 @@ pub fn run(
         let filter_rect = filter_box_rect(scr_w);
         let history_rect = history_button_rect(scr_w);
         let refresh_rect = refresh_button_rect(scr_w);
+        let album_rect = album_button_rect(scr_w);
+        let night_rect = night_button_rect(scr_w);
 
         // Input.
         // O cursor em coordenadas de janela — o hover do botão de play lê
@@ -2962,39 +3291,22 @@ pub fn run(
         let mut pointer = None;
         if filt.editing {
             let te = plat.poll_text_entry();
-            if te.quit {
-                return Ok(Pick::Quit);
-            }
-            if te.backspace {
-                filt.draft.pop();
-            }
-            for c in te.typed.chars() {
-                if filt.draft.chars().count() < FILTER_LIMIT {
-                    filt.draft.push(c);
+            match filt.osk.update(&te, &mut filt.draft, plat) {
+                OskOutcome::Quit => return Ok(Pick::Quit),
+                OskOutcome::Commit => {
+                    filt.query = filt.draft.text().trim().to_string();
+                    filt.editing = false;
+                    plat.stop_text_input(cab);
+                    cur.sel = 0;
+                    cur.top_row = 0;
+                    cur.in_fav = false;
+                    cur.zone = Zone::Grid;
                 }
-            }
-            // ⌘V/⌘C (Ctrl no resto) — mesmo esquema de clipboard dos outros
-            // campos de texto.
-            if let Some(paste) = &te.paste {
-                for c in paste.chars() {
-                    if filt.draft.chars().count() < FILTER_LIMIT {
-                        filt.draft.push(c);
-                    }
+                OskOutcome::Cancel => {
+                    filt.editing = false;
+                    plat.stop_text_input(cab);
                 }
-            }
-            if te.copy {
-                plat.set_clipboard_text(&filt.draft);
-            }
-            if te.commit {
-                filt.query = filt.draft.trim().to_string();
-                filt.editing = false;
-                plat.stop_text_input(cab);
-                cur.sel = 0;
-                cur.top_row = 0;
-                cur.in_fav = false;
-            } else if te.cancel {
-                filt.editing = false;
-                plat.stop_text_input(cab);
+                OskOutcome::Editing => {}
             }
         } else {
             let m = plat.poll_menu(MenuMode::Nav);
@@ -3020,6 +3332,52 @@ pub fn run(
                         zoom_close = None;
                     }
                 }
+            } else if let Some(card) = night.as_ref() {
+                // O cartão da sugestão da noite: A joga, X (ou Y) sorteia
+                // outra, B/Start/Select fecham — e o mouse faz o mesmo
+                // pelos botões do cartão (clicar fora fecha).
+                let rects = night_card_rects(scr_w, scr_h);
+                let playable = card.pick.is_some();
+                let mut act = NightAct::None;
+                for nav in m.nav.iter() {
+                    act = match nav {
+                        MenuNav::Confirm if playable => NightAct::Play,
+                        MenuNav::Confirm | MenuNav::Back | MenuNav::Start | MenuNav::Select => {
+                            NightAct::Close
+                        }
+                        MenuNav::Alt | MenuNav::Extra => NightAct::Again,
+                        _ => continue,
+                    };
+                    break;
+                }
+                if let Some((x, y)) = m.click {
+                    let (ox, oy) = cab.window_to_output(x, y);
+                    if cab.hit_close_button(ox, oy) {
+                        return Ok(Pick::Quit);
+                    }
+                    if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
+                        if playable && in_rect(lx, ly, rects.play) {
+                            act = NightAct::Play;
+                        } else if in_rect(lx, ly, rects.again) {
+                            act = NightAct::Again;
+                        } else if in_rect(lx, ly, rects.close) || !in_rect(lx, ly, rects.card) {
+                            act = NightAct::Close;
+                        }
+                    }
+                }
+                match act {
+                    NightAct::None => {}
+                    NightAct::Close => night = None,
+                    NightAct::Again => {
+                        let avoid = card.pick.as_ref().map(|(e, _)| e.rom.sha1.clone());
+                        night = Some(night_roll(&all, avoid.as_deref(), &mut night_rng));
+                    }
+                    NightAct::Play => {
+                        if let Some((e, _)) = &card.pick {
+                            return Ok(pick_play(catalog, &art.logo_dir, &art.cartridge_dir, e));
+                        }
+                    }
+                }
             } else if man.reader.is_some() {
                 man.handle_input(cab, &m);
             } else if ach.open {
@@ -3029,10 +3387,25 @@ pub fn run(
                     AchInput::Stay => {}
                 }
             } else {
+                // Um botão do painel pedido pelo controle (A no foco do
+                // painel, X = favorito) — roda no mesmo caminho do clique.
+                let mut pad_btn: Option<ShelfButton> = None;
+                let panel_list = pad_panel_list(cab.shelf_button_list());
                 for nav in m.nav {
-                    match nav {
-                        MenuNav::Back => return Ok(Pick::Back),
-                        MenuNav::Confirm => {
+                    let act = cur.pad_step(
+                        nav,
+                        ShelfLens {
+                            grid: view.len(),
+                            favorites: favorites.len(),
+                        },
+                        (grid.cols, grid.vis_rows),
+                        show_fav,
+                        panel_list.len(),
+                    );
+                    match act {
+                        ShelfAct::None => {}
+                        ShelfAct::Back => return Ok(Pick::Back),
+                        ShelfAct::Play => {
                             let picked = cur.focused(&view, &favorites);
                             if let Some(e) = picked {
                                 return Ok(pick_play(
@@ -3043,16 +3416,27 @@ pub fn run(
                                 ));
                             }
                         }
-                        other => cur.step(
-                            other,
-                            ShelfLens {
-                                grid: view.len(),
-                                favorites: favorites.len(),
-                            },
-                            (grid.cols, grid.vis_rows),
-                            show_fav,
-                        ),
+                        ShelfAct::Night => {
+                            night = Some(night_roll(&all, None, &mut night_rng));
+                        }
+                        ShelfAct::Album => return Ok(Pick::Album),
+                        ShelfAct::History => return Ok(Pick::History),
+                        ShelfAct::Refresh => return Ok(Pick::Refresh),
+                        ShelfAct::Settings => return Ok(Pick::Settings),
+                        ShelfAct::OpenFilter => filt.begin(plat, cab, None),
+                        ShelfAct::ToggleFavorite => pad_btn = Some(ShelfButton::ToggleFavorite),
+                        ShelfAct::PanelButton(i) => pad_btn = panel_list.get(i).copied(),
+                        ShelfAct::TabPrev => cur.cycle_section(false, &panel_list),
+                        ShelfAct::TabNext => cur.cycle_section(true, &panel_list),
                     }
+                }
+                // Clamp do foco do painel (a lista muda com o jogo focado).
+                if let Zone::Panel(i) = cur.zone {
+                    cur.zone = if panel_list.is_empty() {
+                        Zone::Grid
+                    } else {
+                        Zone::Panel(i.min(panel_list.len() - 1))
+                    };
                 }
 
                 // Botão direito na caixa do filtro: abre já colando — o
@@ -3061,16 +3445,7 @@ pub fn run(
                     let (ox, oy) = cab.window_to_output(x, y);
                     if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
                         if in_rect(lx, ly, filter_rect) {
-                            filt.editing = true;
-                            filt.draft = filt.query.clone();
-                            if let Some(paste) = plat.paste_from_clipboard() {
-                                for c in paste.chars() {
-                                    if filt.draft.chars().count() < FILTER_LIMIT {
-                                        filt.draft.push(c);
-                                    }
-                                }
-                            }
-                            plat.start_text_input(cab);
+                            filt.begin(plat, cab, plat.paste_from_clipboard());
                         }
                     }
                 }
@@ -3089,154 +3464,18 @@ pub fn run(
                         cab.minimize();
                     }
                     if let Some(hit) = cab.hit_shelf_button(ox, oy) {
-                        match hit {
-                            ShelfButton::Back => return Ok(Pick::Back),
-                            ShelfButton::Settings => return Ok(Pick::Settings),
-                            ShelfButton::ShelfAchievements => {
-                                if let Some(e) = cur.focused(&view, &favorites) {
-                                    ach.open_for(e, &mut ra, opts.ra.as_ref());
-                                }
-                            }
-                            ShelfButton::Refresh => {}
-                            // "Atualizar" moved to the header row (plan
-                            // revision: "colocar botão de atualizar estante
-                            // do lado do histórico").
-                            // Salto de seção do painel (plan revision: no
-                            // lugar das setas de rolar, capa traseira /
-                            // cartucho / informações).
-                            ShelfButton::PanelJump(section) => {
-                                // Abas (plan revision): clicar troca a seção
-                                // visível; clicar de novo em "informações"
-                                // avança campo a campo (a única aba que
-                                // transborda).
-                                if cur.panel_section != section {
-                                    cur.panel_section = section;
-                                    cur.panel_scroll = 0;
-                                } else if section == PanelSection::Informacoes {
-                                    cur.panel_scroll += 1;
-                                }
-                            }
-                            ShelfButton::ToggleFavorite => {
-                                // Flip the focused game's marker in the
-                                // sidecar, then update this visit's own
-                                // copy of the catalog and rebuild the
-                                // strips — no re-scan involved.
-                                let picked = cur.focused(&view, &favorites);
-                                if let Some(e) = picked {
-                                    let sha1 = e.rom.sha1.clone();
-                                    let fav = !e.rom.favorite;
-                                    if catalog.set_favorite(&sha1, fav).is_ok() {
-                                        if let Some(row) =
-                                            all.iter_mut().find(|e| e.rom.sha1 == sha1)
-                                        {
-                                            row.rom.favorite = fav;
-                                        }
-                                        filt.applied = None;
-                                    }
-                                }
-                            }
-                            ShelfButton::Backcover => {
-                                // Open the enlarged view: re-decode the file at
-                                // full resolution for a crisp enlargement (the
-                                // panel texture is thumbnailed to 512).
-                                let picked = cur.focused(&view, &favorites);
-                                if let Some(e) = picked {
-                                    let bid = backcover_id(&e.rom.sha1);
-                                    if cab.has_image(bid) {
-                                        // Abre já com a miniatura; a versão
-                                        // de 2048 px vem do worker e troca a
-                                        // textura quando fica pronta.
-                                        zoom_close = Some(bid);
-                                        art.request_zoom(bid, ArtKind::Backcover, e);
-                                    }
-                                }
-                            }
-                            ShelfButton::Manual => {
-                                // Abrir o leitor na TV (plan revision):
-                                // worker decodifica páginas sob demanda.
-                                let picked = cur.focused(&view, &favorites);
-                                if let Some(e) = picked {
-                                    if let Some(path) =
-                                        man.paths.get(&e.rom.sha1).cloned().flatten()
-                                    {
-                                        let thread_path = path.clone();
-                                        let open_sha1 = e.rom.sha1.clone();
-                                        let (ev_tx, ev_rx) = mpsc::channel();
-                                        let (req_tx, req_rx) = std::sync::mpsc::channel();
-                                        std::thread::spawn(move || {
-                                            let path = thread_path;
-                                            let Ok(pages) = crate::manual::page_count(&path) else {
-                                                return;
-                                            };
-                                            let _ = ev_tx.send(crate::manual::ManualEv::Ready {
-                                                sha1: open_sha1.clone(),
-                                                pages,
-                                            });
-                                            for page in req_rx {
-                                                match crate::manual::render_page(&path, page, 2048)
-                                                {
-                                                    Ok(Some(img)) => {
-                                                        let _ = ev_tx.send(
-                                                            crate::manual::ManualEv::Page {
-                                                                sha1: open_sha1.clone(),
-                                                                page,
-                                                                w: img.w,
-                                                                h: img.h,
-                                                                rgba: img.rgba,
-                                                            },
-                                                        );
-                                                    }
-                                                    _ => {
-                                                        let _ = ev_tx.send(
-                                                            crate::manual::ManualEv::Page {
-                                                                sha1: open_sha1.clone(),
-                                                                page,
-                                                                w: 0,
-                                                                h: 0,
-                                                                rgba: Vec::new(),
-                                                            },
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                        });
-                                        man.reader = Some(ManualState {
-                                            sha1: e.rom.sha1.clone(),
-                                            pages: man.pages.get(&e.rom.sha1).copied().unwrap_or(0),
-                                            page: 1,
-                                            requested: HashSet::new(),
-                                        });
-                                        man.channels.push(ev_rx);
-                                        man.tx = Some(req_tx);
-                                    }
-                                }
-                            }
-                            ShelfButton::Cartridge => {
-                                // Zoom do cartucho, igual ao do back cover
-                                // (plan revision): re-decodifica a arte em
-                                // resolução cheia e abre ampliado no tubo.
-                                let picked = cur.focused(&view, &favorites);
-                                if let Some(e) = picked {
-                                    let cid = cartridge_id(&e.rom.sha1);
-                                    if cab.has_image(cid) {
-                                        // Abre já com a miniatura; a versão
-                                        // de 2048 px vem do worker e troca a
-                                        // textura quando fica pronta.
-                                        zoom_close = Some(cid);
-                                        art.request_zoom(cid, ArtKind::Cartridge, e);
-                                    }
-                                }
-                            }
-                        }
+                        pad_btn = Some(hit);
                     } else if let Some((lx, ly)) = cab.hit_screen_point(ox, oy) {
                         if in_rect(lx, ly, filter_rect) {
-                            filt.editing = true;
-                            filt.draft = filt.query.clone();
-                            plat.start_text_input(cab);
+                            filt.begin(plat, cab, None);
                         } else if in_rect(lx, ly, history_rect) {
                             return Ok(Pick::History);
                         } else if in_rect(lx, ly, refresh_rect) {
                             return Ok(Pick::Refresh);
+                        } else if opts.night_pick && in_rect(lx, ly, night_rect) {
+                            night = Some(night_roll(&all, None, &mut night_rng));
+                        } else if in_rect(lx, ly, album_rect) {
+                            return Ok(Pick::Album);
                         } else if in_rect(lx, ly, strip_arrow_rects(scr_w, fav_layout.y0).0)
                             && cur.fav_scroll > 0
                         {
@@ -3290,6 +3529,142 @@ pub fn run(
                         }
                     }
                 }
+
+                // Os botões do painel — clicados ou acionados pelo controle.
+                if let Some(hit) = pad_btn.take() {
+                    match hit {
+                        ShelfButton::Back => return Ok(Pick::Back),
+                        ShelfButton::Settings => return Ok(Pick::Settings),
+                        ShelfButton::ShelfAchievements => {
+                            if let Some(e) = cur.focused(&view, &favorites) {
+                                ach.open_for(e, &mut ra, opts.ra.as_ref());
+                            }
+                        }
+                        ShelfButton::Refresh => {}
+                        // "Atualizar" moved to the header row (plan
+                        // revision: "colocar botão de atualizar estante
+                        // do lado do histórico").
+                        // Salto de seção do painel (plan revision: no
+                        // lugar das setas de rolar, capa traseira /
+                        // cartucho / informações).
+                        ShelfButton::PanelJump(section) => {
+                            // Abas (plan revision): clicar troca a seção
+                            // visível; clicar de novo em "informações"
+                            // avança campo a campo (a única aba que
+                            // transborda).
+                            if cur.panel_section != section {
+                                cur.panel_section = section;
+                                cur.panel_scroll = 0;
+                            } else if section == PanelSection::Informacoes {
+                                cur.panel_scroll += 1;
+                            }
+                        }
+                        ShelfButton::ToggleFavorite => {
+                            // Flip the focused game's marker in the
+                            // sidecar, then update this visit's own
+                            // copy of the catalog and rebuild the
+                            // strips — no re-scan involved.
+                            let picked = cur.focused(&view, &favorites);
+                            if let Some(e) = picked {
+                                let sha1 = e.rom.sha1.clone();
+                                let fav = !e.rom.favorite;
+                                if catalog.set_favorite(&sha1, fav).is_ok() {
+                                    if let Some(row) = all.iter_mut().find(|e| e.rom.sha1 == sha1) {
+                                        row.rom.favorite = fav;
+                                    }
+                                    filt.applied = None;
+                                }
+                            }
+                        }
+                        ShelfButton::Backcover => {
+                            // Open the enlarged view: re-decode the file at
+                            // full resolution for a crisp enlargement (the
+                            // panel texture is thumbnailed to 512).
+                            let picked = cur.focused(&view, &favorites);
+                            if let Some(e) = picked {
+                                let bid = backcover_id(&e.rom.sha1);
+                                if cab.has_image(bid) {
+                                    // Abre já com a miniatura; a versão
+                                    // de 2048 px vem do worker e troca a
+                                    // textura quando fica pronta.
+                                    zoom_close = Some(bid);
+                                    art.request_zoom(bid, ArtKind::Backcover, e);
+                                }
+                            }
+                        }
+                        ShelfButton::Manual => {
+                            // Abrir o leitor na TV (plan revision):
+                            // worker decodifica páginas sob demanda.
+                            let picked = cur.focused(&view, &favorites);
+                            if let Some(e) = picked {
+                                if let Some(path) = man.paths.get(&e.rom.sha1).cloned().flatten() {
+                                    let thread_path = path.clone();
+                                    let open_sha1 = e.rom.sha1.clone();
+                                    let (ev_tx, ev_rx) = mpsc::channel();
+                                    let (req_tx, req_rx) = std::sync::mpsc::channel();
+                                    std::thread::spawn(move || {
+                                        let path = thread_path;
+                                        let Ok(pages) = crate::manual::page_count(&path) else {
+                                            return;
+                                        };
+                                        let _ = ev_tx.send(crate::manual::ManualEv::Ready {
+                                            sha1: open_sha1.clone(),
+                                            pages,
+                                        });
+                                        for page in req_rx {
+                                            match crate::manual::render_page(&path, page, 2048) {
+                                                Ok(Some(img)) => {
+                                                    let _ =
+                                                        ev_tx.send(crate::manual::ManualEv::Page {
+                                                            sha1: open_sha1.clone(),
+                                                            page,
+                                                            w: img.w,
+                                                            h: img.h,
+                                                            rgba: img.rgba,
+                                                        });
+                                                }
+                                                _ => {
+                                                    let _ =
+                                                        ev_tx.send(crate::manual::ManualEv::Page {
+                                                            sha1: open_sha1.clone(),
+                                                            page,
+                                                            w: 0,
+                                                            h: 0,
+                                                            rgba: Vec::new(),
+                                                        });
+                                                }
+                                            }
+                                        }
+                                    });
+                                    man.reader = Some(ManualState {
+                                        sha1: e.rom.sha1.clone(),
+                                        pages: man.pages.get(&e.rom.sha1).copied().unwrap_or(0),
+                                        page: 1,
+                                        requested: HashSet::new(),
+                                    });
+                                    man.channels.push(ev_rx);
+                                    man.tx = Some(req_tx);
+                                }
+                            }
+                        }
+                        ShelfButton::Cartridge => {
+                            // Zoom do cartucho, igual ao do back cover
+                            // (plan revision): re-decodifica a arte em
+                            // resolução cheia e abre ampliado no tubo.
+                            let picked = cur.focused(&view, &favorites);
+                            if let Some(e) = picked {
+                                let cid = cartridge_id(&e.rom.sha1);
+                                if cab.has_image(cid) {
+                                    // Abre já com a miniatura; a versão
+                                    // de 2048 px vem do worker e troca a
+                                    // textura quando fica pronta.
+                                    zoom_close = Some(cid);
+                                    art.request_zoom(cid, ArtKind::Cartridge, e);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -3314,6 +3689,9 @@ pub fn run(
         art.request_covers(cab, grid_tiles, 8);
         let favs_shown = favorites.iter().skip(cur.fav_scroll).take(strip_vis);
         art.request_covers(cab, favs_shown, usize::MAX);
+        if let Some((e, _)) = night.as_ref().and_then(|c| c.pick.as_ref()) {
+            art.request_covers(cab, std::iter::once(e), 1);
+        }
 
         let focused = cur.focused(&view, &favorites);
         // A new game focused starts its panel scrolled to the top again —
@@ -3384,6 +3762,12 @@ pub fn run(
                 furniture_key = Some(key);
             }
         }
+        // O anel do foco do controle no painel lateral.
+        if let Zone::Panel(i) = cur.zone {
+            if let Some(b) = pad_panel_list(cab.shelf_button_list()).get(i) {
+                cab.set_pad_focus(Some(PadFocus::Shelf(*b)));
+            }
+        }
         let render = |d: &mut Screen| {
             if let Some(m) = &man.reader {
                 man.rects = draw_manual_view(d, &m.sha1, m.page, m.pages, page_ready, false);
@@ -3409,9 +3793,13 @@ pub fn run(
                 )
             };
             d.text(MARGIN, MARGIN - 12, 2, DIM, &count_label);
-            draw_filter_box(d, filter_rect, &filt.query, &filt.draft, filt.editing);
+            draw_filter_box(d, filter_rect, &filt.query, filt.draft.text(), filt.editing);
             draw_history_button(d, history_rect);
             draw_refresh_button(d, refresh_rect);
+            if opts.night_pick {
+                draw_fosforo_btn(d, night_rect, tr!("tonight", "sugestão"), true);
+            }
+            draw_fosforo_btn(d, album_rect, tr!("album", "álbum"), true);
 
             if show_fav {
                 d.text(MARGIN, MARGIN + HEADER_H, 1, DIM, fav_title());
@@ -3476,6 +3864,34 @@ pub fn run(
             }
 
             draw_scrollbar(d, &grid, view.len(), cur.top_row, scr_w);
+
+            // Foco do controle no cabeçalho: moldura em volta do botão.
+            if let Zone::Header(h) = cur.zone {
+                let (x, y, w, hh) = match h {
+                    HeaderItem::Night => night_rect,
+                    HeaderItem::Album => album_rect,
+                    HeaderItem::Refresh => refresh_rect,
+                    HeaderItem::History => history_rect,
+                    HeaderItem::Filter => filter_rect,
+                };
+                d.outline(
+                    x - 3,
+                    y - 3,
+                    w + 6,
+                    hh + 6,
+                    2,
+                    (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+                );
+            }
+            if let Some(card) = &night {
+                draw_night_card(d, card, scr_w, scr_h, opts.theme);
+            } else if !filt.editing {
+                draw_legend(d, cur.zone, scr_w, scr_h);
+            }
+            if filt.editing {
+                filt.osk
+                    .draw(d, &filt.draft, tr!("search by title", "buscar por título"));
+            }
         };
 
         if let (Some(path), true) = (&opts.shot, opts.max_frames == Some(frame_no)) {
@@ -3511,6 +3927,170 @@ pub fn run(
 
         crate::runner::pace_frame(&mut next, frame);
     }
+}
+
+/// O cartão da "sugestão da noite": o jogo sorteado e a razão (ou nada,
+/// quando não há jogo com ROM na biblioteca).
+struct NightCard {
+    pick: Option<(CatalogEntry, Reason)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NightAct {
+    None,
+    Play,
+    Again,
+    Close,
+}
+
+/// Sorteia a sugestão entre os jogos com ROM presente; `avoid` é o sha1 da
+/// sugestão anterior (não repete de imediato).
+fn night_roll(all: &[CatalogEntry], avoid: Option<&str>, rng: &mut night_pick::Rng) -> NightCard {
+    let saves = crate::dirs::saves_dir();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let pool: Vec<(&CatalogEntry, Candidate)> = all
+        .iter()
+        .filter(|e| Path::new(&e.rom.path).exists())
+        .map(|e| {
+            let title = crate::runner::rom_title(Path::new(&e.rom.path));
+            (
+                e,
+                Candidate {
+                    playtime_secs: crate::runner::total_playtime_secs(&saves, &title),
+                    last_played_at: e.rom.last_played_at,
+                    play_count: e.rom.play_count,
+                },
+            )
+        })
+        .collect();
+    let cands: Vec<Candidate> = pool.iter().map(|(_, c)| *c).collect();
+    let avoid_idx = avoid.and_then(|sha| pool.iter().position(|(e, _)| e.rom.sha1 == sha));
+    let pick = night_pick::pick(&cands, now, avoid_idx, rng).map(|i| {
+        let (e, c) = &pool[i];
+        ((*e).clone(), night_pick::reason(c, now))
+    });
+    NightCard { pick }
+}
+
+/// Os retângulos do cartão (locais à tela) — o desenho e o clique usam os
+/// mesmos.
+struct NightRects {
+    card: (i32, i32, u32, u32),
+    play: (i32, i32, u32, u32),
+    again: (i32, i32, u32, u32),
+    close: (i32, i32, u32, u32),
+}
+
+fn night_card_rects(scr_w: u32, scr_h: u32) -> NightRects {
+    let w = scr_w.saturating_sub(40).min(620);
+    let h = 300u32;
+    let x = (scr_w as i32 - w as i32) / 2;
+    let y = ((scr_h as i32 - h as i32) / 2).max(8);
+    let (bw, bh) = (130u32, 34u32);
+    let by = y + h as i32 - 54;
+    let bx = x + 220;
+    NightRects {
+        card: (x, y, w, h),
+        play: (bx, by, bw, bh),
+        again: (bx + bw as i32 + 10, by, bw, bh),
+        close: (bx + 2 * (bw as i32 + 10), by, bw - 20, bh),
+    }
+}
+
+fn draw_night_card(d: &mut Screen, card: &NightCard, scr_w: u32, scr_h: u32, theme: ShelfTheme) {
+    let r = night_card_rects(scr_w, scr_h);
+    let (x, y, w, h) = r.card;
+    d.fill(0, 0, scr_w, scr_h, (0, 0, 0, 175));
+    d.fill(x, y, w, h, (20, 16, 28, 250));
+    d.outline(x, y, w, h, 2, (FOSFORO.0, FOSFORO.1, FOSFORO.2, 255));
+    d.text(
+        x + 20,
+        y + 12,
+        1,
+        FOSFORO,
+        tr!("tonight's pick", "sugestão da noite"),
+    );
+    let btn = |d: &mut Screen, rect: (i32, i32, u32, u32), label: &str| {
+        d.outline(
+            rect.0,
+            rect.1,
+            rect.2,
+            rect.3,
+            1,
+            (FOSFORO.0, FOSFORO.1, FOSFORO.2, 200),
+        );
+        draw_fosforo_btn(d, rect, label, true);
+    };
+    let Some((e, why)) = &card.pick else {
+        let msg = tr!(
+            "no game with a ROM on the shelf yet",
+            "nenhum jogo com ROM na estante ainda"
+        );
+        let tw = msg.chars().count() as i32 * 9;
+        d.text(x + (w as i32 - tw) / 2, y + 120, 1, TEXT, msg);
+        btn(d, r.close, tr!("B close", "B fechar"));
+        return;
+    };
+    draw_cover(
+        d,
+        cover_id(&e.rom.sha1),
+        &e.title(),
+        entry_year(e),
+        (x + 24, y + 48, 170, 200),
+        CoverLook {
+            on_shelf: false,
+            theme,
+            selected: false,
+            hovered: false,
+            favorite: e.rom.favorite,
+        },
+    );
+    let tx = x + 220;
+    let cols = ((w as i32 - 240) / 9).max(8) as usize;
+    let mut ty = y + 52;
+    for line in wrap_lines(&e.title(), cols, 3) {
+        d.text(tx, ty, 1, TEXT, &line);
+        ty += 24;
+    }
+    if let Some(year) = entry_year(e) {
+        d.text(tx, ty, 1, DIM, year);
+        ty += 24;
+    }
+    ty += 8;
+    for line in wrap_lines(&night_pick::reason_text(*why), cols, 2) {
+        d.text(tx, ty, 1, FOSFORO, &line);
+        ty += 24;
+    }
+    btn(d, r.play, tr!("A play", "A jogar"));
+    btn(d, r.again, tr!("X another", "X outra"));
+    btn(d, r.close, tr!("B close", "B fechar"));
+}
+
+/// A legenda de botões no pé da estante, no mesmo estilo dos dicas das
+/// configurações (texto `HINT` pequeno): muda com a zona do foco.
+fn draw_legend(d: &mut Screen, zone: Zone, scr_w: u32, scr_h: u32) {
+    let text = match zone {
+        Zone::Grid => tr!(
+            "A play  X favorite  Y album  Select history  Start settings  LB/RB page  B back",
+            "A jogar  X favorito  Y álbum  Select histórico  Start config.  LB/RB página  B voltar"
+        ),
+        Zone::Header(_) => tr!(
+            "Left/Right choose  A open  Down back to the games  Start settings",
+            "Esq./Dir. escolhe  A abre  Baixo volta aos jogos  Start config."
+        ),
+        Zone::Panel(_) => tr!(
+            "Up/Down choose  A open  Left back to the games  LT/RT tab",
+            "Cima/Baixo escolhe  A abre  Esquerda volta aos jogos  LT/RT aba"
+        ),
+    };
+    let w = (text.chars().count() as i32 * 9 + 16).min(scr_w as i32);
+    let x = (scr_w as i32 - w) / 2;
+    let y = scr_h as i32 - 24;
+    d.fill(x, y, w as u32, 22, (14, 14, 18, 215));
+    d.text(x + 8, y + 1, 1, (150, 146, 138), text);
 }
 
 /// A simple, scrollable ranking of every game with any recorded playtime,
@@ -3552,6 +4132,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
                 MenuNav::Home => sel = 0,
                 MenuNav::End => sel = ranked.len().saturating_sub(1),
                 MenuNav::Back => return Ok(Pick::Back),
+                MenuNav::Start => return Ok(Pick::Settings),
                 MenuNav::Confirm => {
                     if let Some((e, _)) = ranked.get(sel) {
                         return Ok(pick_play(catalog, &logo_dir, &cartridge_dir, e));
@@ -4061,5 +4642,195 @@ mod etiqueta_tests {
         );
         // Palavra maior que a linha é cortada, não estoura a etiqueta.
         assert_eq!(wrap_lines("Supercalifragilistic", 6, 2), ["Superc"]);
+    }
+}
+
+#[cfg(test)]
+mod pad_tests {
+    use super::*;
+
+    const LENS: ShelfLens = ShelfLens {
+        grid: 10,
+        favorites: 0,
+    };
+    // 3 colunas, 2 linhas visíveis.
+    const GRID: (usize, usize) = (3, 2);
+
+    fn nav() -> ShelfNav {
+        ShelfNav::default()
+    }
+
+    #[test]
+    fn night_button_is_reachable_by_pad_only_when_enabled() {
+        let mut n = nav();
+        n.night = true;
+        n.zone = Zone::Header(HeaderItem::Album);
+        n.pad_step(MenuNav::Left, LENS, GRID, false, 5);
+        assert_eq!(n.zone, Zone::Header(HeaderItem::Night));
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 5),
+            ShelfAct::Night
+        );
+        // desligada: Esquerda no álbum fica no álbum
+        let mut off = nav();
+        off.zone = Zone::Header(HeaderItem::Album);
+        off.pad_step(MenuNav::Left, LENS, GRID, false, 5);
+        assert_eq!(off.zone, Zone::Header(HeaderItem::Album));
+    }
+
+    #[test]
+    fn up_from_the_top_row_focuses_the_header_and_down_returns() {
+        let mut n = nav();
+        assert_eq!(
+            n.pad_step(MenuNav::Up, LENS, GRID, false, 5),
+            ShelfAct::None
+        );
+        assert!(matches!(n.zone, Zone::Header(_)));
+        n.pad_step(MenuNav::Down, LENS, GRID, false, 5);
+        assert_eq!(n.zone, Zone::Grid);
+    }
+
+    #[test]
+    fn up_in_a_lower_row_just_moves_the_cursor() {
+        let mut n = nav();
+        n.sel = 4;
+        n.pad_step(MenuNav::Up, LENS, GRID, false, 5);
+        assert_eq!((n.zone, n.sel), (Zone::Grid, 1));
+    }
+
+    #[test]
+    fn header_buttons_activate_and_navigation_clamps() {
+        let mut n = nav();
+        n.zone = Zone::Header(HeaderItem::Filter);
+        n.pad_step(MenuNav::Right, LENS, GRID, false, 5);
+        assert_eq!(n.zone, Zone::Header(HeaderItem::Filter));
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 5),
+            ShelfAct::OpenFilter
+        );
+        n.pad_step(MenuNav::Left, LENS, GRID, false, 5);
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 5),
+            ShelfAct::History
+        );
+        for _ in 0..5 {
+            n.pad_step(MenuNav::Left, LENS, GRID, false, 5);
+        }
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 5),
+            ShelfAct::Album
+        );
+        n.pad_step(MenuNav::Back, LENS, GRID, false, 5);
+        assert_eq!(n.zone, Zone::Grid);
+    }
+
+    #[test]
+    fn right_at_the_last_column_enters_the_panel_and_left_leaves() {
+        let mut n = nav();
+        n.sel = 1;
+        n.pad_step(MenuNav::Right, LENS, GRID, false, 5);
+        assert_eq!((n.zone, n.sel), (Zone::Grid, 2));
+        n.pad_step(MenuNav::Right, LENS, GRID, false, 5);
+        assert_eq!(n.zone, Zone::Panel(0));
+        n.pad_step(MenuNav::Down, LENS, GRID, false, 3);
+        n.pad_step(MenuNav::Down, LENS, GRID, false, 3);
+        n.pad_step(MenuNav::Down, LENS, GRID, false, 3);
+        assert_eq!(n.zone, Zone::Panel(2));
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 3),
+            ShelfAct::PanelButton(2)
+        );
+        n.pad_step(MenuNav::Left, LENS, GRID, false, 3);
+        assert_eq!(n.zone, Zone::Grid);
+        // Sem botões no painel, Direita não entra nele.
+        n.sel = 2;
+        n.pad_step(MenuNav::Right, LENS, GRID, false, 0);
+        assert_eq!(n.zone, Zone::Grid);
+    }
+
+    #[test]
+    fn the_last_game_of_a_short_row_also_reaches_the_panel() {
+        let mut n = nav();
+        n.sel = 9; // último jogo, coluna 0 da última fileira
+        n.pad_step(MenuNav::Right, LENS, GRID, false, 4);
+        assert_eq!(n.zone, Zone::Panel(0));
+    }
+
+    #[test]
+    fn face_buttons_have_the_same_meaning_in_every_zone() {
+        for zone in [Zone::Grid, Zone::Header(HeaderItem::Album), Zone::Panel(0)] {
+            let mut n = nav();
+            n.zone = zone;
+            assert_eq!(
+                n.pad_step(MenuNav::Alt, LENS, GRID, false, 3),
+                ShelfAct::ToggleFavorite
+            );
+            assert_eq!(
+                n.pad_step(MenuNav::Extra, LENS, GRID, false, 3),
+                ShelfAct::Album
+            );
+            assert_eq!(
+                n.pad_step(MenuNav::Select, LENS, GRID, false, 3),
+                ShelfAct::History
+            );
+            assert_eq!(
+                n.pad_step(MenuNav::Start, LENS, GRID, false, 3),
+                ShelfAct::Settings
+            );
+        }
+        let mut n = nav();
+        assert_eq!(
+            n.pad_step(MenuNav::Back, LENS, GRID, false, 3),
+            ShelfAct::Back
+        );
+        assert_eq!(
+            n.pad_step(MenuNav::Confirm, LENS, GRID, false, 3),
+            ShelfAct::Play
+        );
+    }
+
+    #[test]
+    fn up_from_the_favorites_strip_focuses_the_header() {
+        let lens = ShelfLens {
+            grid: 10,
+            favorites: 4,
+        };
+        let mut n = nav();
+        n.in_fav = true;
+        n.fav_idx = 3;
+        n.pad_step(MenuNav::Up, lens, GRID, true, 3);
+        assert_eq!(n.zone, Zone::Header(HeaderItem::Filter));
+    }
+
+    #[test]
+    fn triggers_cycle_the_drawn_panel_tabs() {
+        let drawn = [
+            ShelfButton::Settings,
+            ShelfButton::PanelJump(PanelSection::Informacoes),
+            ShelfButton::PanelJump(PanelSection::CapaTraseira),
+            ShelfButton::PanelJump(PanelSection::Cartucho),
+        ];
+        let mut n = nav();
+        assert_eq!(n.panel_section, PanelSection::Informacoes);
+        n.cycle_section(true, &drawn);
+        assert_eq!(n.panel_section, PanelSection::CapaTraseira);
+        n.cycle_section(true, &drawn);
+        n.cycle_section(true, &drawn);
+        assert_eq!(n.panel_section, PanelSection::Informacoes);
+        n.cycle_section(false, &drawn);
+        assert_eq!(n.panel_section, PanelSection::Cartucho);
+        // Sem abas desenhadas, nada muda.
+        n.cycle_section(true, &[ShelfButton::Settings]);
+        assert_eq!(n.panel_section, PanelSection::Cartucho);
+    }
+
+    #[test]
+    fn the_panel_list_leaves_refresh_to_the_header() {
+        let l = pad_panel_list(vec![
+            ShelfButton::Refresh,
+            ShelfButton::Settings,
+            ShelfButton::Back,
+        ]);
+        assert_eq!(l, vec![ShelfButton::Settings, ShelfButton::Back]);
     }
 }

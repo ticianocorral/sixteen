@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use sixteen_platform::{KeyMap, PadButton, PadMap};
+use sixteen_platform::{KeyMap, PadButton, PadMap, ScreenLines, ScreenLook};
 
 pub struct Config {
     pub fullscreen: bool,
@@ -39,6 +39,10 @@ pub struct Config {
     /// (padrão) ou o expositor de metal da locadora. Linha "Estante" na
     /// seção de vídeo das configurações.
     pub shelf_theme: ShelfTheme,
+    /// "Sugestão da noite": botão na estante que sorteia um jogo (de
+    /// preferência nunca aberto ou parado há muito tempo). Desligado por
+    /// padrão. Linha na seção "estante" das configurações.
+    pub night_pick: bool,
     /// Mau contato do cartucho (soprar o cartucho): com que frequência o
     /// primeiro Power depois de inserir não sobe o jogo — tela preta, lixo
     /// de tiles, abertura travada ou gráficos embaralhados — até ejetar,
@@ -58,12 +62,13 @@ pub struct Config {
     /// Burn-in leve: horas no mesmo jogo marcam o HUD no tubo, e a marca
     /// some com o tempo. Desligado por padrão.
     pub burn_in: bool,
-    /// A luz do quarto pela hora do dia (reflexo da janela de dia, quarto
-    /// escuro com o brilho azul do tubo à noite). Ligado por padrão.
-    pub room_light: bool,
     /// O menu OSD da TV: brilho, contraste, cor e nitidez (0..100, 50 =
     /// neutro), ajustados pelo MENU do queixo e salvos aqui ao sair.
     pub tv_picture: [u8; 4],
+    /// O visual da tela (`screen_look`): sinal + scanlines/grade/brilho.
+    pub screen_look: ScreenLook,
+    /// As linhas e a máscara (`screen_lines`), à parte do sinal.
+    pub screen_lines: ScreenLines,
     /// RetroAchievements account (plan: `docs/plano-retroachievements.md`,
     /// fase 1) — the username and the web-API token the user generates on
     /// retroachievements.org (Settings → Web API). Both empty (the default)
@@ -87,6 +92,9 @@ pub struct Config {
     /// keyboard — clones and native-driver paths can land a press in the
     /// wrong slot, so the layout is the user's to fix.
     pub padmap: PadMap,
+    /// O mesmo, para o controle 2 (`[gamepad2]`) — cada controle tem o seu
+    /// mapa, já que dois controles diferentes raramente batem.
+    pub padmap2: PadMap,
     /// centavos, moeda, mínimo de jogos e o dobradouro de fim de semana.
     /// Where it was read from (or freshly written), for logging and for
     /// `save()`.
@@ -271,6 +279,8 @@ struct Raw {
     #[serde(default)]
     shelf_theme: Option<String>,
     #[serde(default)]
+    night_pick: Option<bool>,
+    #[serde(default)]
     bad_contact: Option<String>,
     #[serde(default)]
     blow_mic: Option<bool>,
@@ -281,9 +291,10 @@ struct Raw {
     #[serde(default)]
     burn_in: Option<bool>,
     #[serde(default)]
-    room_light: Option<bool>,
-    #[serde(default)]
     tv_picture: Option<Vec<u8>>,
+    #[serde(default)]
+    screen_look: Option<String>,
+    screen_lines: Option<String>,
     #[serde(default)]
     ra_user: Option<String>,
     #[serde(default)]
@@ -296,6 +307,8 @@ struct Raw {
     keyboard: BTreeMap<String, String>,
     #[serde(default)]
     gamepad: BTreeMap<String, String>,
+    #[serde(default)]
+    gamepad2: BTreeMap<String, String>,
 }
 
 impl Config {
@@ -317,19 +330,22 @@ impl Config {
             check_updates_on_start: true,
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
+            night_pick: false,
             bad_contact: BadContact::Off,
             blow_mic: false,
             tv_speaker: false,
             flyback_whine: false,
             burn_in: false,
-            room_light: true,
             tv_picture: [50; 4],
+            screen_look: ScreenLook::Rf,
+            screen_lines: ScreenLines::Auto,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
+            padmap2: PadMap::defaults(),
             source: path.clone(),
         };
 
@@ -360,6 +376,9 @@ impl Config {
     }
 
     fn apply(&mut self, raw: Raw) -> Result<()> {
+        if let Some(n) = raw.night_pick {
+            self.night_pick = n;
+        }
         if let Some(f) = raw.fullscreen {
             self.fullscreen = f;
         }
@@ -408,14 +427,29 @@ impl Config {
         if let Some(v) = raw.burn_in {
             self.burn_in = v;
         }
-        if let Some(v) = raw.room_light {
-            self.room_light = v;
-        }
         if let Some(p) = raw.tv_picture {
             match <[u8; 4]>::try_from(p.as_slice()) {
                 Ok(p) => self.tv_picture = p.map(|v| v.min(100)),
                 Err(_) => log::warn!(
                     "[config] tv_picture = {p:?}: want 4 values (brightness, contrast, color, sharpness)"
+                ),
+            }
+        }
+        if let Some(l) = raw.screen_look {
+            match ScreenLook::parse(&l) {
+                Some(v) => self.screen_look = v,
+                None => log::warn!(
+                    "[config] screen_look = {l:?}: not a look (want rf|composite|svideo|pvm|trinitron|lcd|mono), keeping {}",
+                    self.screen_look.as_str()
+                ),
+            }
+        }
+        if let Some(l) = raw.screen_lines {
+            match ScreenLines::parse(&l) {
+                Some(v) => self.screen_lines = v,
+                None => log::warn!(
+                    "[config] screen_lines = {l:?}: not an option (want auto|off|light|pvm|grille|grid), keeping {}",
+                    self.screen_lines.as_str()
                 ),
             }
         }
@@ -444,26 +478,32 @@ impl Config {
                 log::warn!("[keyboard] {action}: not a bindable action any more, ignoring");
                 continue;
             };
+            if key.is_empty() {
+                continue;
+            }
             self.keymap
                 .bind_pad(key, b)
                 .map_err(anyhow::Error::msg)
                 .with_context(|| format!("[keyboard] {action}"))?;
         }
-        for (action, button) in &raw.gamepad {
-            let Ok(b) = action.parse::<PadButton>() else {
-                log::warn!("[gamepad] {action}: not a bindable action, ignoring");
-                continue;
-            };
-            if button.is_empty() {
-                // Written for an action whose button another action took —
-                // nothing to bind here (the empty state re-emerges from the
-                // other action's bind dropping the default).
-                continue;
+        for (section, map, table) in [
+            ("gamepad", &mut self.padmap, &raw.gamepad),
+            ("gamepad2", &mut self.padmap2, &raw.gamepad2),
+        ] {
+            for (action, button) in table {
+                let Ok(b) = action.parse::<PadButton>() else {
+                    log::warn!("[{section}] {action}: not a bindable action, ignoring");
+                    continue;
+                };
+                if button.is_empty() {
+                    // Um arquivo antigo, de quando roubar um botão deixava a
+                    // outra ação vazia — nada a ligar aqui.
+                    continue;
+                }
+                map.bind(button, b)
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| format!("[{section}] {action}"))?;
             }
-            self.padmap
-                .bind(button, b)
-                .map_err(anyhow::Error::msg)
-                .with_context(|| format!("[gamepad] {action}"))?;
         }
         Ok(())
     }
@@ -480,19 +520,22 @@ impl Config {
              # hiss_on_static: white-noise hiss while the TV shows static (off by default).\n\
              # shelf_theme: the shelf furniture — wood (default), metal (rental-store rack),\n\
              # hifi (black stereo rack), memphis (90s bedroom) or arcade.\n\
+             # night_pick: show a \"tonight's pick\" button on the shelf (off by default).\n\
              # bad_contact: cartridge bad contact on first power-on — off (default), rare or 90s.\n\
              # blow_mic: blow into the real microphone to clean the cartridge (off by default).\n\
              # tv_speaker: game sound through the TV's own small mono speaker (off = 3-in-1 stereo).\n\
              # flyback_whine: the ~15 kHz flyback whine while the TV is on (off by default).\n\
              # burn_in: hours on the same game lightly mark the HUD on the tube (off by default).\n\
-             # room_light: room lighting follows the clock — window by day, dark room at night.\n\
              # tv_picture: TV menu [brightness, contrast, color, sharpness], 0-100, 50 = neutral.\n\
+             # screen_look: the picture style — rf (default), composite, svideo, pvm, trinitron, lcd or mono.\n\
+             # screen_lines: scanlines/mask over any look — auto (the look's own), off, light, pvm, grille or grid.\n\
              # RetroAchievements: ra_user/ra_token from retroachievements.org\n\
              # (Settings -> Web API); empty = the whole feature stays off.\n\
              # ra_hardcore: no cheats/savestates while earning achievements.\n\
              # [keyboard]: action = \"SDL key name\" (e.g. \"Left Shift\", \"F2\", \"]\").\n\
              # [gamepad]: action = \"SDL gamepad button name\" (e.g. \"south\",\n\
-             # \"dpup\", \"leftshoulder\") — which pad button drives each action.\n\n",
+             # \"dpup\", \"leftshoulder\") — which pad button drives each action.\n\
+             # [gamepad2]: the same, for the second controller.\n\n",
         );
         s.push_str(&format!("fullscreen = {}\n", self.fullscreen));
         s.push_str(&format!("lang = {:?}\n", self.lang.as_str()));
@@ -502,13 +545,18 @@ impl Config {
         ));
         s.push_str(&format!("hiss_on_static = {}\n", self.hiss_on_static));
         s.push_str(&format!("shelf_theme = {:?}\n", self.shelf_theme.as_str()));
+        s.push_str(&format!("night_pick = {}\n", self.night_pick));
         s.push_str(&format!("bad_contact = {:?}\n", self.bad_contact.as_str()));
         s.push_str(&format!("blow_mic = {}\n", self.blow_mic));
         s.push_str(&format!("tv_speaker = {}\n", self.tv_speaker));
         s.push_str(&format!("flyback_whine = {}\n", self.flyback_whine));
         s.push_str(&format!("burn_in = {}\n", self.burn_in));
-        s.push_str(&format!("room_light = {}\n", self.room_light));
-        s.push_str(&format!("tv_picture = {:?}\n\n", self.tv_picture));
+        s.push_str(&format!("tv_picture = {:?}\n", self.tv_picture));
+        s.push_str(&format!("screen_look = {:?}\n", self.screen_look.as_str()));
+        s.push_str(&format!(
+            "screen_lines = {:?}\n\n",
+            self.screen_lines.as_str()
+        ));
         s.push_str("# RetroAchievements\n");
         s.push_str(&format!("ra_user = {:?}\n", self.ra_user));
         s.push_str(&format!("ra_token = {:?}\n", self.ra_token));
@@ -522,6 +570,10 @@ impl Config {
         }
         s.push_str("\n[gamepad]\n");
         for (action, button) in self.padmap.describe() {
+            s.push_str(&format!("{action} = {button:?}\n"));
+        }
+        s.push_str("\n[gamepad2]\n");
+        for (action, button) in self.padmap2.describe() {
             s.push_str(&format!("{action} = {button:?}\n"));
         }
         s
@@ -560,19 +612,22 @@ mod tests {
             check_updates_on_start: true,
             hiss_on_static: false,
             shelf_theme: ShelfTheme::Wood,
+            night_pick: false,
             bad_contact: BadContact::Off,
             blow_mic: false,
             tv_speaker: false,
             flyback_whine: false,
             burn_in: false,
-            room_light: true,
             tv_picture: [50; 4],
+            screen_look: ScreenLook::Rf,
+            screen_lines: ScreenLines::Auto,
             ra_user: String::new(),
             ra_token: String::new(),
             ra_hardcore: true,
             ra_connect: None,
             keymap: KeyMap::defaults(),
             padmap: PadMap::defaults(),
+            padmap2: PadMap::defaults(),
             source: None,
         }
     }
@@ -649,6 +704,21 @@ mod tests {
     }
 
     #[test]
+    fn night_pick_round_trips_and_defaults_off() {
+        let mut cfg = defaults();
+        assert!(!cfg.night_pick);
+        cfg.apply(toml::from_str("night_pick = true").unwrap())
+            .unwrap();
+        assert!(cfg.night_pick);
+        let round = defaults();
+        let mut round = round;
+        round
+            .apply(toml::from_str(&cfg.to_toml()).unwrap())
+            .unwrap();
+        assert!(round.night_pick);
+    }
+
+    #[test]
     fn shelf_theme_round_trips_and_rejects_junk() {
         let mut cfg = defaults();
         assert_eq!(cfg.shelf_theme, ShelfTheme::Wood);
@@ -710,12 +780,11 @@ mod tests {
     fn tv_room_settings_round_trip() {
         let mut cfg = defaults();
         assert!(!cfg.tv_speaker && !cfg.flyback_whine && !cfg.burn_in);
-        assert!(cfg.room_light);
         assert_eq!(cfg.tv_picture, [50; 4]);
         cfg.apply(
             toml::from_str(
                 "tv_speaker = true\nflyback_whine = true\nburn_in = true\n\
-                 room_light = false\ntv_picture = [70, 40, 55, 200]",
+                 tv_picture = [70, 40, 55, 200]",
             )
             .unwrap(),
         )
@@ -731,8 +800,40 @@ mod tests {
             .apply(toml::from_str(&cfg.to_toml()).unwrap())
             .unwrap();
         assert!(round.tv_speaker && round.flyback_whine && round.burn_in);
-        assert!(!round.room_light);
         assert_eq!(round.tv_picture, [70, 40, 55, 100]);
+    }
+
+    #[test]
+    fn screen_look_round_trips_and_rejects_junk() {
+        let mut cfg = defaults();
+        assert_eq!(cfg.screen_look, ScreenLook::Rf);
+        cfg.apply(toml::from_str("screen_look = \"trinitron\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.screen_look, ScreenLook::Trinitron);
+        cfg.apply(toml::from_str("screen_look = \"holograma\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.screen_look, ScreenLook::Trinitron);
+        let mut round = defaults();
+        round
+            .apply(toml::from_str(&cfg.to_toml()).unwrap())
+            .unwrap();
+        assert_eq!(round.screen_look, ScreenLook::Trinitron);
+        cfg.apply(toml::from_str("screen_lines = \"pvm\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.screen_lines, ScreenLines::Pvm);
+        cfg.apply(toml::from_str("screen_lines = \"xx\"").unwrap())
+            .unwrap();
+        assert_eq!(cfg.screen_lines, ScreenLines::Pvm);
+    }
+
+    #[test]
+    fn old_cheat_genius_key_is_ignored() {
+        // A chave saiu (o Cheat Genius é o único jeito de usar cheats);
+        // um config.toml antigo com ela continua carregando.
+        let raw: Raw = toml::from_str("cheat_genius = false").unwrap();
+        let mut cfg = defaults();
+        cfg.apply(raw).unwrap();
+        assert!(!cfg.to_toml().contains("cheat_genius"));
     }
 
     #[test]
@@ -772,10 +873,11 @@ mod tests {
         let raw: Raw = toml::from_str("[gamepad]\nb = \"dpup\"").unwrap();
         cfg.apply(raw).unwrap();
         let d = cfg.padmap.describe();
-        // B now lives on dpup; Up lost its button to it (one action per
-        // button, one button per action — same rule as the keyboard side).
+        // B now lives on dpup; Up took B's old button in the swap (one
+        // action per button, one button per action — nothing left unbound).
+        let south = PadMap::defaults().describe()[0].1.clone();
         assert!(d.contains(&("b".to_string(), "dpup".to_string())));
-        assert!(d.contains(&("up".to_string(), String::new())));
+        assert!(d.contains(&("up".to_string(), south)));
         // And the text form survives a save/load round trip.
         let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
         let mut round = defaults();
@@ -788,5 +890,18 @@ mod tests {
         let mut cfg = defaults();
         let raw: Raw = toml::from_str("[gamepad]\nb = \"not_a_button\"").unwrap();
         assert!(cfg.apply(raw).is_err());
+    }
+
+    #[test]
+    fn second_gamepad_has_its_own_map() {
+        let mut cfg = defaults();
+        let raw: Raw = toml::from_str("[gamepad2]\nb = \"b\"\na = \"a\"").unwrap();
+        cfg.apply(raw).unwrap();
+        assert_eq!(cfg.padmap, PadMap::defaults());
+        assert_ne!(cfg.padmap2, PadMap::defaults());
+        let raw: Raw = toml::from_str(&cfg.to_toml()).unwrap();
+        let mut round = defaults();
+        round.apply(raw).unwrap();
+        assert_eq!(round.padmap2, cfg.padmap2);
     }
 }

@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
 use anyhow::{anyhow, Context, Result};
+use sixteen_app::album;
 use sixteen_app::config::Config;
 use sixteen_app::core_update;
 use sixteen_app::idle::{self, IdleExit};
@@ -217,7 +218,8 @@ fn main() -> Result<()> {
     log::info!("{} rom(s) in roms/", catalog.counts()?);
 
     let mut plat = Platform::new().map_err(|e| anyhow!(e.to_string()))?;
-    plat.set_pad_map(cfg.padmap.clone());
+    plat.set_pad_map(0, cfg.padmap.clone());
+    plat.set_pad_map(1, cfg.padmap2.clone());
     // One window for the whole session — shelf and game both draw into it.
     let mut cab = plat
         .create_cabinet("SixteeN", 1280, 800, cfg.fullscreen)
@@ -251,12 +253,13 @@ fn main() -> Result<()> {
         preset_filter: None,
         ra: None,
         theme: Default::default(),
+        night_pick: false,
     };
     refresh_ra(&cfg, &mut cab, &mut shelf_opts);
 
     // Headless self-check: render one settings screen and exit.
     if let (Some(screen), Some(path)) = (&args.debug_settings, &args.shot) {
-        settings::capture_preview(&mut cab, &cfg, screen, path)?;
+        settings::capture_preview(&plat, &mut cab, &cfg, screen, path)?;
         log::info!("wrote {} (settings preview: {screen})", path.display());
         return Ok(());
     }
@@ -361,6 +364,22 @@ fn main() -> Result<()> {
                     // there means "back to the shelf", not all the way to
                     // idle, so it's handled here rather than falling through
                     // to the `Pick::Back` arm above.
+                    // "Álbum de prints": mesmo vai-e-volta do histórico — Voltar
+                    // de lá cai na estante.
+                    Pick::Album => match album::run(&mut plat, &mut cab, &args.notes_dir)? {
+                        Pick::Settings => {
+                            let quit = settings::run(&mut plat, &mut cab, &mut cfg)?;
+                            if quit {
+                                break 'app;
+                            }
+                            refresh_ra(&cfg, &mut cab, &mut shelf_opts);
+                            core_path = args.core.clone().or_else(default_core_path);
+                            cab.set_nameplate(&core_update::nameplate_text(core_path.as_deref()));
+                            continue;
+                        }
+                        Pick::Quit => break 'app,
+                        _ => continue,
+                    },
                     Pick::History => match shelf::run_history(&mut plat, &mut cab, &catalog)? {
                         Pick::Play {
                             rom,
@@ -453,6 +472,7 @@ fn main() -> Result<()> {
 /// tema do móvel, trocado na mesma tela.
 fn refresh_ra(cfg: &Config, cab: &mut Cabinet, shelf_opts: &mut ShelfOpts) {
     shelf_opts.theme = cfg.shelf_theme;
+    shelf_opts.night_pick = cfg.night_pick;
     let on = !cfg.ra_user.is_empty() && cfg.ra_connect.is_some();
     cab.set_ra_status(on.then_some(RaStatus {
         hardcore: cfg.ra_hardcore,

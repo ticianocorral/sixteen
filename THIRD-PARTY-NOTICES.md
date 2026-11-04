@@ -175,3 +175,9 @@ verificação de integridade SHA-256 do core snes9x baixado (ver
 
 Abertura de ROMs `.zip` e do pacote do core snes9x: [zip](https://github.com/zip-rs/zip2)
 (MIT) — o app nunca extrai zips para o disco; o conteúdo é lido em memória.
+
+## font8x8 (domínio público)
+
+A ROM do Cheat Genius (`crates/app/cheat_genius/`) usa a fonte bitmap 8x8
+`font8x8_basic` de Daniel Hepper (`font8x8_basic.h`, domínio público, derivada
+das fontes VGA de Marcel Sondaar / IBM, também domínio público).

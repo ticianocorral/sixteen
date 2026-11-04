@@ -38,8 +38,8 @@ struct Args {
     debug_note_capture: bool,
     /// Headless: preview the pause book instead of gameplay (dev/testing).
     debug_shot_pause: bool,
-    /// Headless: preview one of the save/load/print/cheats modals instead
-    /// of gameplay (dev/testing) — "save", "load", "print", or "cheats".
+    /// Headless: preview one of the save/load/print modals instead of
+    /// gameplay (dev/testing) — "save", "load", "print", "print-name", "menu" or "print-pad".
     debug_shot_modal: Option<String>,
     debug_cart_anim: Option<std::path::PathBuf>,
     /// Headless: as telas de mau contato e a cena do sopro, em BMPs.
@@ -155,10 +155,9 @@ fn parse_args() -> Result<Args> {
             "--debug-note-capture" => debug_note_capture = true,
             "--debug-shot-pause" => debug_shot_pause = true,
             "--debug-shot-modal" => {
-                debug_shot_modal =
-                    Some(it.next().ok_or_else(|| {
-                        anyhow!("--debug-shot-modal needs save/load/print/cheats")
-                    })?)
+                debug_shot_modal = Some(it.next().ok_or_else(|| {
+                    anyhow!("--debug-shot-modal needs save/load/print/print-name/menu/print-pad")
+                })?)
             }
             "-h" | "--help" => {
                 println!("{}", HELP);
@@ -202,7 +201,7 @@ const HELP: &str = "emu-run --core <lib> --rom <game.sfc> [--system-dir D] [--sa
        [--notes-dir DIR]                   per-ROM notebooks (default: <save-dir>/notes)\n\
        [--debug-note-capture]              force one note capture at --shot-frame (dev/testing)\n\
        [--debug-shot-pause]                preview the pause book instead of gameplay (dev/testing)\n\
-       [--debug-shot-modal save|load|print|cheats] preview a modal instead of gameplay (dev/testing)\n\
+       [--debug-shot-modal save|load|print|print-name|menu|print-pad] preview a modal instead of gameplay (dev/testing)\n\
 \n\
 Presentation is fixed: RF NTSC + CRT-tube warp (knobs are consts in the source).\n\
 Battery SRAM and 10 save-state slots live in --save-dir/<game title>/, same\n\
@@ -216,9 +215,7 @@ default keys (gameplay only): arrows=dpad  Z=B X=A A=Y S=X Q=L W=R\n\
 \n\
 Everything else — power, eject, reset, the notebook (Anotacoes: free text\n\
 and a fixed 15-slot photo album per game, pin a slot to feature it in the\n\
-side panel), Cheats (a checklist modal sourced from the full\n\
-libretro-database SNES set, matched by the ROM's own title — absent when\n\
-nothing in there matches), Printscreen, save/load state (all three open a\n\
+side panel), Printscreen, save/load state (all three open a\n\
 slot-picker modal) — is a clickable button in the side panel (or the\n\
 pause book's own buttons once paused); none of it is keyboard-bindable\n\
 any more (plan revision: mouse/gamepad only for console commands,\n\
@@ -239,7 +236,8 @@ fn main() -> Result<()> {
     sixteen_platform::tr::set_lang(Some(cfg.lang.tr_lang()));
 
     let mut platform = sixteen_platform::Platform::new().map_err(|e| anyhow!(e.to_string()))?;
-    platform.set_pad_map(cfg.padmap.clone());
+    platform.set_pad_map(0, cfg.padmap.clone());
+    platform.set_pad_map(1, cfg.padmap2.clone());
     let mut cabinet = platform
         .create_cabinet("SixteeN", 1024, 768, false)
         .map_err(|e| anyhow!(e.to_string()))?;

@@ -153,9 +153,59 @@ pub fn for_title(title: &str) -> Vec<CheatDef> {
         .unwrap_or_default()
 }
 
+/// Longest code the app will hand to `retro_cheat_set` — see this module's
+/// doc comment for the stack-overflow this guards against.
+pub const MAX_CODE_LEN: usize = 96;
+
+/// Whether `code` is one the core can take: one or more `+`-joined parts,
+/// each either a Game Genie code (`XXXX-XXXX`) or a raw RAM write
+/// (`XXXXXXXX`, 6 hex address digits + 2 value digits), hex digits only, and
+/// no longer than [`MAX_CODE_LEN`]. Used for codes the player typed
+/// themselves (the embedded database is pre-filtered at generation time).
+pub fn is_valid_code(code: &str) -> bool {
+    if code.is_empty() || code.len() > MAX_CODE_LEN {
+        return false;
+    }
+    code.split('+').all(|part| {
+        let hex = |s: &str| s.bytes().all(|b| b.is_ascii_hexdigit());
+        match part.len() {
+            8 => hex(part),
+            9 => part.as_bytes()[4] == b'-' && hex(&part[..4]) && hex(&part[5..]),
+            _ => false,
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_game_genie_and_ram_codes() {
+        assert!(is_valid_code("C24F-74D4"));
+        assert!(is_valid_code("7E036999"));
+        assert!(is_valid_code("D3E6-E4A4+A9E6-E7D4"));
+        assert!(is_valid_code("7E036999+C24F-74D4"));
+    }
+
+    #[test]
+    fn rejects_malformed_codes() {
+        for bad in [
+            "",
+            "C24F74D4A",
+            "C24-F74D4",
+            "C24F-74G4",
+            "7E03699",
+            "7E036999+",
+            "+7E036999",
+            "C24F--74D4",
+            "7E036999 ",
+            "c24f-74d4+",
+        ] {
+            assert!(!is_valid_code(bad), "{bad:?} should be invalid");
+        }
+        assert!(!is_valid_code(&["7E036999"; 12].join("+")));
+    }
 
     #[test]
     fn matches_exact_title_case_insensitively() {

@@ -117,3 +117,31 @@ pub(super) fn draw_ch_osd(
         usize::MAX,
     );
 }
+
+/// O anel do foco do controle em volta de um botão: contorno lavanda de 3 px
+/// (a cor fósforo da estante) com um filete escuro por fora, para ler sobre
+/// qualquer plástico ou painel.
+pub(super) fn draw_focus_ring(canvas: &mut WindowCanvas, r: Rect) {
+    canvas.set_blend_mode(BlendMode::Blend);
+    // Contorno de `t` px cuja borda externa fica `grow` px fora de `r`.
+    let ring = |canvas: &mut WindowCanvas, grow: i32, t: i32, c: Color| {
+        canvas.set_draw_color(c);
+        let (x, y) = (r.x() - grow, r.y() - grow);
+        let (w, h) = (r.width() as i32 + grow * 2, r.height() as i32 + grow * 2);
+        for edge in [
+            Rect::new(x, y, w as u32, t as u32),
+            Rect::new(x, y + h - t, w as u32, t as u32),
+            Rect::new(x, y, t as u32, h as u32),
+            Rect::new(x + w - t, y, t as u32, h as u32),
+        ] {
+            let _ = canvas.fill_rect(edge);
+        }
+    };
+    ring(canvas, 5, 2, Color::RGBA(10, 10, 14, 220));
+    ring(
+        canvas,
+        3,
+        3,
+        Color::RGBA(FOSFORO.0, FOSFORO.1, FOSFORO.2, 255),
+    );
+}

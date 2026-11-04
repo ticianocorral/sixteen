@@ -168,50 +168,6 @@ impl Burn {
     }
 }
 
-/// A luz do quarto num instante.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct RoomLight {
-    /// Quanto o plástico do gabinete recebe de luz (1 = a cor de sempre).
-    pub ambient: f32,
-    /// O tom da luz: branco de dia, laranja no fim da tarde.
-    pub tint: (f32, f32, f32),
-    /// O reflexo da janela no vidro (0..1).
-    pub window: f32,
-    /// O quanto o quarto está escuro — o brilho azul do tubo aparece.
-    pub night: f32,
-}
-
-impl RoomLight {
-    /// A luz neutra (a opção desligada): o gabinete como sempre foi.
-    pub const NEUTRAL: RoomLight = RoomLight {
-        ambient: 1.0,
-        tint: (1.0, 1.0, 1.0),
-        window: 0.0,
-        night: 0.0,
-    };
-
-    /// A luz pela hora local (0..24, fracionária).
-    pub fn at_hour(h: f32) -> RoomLight {
-        let smooth = |a: f32, b: f32, x: f32| {
-            let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-            t * t * (3.0 - 2.0 * t)
-        };
-        // Sol: nasce entre 5h30 e 7h30, se põe entre 17h e 19h30.
-        let day = smooth(5.5, 7.5, h) * (1.0 - smooth(17.0, 19.5, h));
-        // O fim da tarde alaranjado (e um pouco o amanhecer).
-        let dusk = (1.0 - ((h - 17.8) / 1.4).powi(2)).max(0.0)
-            + 0.5 * (1.0 - ((h - 6.5) / 0.9).powi(2)).max(0.0);
-        let dusk = dusk.min(1.0);
-        let tint = (1.0 + 0.10 * dusk, 1.0 - 0.02 * dusk, 1.0 - 0.22 * dusk);
-        RoomLight {
-            ambient: 0.5 + 0.62 * day + 0.12 * dusk,
-            tint,
-            window: (day * 0.9 + dusk * 0.5).min(1.0),
-            night: 1.0 - smooth(0.0, 0.6, day + dusk * 0.4),
-        }
-    }
-}
-
 /// O estado da TV e do quarto, dentro do [`Cabinet`].
 pub(super) struct TvExtras {
     pub picture: Picture,
@@ -232,10 +188,6 @@ pub(super) struct TvExtras {
     ticks: Vec<Instant>,
     /// O estalo tocando: (envelope, fase, passo).
     tick: Option<(f32, f32, f32)>,
-    room_on: bool,
-    /// A hora forçada (`SIXTEEN_HORA=21.5`), para testar.
-    hour_override: Option<f32>,
-    hour_cache: Option<(Instant, f32)>,
     /// O brilho médio da imagem, suavizado (0..1), e o alvo dele.
     pub lum: f32,
     lum_target: f32,
@@ -260,9 +212,6 @@ impl TvExtras {
             amb_phase: 0.0,
             ticks: Vec::new(),
             tick: None,
-            room_on: true,
-            hour_override: env_f32("SIXTEEN_HORA"),
-            hour_cache: None,
             lum: 0.2,
             lum_target: 0.2,
             lum_sampled: Instant::now(),
@@ -431,35 +380,6 @@ impl TvExtras {
         self.lum += (target - self.lum) * 0.08;
     }
 
-    // --- Luz do quarto -------------------------------------------------
-
-    pub fn set_room_light(&mut self, on: bool) {
-        self.room_on = on;
-    }
-
-    /// A luz do quarto com a hora já lida (ver `refresh_hour`).
-    pub fn room_now(&self) -> RoomLight {
-        if !self.room_on {
-            return RoomLight::NEUTRAL;
-        }
-        let h = match (self.hour_override, self.hour_cache) {
-            (Some(h), _) => h.rem_euclid(24.0),
-            (None, Some((_, h))) => h,
-            (None, None) => 15.0,
-        };
-        RoomLight::at_hour(h)
-    }
-
-    /// Relê a hora local no máximo uma vez por minuto.
-    pub fn refresh_hour(&mut self) {
-        let stale = self
-            .hour_cache
-            .is_none_or(|(at, _)| at.elapsed() >= Duration::from_secs(60));
-        if self.hour_override.is_none() && stale {
-            self.hour_cache = Some((Instant::now(), local_hour().unwrap_or(15.0)));
-        }
-    }
-
     // --- Som do tubo ---------------------------------------------------
 
     pub fn set_flyback(&mut self, on: bool) {
@@ -526,17 +446,6 @@ impl TvExtras {
     }
 }
 
-/// A hora local (0..24) pelo relógio do SDL.
-fn local_hour() -> Option<f32> {
-    use sdl3::sys::stdinc::SDL_Time;
-    use sdl3::sys::time::{SDL_DateTime, SDL_GetCurrentTime, SDL_TimeToDateTime};
-    let mut ticks: SDL_Time = 0;
-    let mut dt: SDL_DateTime = unsafe { std::mem::zeroed() };
-    // SAFETY: ponteiros para locais válidos; o SDL só escreve neles.
-    let ok = unsafe { SDL_GetCurrentTime(&mut ticks) && SDL_TimeToDateTime(ticks, &mut dt, true) };
-    ok.then(|| dt.hour as f32 + dt.minute as f32 / 60.0)
-}
-
 impl Cabinet {
     /// Os ajustes de imagem do menu OSD (o app passa para o filtro NTSC e
     /// salva na configuração).
@@ -564,37 +473,11 @@ impl Cabinet {
         self.tvx.set_flyback(on);
     }
 
-    pub fn set_room_light(&mut self, on: bool) {
-        self.tvx.set_room_light(on);
-    }
-
     /// Os sons do tubo, uma vez por quadro apresentado.
     pub(super) fn feed_tv_sound(&mut self) {
         let on = self.tv_on();
         self.tvx.tick_lum(on);
         self.tvx.feed_sound(&self.audio, on);
-    }
-
-    /// Ilumina o gabinete com a luz do quarto: o plástico recebe a luz do
-    /// dia (ou some no escuro) e, à noite, o brilho azul do tubo bate na
-    /// moldura, mais forte perto do vidro.
-    pub(super) fn light_bezel(&mut self) {
-        self.tvx.refresh_hour();
-        let room = self.tvx.room_now();
-        let glow = room.night * self.tvx.lum;
-        let Some(bezel) = &mut self.bezel else { return };
-        let lit = |c: (u8, u8, u8), blue: f32| {
-            FColor::RGBA(
-                (c.0 as f32 / 255.0 * room.ambient * room.tint.0 + 0.10 * blue).min(1.0),
-                (c.1 as f32 / 255.0 * room.ambient * room.tint.1 + 0.15 * blue).min(1.0),
-                (c.2 as f32 / 255.0 * room.ambient * room.tint.2 + 0.32 * blue).min(1.0),
-                1.0,
-            )
-        };
-        let (outer, inner) = (lit(CABINET, glow * 0.35), lit(RECESS, glow));
-        for (i, v) in bezel.verts.iter_mut().enumerate() {
-            v.color = if i < 4 { outer } else { inner };
-        }
     }
 
     /// Deixa pronto o que o vidro desenha neste quadro: a textura do
@@ -605,7 +488,6 @@ impl Cabinet {
             self.tvx.close_menu();
         }
         self.tvx.menu_open();
-        self.tvx.refresh_hour();
         let Some(burn) = &mut self.tvx.burn else {
             return;
         };
@@ -635,7 +517,6 @@ impl Cabinet {
 /// O que o vidro mostra num quadro, emprestado do [`TvExtras`].
 pub(super) struct GlassView<'a> {
     burn: Option<&'a Texture>,
-    room: RoomLight,
     menu: Option<(usize, Picture)>,
 }
 
@@ -647,14 +528,13 @@ impl TvExtras {
                 .as_ref()
                 .filter(|b| b.visible && tv_on)
                 .and_then(|b| b.tex.as_ref()),
-            room: self.room_now(),
             menu: self.menu.filter(|_| tv_on).map(|(i, _)| (i, self.picture)),
         }
     }
 }
 
-/// O que vai no vidro por cima da imagem: o fantasma do burn-in, o
-/// reflexo da janela e o menu OSD.
+/// O que vai no vidro por cima da imagem: o brilho, o fantasma do
+/// burn-in e o menu OSD.
 pub(super) fn draw_glass(
     canvas: &mut WindowCanvas,
     font: &mut Texture,
@@ -662,59 +542,62 @@ pub(super) fn draw_glass(
     screen: Rect,
     view: &GlassView,
 ) {
+    draw_glass_sheen(canvas, screen);
     if let Some(tex) = view.burn {
         let _ = canvas.render_geometry(&mesh.verts, Some(tex), &mesh.indices[..]);
-    }
-    if view.room.window > 0.01 {
-        draw_window_reflection(canvas, screen, &view.room);
     }
     if let Some((item, picture)) = view.menu {
         draw_picture_menu(canvas, font, screen, picture, item);
     }
 }
 
-/// O reflexo da janela no vidro: dois painéis claros com o caixilho em
-/// cruz, no alto à esquerda, levemente inclinados pela curva do tubo e
-/// esmaecendo para baixo.
-fn draw_window_reflection(canvas: &mut WindowCanvas, screen: Rect, room: &RoomLight) {
+/// O brilho do vidro, sempre presente (a TV ligada ou não): uma mancha
+/// de luz difusa no alto à esquerda, uma faixa diagonal mais fina e um
+/// aro claro rente à borda — tudo sobre a mesma grade curva da imagem,
+/// para o vidro parecer abaulado e não um adesivo plano.
+fn draw_glass_sheen(canvas: &mut WindowCanvas, screen: Rect) {
+    const N: usize = 24;
+    let warp = crt_warp();
     let (sx, sy) = (screen.x() as f32, screen.y() as f32);
     let (sw, sh) = (screen.width() as f32, screen.height() as f32);
-    let a = room.window * 0.06;
-    let c = |alpha: f32| {
-        FColor::RGBA(
-            (0.95 * room.tint.0).min(1.0),
-            (0.97 * room.tint.1).min(1.0),
-            (1.0 * room.tint.2).min(1.0),
-            alpha,
-        )
-    };
     let z = sdl3::render::FPoint::new(0.0, 0.0);
-    let vtx = |x: f32, y: f32, alpha: f32| Vertex {
-        position: sdl3::render::FPoint::new(sx + x * sw, sy + y * sh),
-        color: c(alpha),
-        tex_coord: z,
-    };
-    canvas.set_blend_mode(BlendMode::Blend);
-    // A janela: x de 0,08 a 0,40, y de 0,06 a 0,58, com o caixilho no meio.
-    // Cada painel é um quadrilátero inclinado (a curva do vidro), claro em
-    // cima e sumindo embaixo.
-    let panes = [
-        (0.08, 0.235, 0.06, 0.30),
-        (0.255, 0.40, 0.06, 0.30),
-        (0.08, 0.235, 0.32, 0.58),
-        (0.255, 0.40, 0.32, 0.58),
-    ];
-    for (x0, x1, y0, y1) in panes {
-        let skew = 0.03;
-        let fade = |y: f32| a * (1.0 - (y - 0.06) / 0.6).clamp(0.2, 1.0);
-        let verts = [
-            vtx(x0 + skew * (1.0 - y0), y0, fade(y0)),
-            vtx(x1 + skew * (1.0 - y0), y0, fade(y0)),
-            vtx(x1 + skew * (1.0 - y1), y1, fade(y1)),
-            vtx(x0 + skew * (1.0 - y1), y1, fade(y1)),
-        ];
-        let _ = canvas.render_geometry(&verts, None::<&Texture>, &[0, 1, 2, 0, 2, 3][..]);
+    let mut verts = Vec::with_capacity((N + 1) * (N + 1));
+    for j in 0..=N {
+        for i in 0..=N {
+            let (u, v) = (i as f32 / N as f32, j as f32 / N as f32);
+            let (cx, cy) = (u * 2.0 - 1.0, v * 2.0 - 1.0);
+            let dx = cx * (1.0 - warp * cy * cy);
+            let dy = cy * (1.0 - warp * cx * cx);
+            // Mancha: gaussiana larga centrada em (0,22; 0,20).
+            let (mx, my) = ((u - 0.22) / 0.30, (v - 0.20) / 0.26);
+            let blob = (-(mx * mx + my * my)).exp() * 0.10;
+            // Faixa diagonal: some ao se afastar da reta u + v = 0,62.
+            let d = (u + v - 0.62) / 0.07;
+            let streak = (-(d * d)).exp() * 0.02 * (1.0 - v).clamp(0.0, 1.0);
+            // Aro: luz que pega na borda do vidro curvo.
+            let edge = cx.abs().max(cy.abs());
+            let rim = ((edge - 0.90) / 0.10).clamp(0.0, 1.0).powi(2) * 0.05;
+            let a = (blob + streak + rim).min(0.20);
+            verts.push(Vertex {
+                position: sdl3::render::FPoint::new(
+                    sx + (dx * 0.5 + 0.5) * sw,
+                    sy + (dy * 0.5 + 0.5) * sh,
+                ),
+                color: FColor::RGBA(0.96, 0.98, 1.0, a),
+                tex_coord: z,
+            });
+        }
     }
+    let stride = (N + 1) as i32;
+    let mut idx = Vec::with_capacity(N * N * 6);
+    for j in 0..N as i32 {
+        for i in 0..N as i32 {
+            let a = j * stride + i;
+            idx.extend_from_slice(&[a, a + stride, a + 1, a + 1, a + stride, a + stride + 1]);
+        }
+    }
+    canvas.set_blend_mode(BlendMode::Blend);
+    let _ = canvas.render_geometry(&verts, None::<&Texture>, &idx[..]);
 }
 
 /// O menu de imagem dos anos 90: letras verdes grandes com sombra, o item
@@ -806,18 +689,6 @@ fn draw_picture_menu(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn room_light_follows_the_clock() {
-        let noon = RoomLight::at_hour(12.0);
-        let night = RoomLight::at_hour(23.0);
-        let dusk = RoomLight::at_hour(18.0);
-        assert!(noon.window > 0.8 && noon.night < 0.05);
-        assert!(night.window < 0.01 && night.night > 0.95);
-        assert!(night.ambient < noon.ambient);
-        // O fim da tarde é alaranjado: mais vermelho que azul.
-        assert!(dusk.tint.0 > dusk.tint.2 + 0.1);
-    }
 
     #[test]
     fn menu_cycles_and_adjusts() {

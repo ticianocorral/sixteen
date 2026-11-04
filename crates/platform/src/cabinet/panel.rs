@@ -418,8 +418,7 @@ pub(super) fn draw_panel(
     // 4. Cheats — just a count here (plan revision: used to list every
     // active description, one per line, which could run the panel out of
     // room on its own for a game with several curated cheats on at once;
-    // the actual list lives in the Cheats modal, reachable from a
-    // `commands` row above, so nothing is lost by not repeating it here).
+    // the cheats themselves are picked in the Cheat Genius at power-on).
     // Absent entirely with none on, not a "0 cheats" filler.
     let cheats_on_count = panel.cheats.iter().filter(|(_, on)| *on).count();
     // Room for the header plus one line — the count line never wraps to

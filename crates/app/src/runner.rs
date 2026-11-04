@@ -11,10 +11,11 @@ use sixteen_domain::fsutil::write_atomic;
 
 use anyhow::{anyhow, Context, Result};
 use sixteen_emulation::{Button, Core, Frame as EmuFrame, PixelFormat as EmuFormat};
-use sixteen_ntsc::{NtscFilter, Preset};
+use sixteen_ntsc::NtscFilter;
 use sixteen_platform::tr;
 use sixteen_platform::{
-    Cabinet, FrameRef, PanelButton, PixelFormat as PlatFormat, Platform, UiEvent, MAX_PORTS,
+    Cabinet, FrameRef, Osk, OskOutcome, PanelButton, PixelFormat as PlatFormat, Platform,
+    TextField, UiEvent, MAX_PORTS,
 };
 
 use crate::config::Config;
@@ -342,13 +343,10 @@ fn reset_pressed(flash: &HashMap<PanelButton, Instant>) -> bool {
 /// `draw_rocker`). Salvar/Carregar/Printscreen no longer carry a slot
 /// number in their label (plan revision — confusing next to the old
 /// cyclers): clicking any of the three now opens a modal to pick one, so
-/// the label just names the action. Cheats (plan revision — split out of
-/// the notebook) is absent entirely when `has_cheats` is false — this
-/// cartridge has no curated codes, so a button that always opened an empty
-/// checklist would just be clutter.
+/// the label just names the action. Cheats have no button here: they're
+/// picked in the Cheat Genius at power-on.
 fn command_rows(
     flash: &HashMap<PanelButton, Instant>,
-    has_cheats: bool,
     has_achievements: bool,
     all_slots_pinned: bool,
 ) -> Vec<(PanelButton, String)> {
@@ -365,9 +363,6 @@ fn command_rows(
             PanelButton::Achievements,
             tr!("Achievements", "Conquistas").to_string(),
         ));
-    }
-    if has_cheats {
-        rows.push((PanelButton::Cheats, "Cheats".to_string()));
     }
     rows.push((
         PanelButton::PrintScreen,
@@ -739,24 +734,96 @@ fn save_cheat_state(path: &Path, state: &[bool]) {
     }
 }
 
+/// Reaplica ao core o estado de todos os cheats — os do banco e os que o
+/// jogador digitou no Cheat Genius. Reset + set de tudo, a mesma sequência
+/// "cinto e suspensório" do carregamento.
+fn apply_cheats(
+    core: &mut Core,
+    defs: &[sixteen_domain::CheatDef],
+    state: &[bool],
+    customs: &[crate::genius::Custom],
+) {
+    core.cheat_reset();
+    let mut i = 0u32;
+    for (def, &on) in defs.iter().zip(state) {
+        core.cheat_set(i, on, def.code);
+        i += 1;
+    }
+    for c in customs {
+        core.cheat_set(i, c.on, &c.code);
+        i += 1;
+    }
+}
+
+/// `cheat_rows` + os códigos próprios (a descrição de um é o próprio código).
+fn all_cheat_rows(
+    defs: &[sixteen_domain::CheatDef],
+    state: &[bool],
+    customs: &[crate::genius::Custom],
+) -> Vec<(String, bool)> {
+    let mut rows = cheat_rows(defs, state);
+    rows.extend(customs.iter().map(|c| (c.code.clone(), c.on)));
+    rows
+}
+
+/// Cheat Genius: troca a ROM do core pela do adaptador e entrega a lista.
+/// `Some(n)` com o nº de entradas enviadas; em qualquer falha o jogo volta
+/// ao core e é `None` (o jogador segue sem a tela, nunca fica sem jogo).
+#[allow(clippy::too_many_arguments)]
+fn launch_genius(
+    core: &mut Core,
+    rom: &Path,
+    rom_bytes: &[u8],
+    sram_path: &Path,
+    last_sram: &mut Option<Vec<u8>>,
+    title: &str,
+    defs: &[sixteen_domain::CheatDef],
+    state: &[bool],
+    customs: &[crate::genius::Custom],
+) -> Option<usize> {
+    // A SRAM do jogo vai para o disco antes de a ROM sair do core.
+    flush_sram(sram_path, last_sram, core.sram());
+    core.unload_game();
+    let entries = crate::genius::build_entries(defs, state, customs);
+    let ok = core
+        .load_game(Path::new("cheat_genius.sfc"), crate::genius::ROM)
+        .is_ok()
+        && crate::genius::start(core, title, &entries);
+    if ok {
+        log::info!("cheat genius: {} entradas", entries.len());
+        Some(entries.len())
+    } else {
+        log::warn!("cheat genius: a ROM não carregou, seguindo sem ela");
+        restore_game(core, rom, rom_bytes, sram_path, last_sram);
+        None
+    }
+}
+
+/// Devolve o jogo ao core (depois do Cheat Genius), com a SRAM do disco.
+fn restore_game(
+    core: &mut Core,
+    rom: &Path,
+    rom_bytes: &[u8],
+    sram_path: &Path,
+    last_sram: &mut Option<Vec<u8>>,
+) {
+    core.unload_game();
+    if let Err(e) = core.load_game(rom, rom_bytes) {
+        log::error!("recarregar o jogo falhou: {e}");
+        return;
+    }
+    if let Ok(bytes) = fs::read(sram_path) {
+        core.load_sram(&bytes);
+    }
+    *last_sram = core.sram();
+}
+
 /// `(description, on)` pairs for the panel — cheap enough to rebuild on every
 /// toggle/navigate, there are only ever a handful.
 fn cheat_rows(defs: &[sixteen_domain::CheatDef], state: &[bool]) -> Vec<(String, bool)> {
     defs.iter()
         .zip(state)
         .map(|(d, &on)| (d.desc.to_string(), on))
-        .collect()
-}
-
-/// `cheat_rows`' pairs, formatted for the Cheats modal's row grid (plan
-/// revision — its own menu, not a page in the notebook): every row stays
-/// `enabled: true` (toggling is always available, unlike a save/load/print
-/// slot that can be dimmed), with an `[x]`/`[ ]` mark standing in for the
-/// on/off state a modal row otherwise has no way to show.
-fn cheat_modal_rows(cheats: &[(String, bool)]) -> Vec<(String, bool)> {
-    cheats
-        .iter()
-        .map(|(desc, on)| (format!("{}{desc}", if *on { "[x] " } else { "[ ] " }), true))
         .collect()
 }
 
@@ -837,13 +904,6 @@ enum NoteEdit {
     /// one also writes `runner::print_capture`'s image to disk for the
     /// first time — the capture and the name land together.
     PrintName(u8),
-    /// Typing the Cheats modal's search filter (plan revision — the
-    /// libretro-database expansion made some games' lists long enough that
-    /// finding one by eye/scroll alone stopped being practical). Unlike
-    /// every other `NoteEdit`, committing this one writes nothing to
-    /// disk — it just updates `Cabinet`'s in-memory filter and returns to
-    /// the Cheats modal's row grid rather than closing it.
-    CheatSearch,
 }
 
 impl NoteEdit {
@@ -851,7 +911,7 @@ impl NoteEdit {
         match self {
             NoteEdit::None => 0,
             NoteEdit::Text => NOTE_CHAR_LIMIT,
-            NoteEdit::SlotName | NoteEdit::PrintName(_) | NoteEdit::CheatSearch => SLOT_NAME_LIMIT,
+            NoteEdit::SlotName | NoteEdit::PrintName(_) => SLOT_NAME_LIMIT,
         }
     }
 
@@ -867,15 +927,11 @@ impl NoteEdit {
                 "renomeando o print (clique fora cancela)"
             ),
             NoteEdit::PrintName(_) => tr!("screenshot name (optional)", "nome do print (opcional)"),
-            NoteEdit::CheatSearch => tr!(
-                "cheat search (empty shows all)",
-                "buscar cheat (vazio mostra todos)"
-            ),
         }
     }
 }
 
-/// A save/load-state or print slot picker, or the cheats checklist (plan
+/// A save/load-state or print slot picker, or the achievements list (plan
 /// revision) — mutually exclusive with `paused` (the notebook has no
 /// slot-picking or cheats of its own any more) and gates gameplay stepping
 /// the same way `paused` does, so the frozen frame behind the dialog doesn't
@@ -888,14 +944,109 @@ enum Modal {
     /// Picking which of the 15 note slots to save the just-grabbed print
     /// into — see `runner::print_capture`.
     PrintSlot,
-    /// The curated cheats checklist (plan revision — split out of the
-    /// notebook into its own menu). Unlike the other three, a pick
-    /// (`ModalPick`) toggles a row in place and leaves the modal open
-    /// instead of closing it.
-    Cheats,
     /// The achievements list (plan: `docs/plano-retroachievements.md`,
     /// fase 4) — read-only rows with the earned state; a pick just closes.
     Achievements,
+    /// O "Menu do jogo" aberto pelo acorde Select+Start do gamepad — as
+    /// linhas estão em `menu_acts` (ver `game_menu_rows`).
+    GameMenu,
+}
+
+/// Ação de uma linha do Menu do jogo; cada uma dispara o `UiEvent` que o
+/// painel (mouse) já dispara.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuAct {
+    Continue,
+    Save,
+    Load,
+    Print,
+    Notes,
+    Achievements,
+    Reset,
+    Power,
+    Eject,
+    QuitApp,
+}
+
+/// As linhas do Menu do jogo para o estado atual: ligado, desligado (Ligar
+/// no lugar de Desligar) e com o adaptador do Cheat Genius no ar (só
+/// Desligar/Ejetar/Sair valem lá — o mesmo filtro dos cliques).
+fn game_menu_rows(powered: bool, genius: bool, has_ra: bool) -> Vec<(MenuAct, String)> {
+    let mut v = vec![(MenuAct::Continue, tr!("Resume", "Continuar").to_string())];
+    if powered && !genius {
+        v.push((
+            MenuAct::Save,
+            tr!("Save state", "Salvar estado").to_string(),
+        ));
+        v.push((
+            MenuAct::Load,
+            tr!("Load state", "Carregar estado").to_string(),
+        ));
+        v.push((MenuAct::Print, tr!("Screenshot", "Print").to_string()));
+        v.push((MenuAct::Notes, tr!("Notes", "Anotações").to_string()));
+        if has_ra {
+            v.push((
+                MenuAct::Achievements,
+                tr!("Achievements", "Conquistas").to_string(),
+            ));
+        }
+        v.push((MenuAct::Reset, "Reset".to_string()));
+    }
+    v.push((
+        MenuAct::Power,
+        if powered {
+            tr!("Power off", "Desligar")
+        } else {
+            tr!("Power on", "Ligar")
+        }
+        .to_string(),
+    ));
+    v.push((
+        MenuAct::Eject,
+        tr!("Eject (back to shelf)", "Ejetar (voltar à estante)").to_string(),
+    ));
+    v.push((MenuAct::QuitApp, tr!("Quit app", "Sair do app").to_string()));
+    v
+}
+
+/// Os `UiEvent`s que uma linha do Menu do jogo dispara. Ejetar com o
+/// console ligado desliga antes (o trinco não cede ligado).
+fn menu_act_events(act: MenuAct, powered: bool) -> Vec<UiEvent> {
+    match act {
+        MenuAct::Continue => vec![],
+        MenuAct::Save => vec![UiEvent::OpenSaveModal],
+        MenuAct::Load => vec![UiEvent::OpenLoadModal],
+        MenuAct::Print => vec![UiEvent::OpenPrintModal],
+        MenuAct::Notes => vec![UiEvent::TogglePause],
+        MenuAct::Achievements => vec![UiEvent::OpenAchievementsModal],
+        MenuAct::Reset => vec![UiEvent::Reset],
+        MenuAct::Power => vec![UiEvent::Quit],
+        MenuAct::Eject if powered => vec![UiEvent::Quit, UiEvent::Eject],
+        MenuAct::Eject => vec![UiEvent::Eject],
+        MenuAct::QuitApp => vec![UiEvent::CloseRequested],
+    }
+}
+
+/// Botões do pad durante o livro de pausa → o `UiEvent` do botão equivalente
+/// do mouse. Escrever/nomear abrem o editor de texto (ver o ponto de
+/// encaixe do teclado na tela no ramo `note_edit` do loop).
+fn book_pad_events(edges: u16) -> Vec<UiEvent> {
+    use sixteen_platform::padnav::bit;
+    let map = [
+        (bit::LEFT, UiEvent::NotePrev),
+        (bit::RIGHT, UiEvent::NoteNext),
+        (bit::LB, UiEvent::TextPrev),
+        (bit::RB, UiEvent::TextNext),
+        (bit::X, UiEvent::NotePinToggle),
+        (bit::Y, UiEvent::NoteNameStart),
+        (bit::START, UiEvent::NoteWriteStart),
+        (bit::SELECT, UiEvent::TextPinToggle),
+        (bit::B, UiEvent::TogglePause),
+    ];
+    map.into_iter()
+        .filter(|(b, _)| edges & b != 0)
+        .map(|(_, e)| e)
+        .collect()
 }
 
 /// One note slot's protection/caption (plan revision) — everything defaults
@@ -1165,15 +1316,13 @@ fn show_text_slot(cab: &mut Cabinet, notes_dir: &Path, title: &str, slot: u8, me
 }
 
 /// Headless `--debug-shot-modal`: monta um dos modais (salvar, carregar,
-/// print, cheats e variantes) em vez do gameplay, para a captura.
+/// print e o nome do print) em vez do gameplay, para a captura.
 fn preview_modal(
     cab: &mut Cabinet,
     kind: &str,
     spec: &GameSpec,
     title: &str,
     notes_meta: &NotesMeta,
-    cheat_defs: &[sixteen_domain::CheatDef],
-    cheat_state: &[bool],
 ) {
     match kind {
         "save" => cab.set_modal(
@@ -1202,39 +1351,26 @@ fn preview_modal(
                 NoteEdit::PrintName(1).heading(),
             );
         }
-        "cheats" => {
-            cab.set_modal(
-                "Cheats",
-                &cheat_modal_rows(&cheat_rows(cheat_defs, cheat_state)),
-            );
-            cab.set_modal_searchable(true);
+        // O Menu do jogo (acorde Select+Start) com o destaque do pad na 3a
+        // linha, e o modal de print (2 colunas) com o destaque na 10a.
+        "menu" => {
+            let rows: Vec<(String, bool)> = game_menu_rows(true, false, true)
+                .into_iter()
+                .map(|(_, l)| (l, true))
+                .collect();
+            cab.set_modal(tr!("Game menu", "Menu do jogo"), &rows);
+            cab.move_modal_cursor(0, 2, 0);
         }
-        // Previews the search box already filtered, without a live
-        // GUI to type into it — the filter word is fixed (dev/
-        // testing only, not configurable from the CLI).
-        "cheats-search" => {
+        "print-pad" => {
             cab.set_modal(
-                "Cheats",
-                &cheat_modal_rows(&cheat_rows(cheat_defs, cheat_state)),
+                tr!("Where to save the screenshot?", "Onde salvar o print?"),
+                &print_slot_rows(&spec.notes_dir, title, notes_meta),
             );
-            cab.set_modal_searchable(true);
-            cab.set_modal_search("infinit");
-        }
-        // Previews the on/off state filter, forcing the first
-        // cheat on first so "Ligados" has something to show
-        // (dev/testing only — no CLI way to pick which).
-        "cheats-filtered" => {
-            let mut state = cheat_state.to_vec();
-            if let Some(first) = state.first_mut() {
-                *first = true;
-            }
-            cab.set_modal("Cheats", &cheat_modal_rows(&cheat_rows(cheat_defs, &state)));
-            cab.set_modal_searchable(true);
-            cab.set_modal_filter(Some(true));
+            cab.move_modal_cursor(0, 9, 0);
         }
         other => {
             log::warn!(
-                "--debug-shot-modal {other}: unknown, expected save/load/print/print-name/cheats/cheats-search/cheats-filtered"
+                "--debug-shot-modal {other}: unknown, expected save/load/print/print-name/menu/print-pad"
             )
         }
     }
@@ -1390,7 +1526,10 @@ pub fn run_game(
     // We do our own NTSC (vendored blargg snes_ntsc, RF preset) on the raw
     // frame, so keep the core's built-in filter off.
     core.set_variable("snes9x_blargg", "disabled");
-    let mut ntsc = NtscFilter::new(Preset::Rf);
+    // O visual da tela da configuração (a tela de ajustes troca depois).
+    cab.set_screen_look(cfg.screen_look);
+    cab.set_screen_lines(cfg.screen_lines);
+    let mut ntsc = NtscFilter::new(crate::look_preset(cfg.screen_look));
 
     let av = core.av_info();
     log::info!(
@@ -1415,9 +1554,8 @@ pub fn run_game(
     // §4.4, revision) --- Matched by the ROM's own title (same string
     // saves/notes are keyed by), not the cartridge header any more — see
     // `sixteen_domain::cheats`'s doc comment for why. Empty if nothing in
-    // the database lines up with it. Loaded before the side panel below,
-    // since its command legend needs to know whether to show the Cheats
-    // button at all (plan revision).
+    // the database lines up with it. Choosing them happens in the Cheat
+    // Genius at power-on; the side panel only counts the ones on.
     let cheat_defs = sixteen_domain::cheats_for_title(&title);
     let cheat_path = cheat_state_path(&spec.save_dir, &title);
     let mut cheat_state = load_cheat_state(&cheat_path, cheat_defs.len());
@@ -1430,12 +1568,23 @@ pub fn run_game(
         log::info!("ra hardcore: cheats disabled for this session");
         cheat_state = vec![false; cheat_defs.len()];
     }
-    if !cheat_defs.is_empty() {
-        core.cheat_reset();
-        for (i, (def, &on)) in cheat_defs.iter().zip(&cheat_state).enumerate() {
-            core.cheat_set(i as u32, on, def.code);
-        }
-    }
+    // Cheat Genius: a ROM do adaptador roda no power-on e decide o que liga
+    // — é o único jeito de usar cheats. Fora no hardcore do RA (nada a
+    // escolher) e na captura headless (sem controle; aí o jogo roda sem
+    // cheats).
+    // `SIXTEEN_DEBUG_GENIUS=1` (dev): com `--shot` arma o Genius já ligado,
+    // para capturar a tela dele pelo mesmo caminho do jogo.
+    let debug_genius = std::env::var_os("SIXTEEN_DEBUG_GENIUS").is_some();
+    let genius_on = !ra_hardcore_active && (spec.shot.is_none() || debug_genius);
+    let custom_path = game_dir(&spec.save_dir, &title).join("custom_cheats.txt");
+    let mut customs: Vec<crate::genius::Custom> = if genius_on {
+        fs::read_to_string(&custom_path)
+            .map(|t| crate::genius::parse_customs(&t))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    // Quem aplica os cheats é o veredito do Genius, depois do power-on.
     // --- side panel: logo, cartridge art, command legend, session timer
     // (plan §3.2) — cartridge art is new (plan revision): a second, optional
     // image alongside the logo, same local-file convention.
@@ -1491,12 +1640,7 @@ pub fn run_game(
     // The command legend's last drawn signature (a "(feito!)" flash active?
     // all print slots pinned?) — `None` forces the first frame to draw it.
     let mut prev_sig: Option<(bool, bool)> = None;
-    let commands = command_rows(
-        &flash,
-        !cheat_defs.is_empty(),
-        ra_session.is_some(),
-        all_slots_pinned(&notes_meta),
-    );
+    let commands = command_rows(&flash, ra_session.is_some(), all_slots_pinned(&notes_meta));
     let decode_panel_art = |path: &Option<PathBuf>, kind: &str| {
         path.as_ref().and_then(|p| match decode_art(p, 640) {
             Ok(img) => Some(img),
@@ -1528,11 +1672,11 @@ pub fn run_game(
     // `set_cheats` has to come *after* `set_panel` — `set_panel` replaces
     // the whole `PanelInfo` (fresh `cheats: Vec::new()` included), so
     // calling this first, as an earlier revision did when the cheats-
-    // loading block moved up ahead of the panel block (for `command_rows`'
-    // `has_cheats` flag), silently wiped out the count before it ever
+    // loading block moved up ahead of the panel block, silently wiped out
+    // the count before it ever
     // reached the screen — a real bug, caught by testing the panel's
     // "N cheats ativados" line and finding it never showed up at all.
-    cab.set_cheats(&cheat_rows(&cheat_defs, &cheat_state));
+    cab.set_cheats(&all_cheat_rows(&cheat_defs, &cheat_state, &customs));
 
     // --- notes: the notebook block, empty until the first capture (§3.4) --
     fs::create_dir_all(&spec.notes_dir).ok();
@@ -1575,15 +1719,7 @@ pub fn run_game(
     // as the pause book above, just picking which modal by name.
     if let Some(kind) = &spec.debug_shot_modal {
         if let Some((path, _)) = &spec.shot {
-            preview_modal(
-                cab,
-                kind,
-                spec,
-                &title,
-                &notes_meta,
-                &cheat_defs,
-                &cheat_state,
-            );
+            preview_modal(cab, kind, spec, &title, &notes_meta);
             cab.capture_modal_bmp(path)
                 .map_err(|e| anyhow!(e.to_string()))?;
             log::info!("wrote {} (modal preview: {kind})", path.display());
@@ -1675,17 +1811,63 @@ pub fn run_game(
     // the free-text note, a slot's caption, or a just-captured print's name
     // (see `NoteEdit`).
     let mut note_edit = NoteEdit::None;
+    // Teclado na tela (gamepad) do editor de notas/legendas: nasce quando o
+    // editor abre (`note_field` = None) e some quando fecha.
+    let mut note_field: Option<(TextField, Osk)> = None;
     let mut note_draft = String::new();
     // A save/load-state or print slot picker (plan revision) — see `Modal`.
     let mut modal = Modal::None;
+    // Gamepad dentro do jogo: o acorde Select+Start abre o Menu do jogo
+    // (`Modal::GameMenu`); com um overlay aberto os botões físicos viram
+    // navegação (`padnav`).
+    let mut chord = sixteen_platform::padnav::Chord::default();
+    let mut edges = sixteen_platform::padnav::EdgeTracker::default();
+    let mut menu_acts: Vec<MenuAct> = Vec::new();
+    // O pad (não o mouse) está conduzindo: liga o destaque nos modais.
+    let mut pad_flow = false;
+    // Overlay recém-fechado com botão ainda apertado: o jogo só volta a
+    // ver o pad depois de soltar tudo (o B que fechou não vaza).
+    let mut input_gate = false;
+    let mut was_overlay = false;
+    let mut hint_shown = false;
     // Set the instant "Printscreen" is clicked; the frame that's live once
     // `core.run()` next produces one gets cloned into `print_capture` below
     // and held there until the player finishes naming it (or cancels).
     let mut print_pending = false;
     let mut print_capture: Option<EmuFrame> = None;
     log::info!("running: rf ntsc + crt tube");
+    // Cheat Genius: `genius_boot` fica armado até o primeiro power-on (e é
+    // rearmado pelo Reset, como num adaptador de verdade no slot);
+    // `genius_run` guarda quantas entradas a ROM em execução recebeu.
+    let mut genius_boot = genius_on;
+    let mut genius_run: Option<usize> = None;
+    if debug_genius && genius_on && spec.shot.is_some() {
+        genius_boot = false;
+        genius_run = launch_genius(
+            &mut core,
+            &spec.rom,
+            &rom_bytes,
+            &sram_path,
+            &mut last_sram,
+            &title,
+            &cheat_defs,
+            &cheat_state,
+            &customs,
+        );
+    }
 
     let exit = 'run: loop {
+        use sixteen_platform::padnav::bit;
+        let pad_bits = plat.pad_bits();
+        let overlay_open = paused || modal != Modal::None || note_edit != NoteEdit::None;
+        // Com overlay aberto (ou o acorde em curso) o pad não troca de
+        // porta: quem aperta Select+Start continua sendo o mesmo jogador.
+        plat.set_hold_pad_order(overlay_open || chord.progress() > 0.0);
+        if was_overlay && !overlay_open && pad_bits != 0 {
+            input_gate = true;
+        }
+        was_overlay = overlay_open;
+        let nav_edges = edges.update(pad_bits, frame_time);
         // Editing (text or a caption) is the one deliberate keyboard-typing
         // exception (plan revision) — while it's open, poll for composed
         // text/backspace/commit/cancel instead of gameplay input, so a key
@@ -1693,40 +1875,27 @@ pub fn run_game(
         if note_edit != NoteEdit::None {
             // Naming a fresh print (plan revision) renders in the modal, not
             // the notebook — everything else about polling/typing is shared.
-            let in_modal = matches!(note_edit, NoteEdit::PrintName(_) | NoteEdit::CheatSearch);
+            let in_modal = matches!(note_edit, NoteEdit::PrintName(_));
             let te = plat.poll_text_entry();
-            if te.quit {
+            let (field, osk) = note_field.get_or_insert_with(|| {
+                let mut osk = Osk::new();
+                osk.begin(plat.last_input_was_pad());
+                (TextField::new(&note_draft, note_edit.limit(), false), osk)
+            });
+            let outcome = osk.update(&te, field, plat);
+            if matches!(outcome, OskOutcome::Quit) {
                 break 'run GameExit::Quit;
             }
-            if te.backspace {
-                note_draft.pop();
-            }
-            for c in te.typed.chars() {
-                if note_draft.chars().count() < note_edit.limit() {
-                    note_draft.push(c);
-                }
-            }
-            // ⌘V/⌘C (Ctrl no resto) — o mesmo esquema de clipboard de todo
-            // campo de texto; o colado redesenha o rascunho como a digitação.
-            if let Some(paste) = &te.paste {
-                for c in paste.chars() {
-                    if note_draft.chars().count() < note_edit.limit() {
-                        note_draft.push(c);
-                    }
-                }
-            }
-            if te.copy {
-                plat.set_clipboard_text(&note_draft);
-            }
-            if !te.typed.is_empty() || te.backspace || te.paste.is_some() {
+            if field.text() != note_draft {
+                note_draft = field.text().to_string();
                 if in_modal {
                     cab.set_modal_draft(Some(&note_draft), note_edit.limit(), note_edit.heading());
                 } else {
                     cab.set_pause_draft(Some(&note_draft), note_edit.limit(), note_edit.heading());
                 }
             }
-            let mut save = te.commit;
-            let mut cancel = te.cancel;
+            let mut save = matches!(outcome, OskOutcome::Commit);
+            let mut cancel = matches!(outcome, OskOutcome::Cancel);
             if let Some((x, y)) = te.click {
                 let (ox, oy) = cab.window_to_output(x, y);
                 let hit = if in_modal {
@@ -1797,35 +1966,31 @@ pub fn run_game(
                             }
                         }
                     }
-                    NoteEdit::CheatSearch => cab.set_modal_search(note_draft.trim()),
                     _ => {}
                 }
             }
             if save || cancel {
                 if in_modal {
                     cab.set_modal_draft(None, 0, "");
-                    if matches!(note_edit, NoteEdit::CheatSearch) {
-                        // Searching narrows the same Cheats modal rather
-                        // than acting on a pick — stay in it, just back on
-                        // the (maybe newly filtered) row grid, unlike
-                        // every other in-modal edit here, which is always
-                        // a one-shot action that closes the dialog.
-                    } else {
-                        modal = Modal::None;
-                        print_capture = None;
-                        cab.clear_modal();
-                    }
+                    modal = Modal::None;
+                    print_capture = None;
+                    cab.clear_modal();
                 } else {
                     cab.set_pause_draft(None, 0, "");
                 }
                 note_edit = NoteEdit::None;
                 note_draft.clear();
+                note_field = None;
                 plat.stop_text_input(cab);
             }
-            if in_modal {
-                cab.present_modal();
-            } else {
-                cab.present_pause();
+            match note_field.as_ref().filter(|(_, o)| o.shown()) {
+                // Com o controle: o teclado na tela ocupa o lugar do livro.
+                Some((field, osk)) => {
+                    let heading = note_edit.heading();
+                    cab.frame_2d((18, 18, 20), |d| osk.draw(d, field, heading));
+                }
+                None if in_modal => cab.present_modal(),
+                None => cab.present_pause(),
             }
             pace_frame(&mut next, frame_time);
             continue;
@@ -1852,8 +2017,8 @@ pub fn run_game(
                         cab.minimize();
                         None
                     } else if modal != Modal::None {
-                        // Not reachable during the naming/searching step —
-                        // that's `NoteEdit::PrintName`/`CheatSearch`, polled
+                        // Not reachable during the naming step — that's
+                        // `NoteEdit::PrintName`, polled
                         // via `poll_text_entry` instead (above), so `Click`
                         // never comes through `plat.poll()` while it's open.
                         match cab.hit_modal_button(ox, oy) {
@@ -1861,10 +2026,6 @@ pub fn run_game(
                             Some(PanelButton::ModalCancel) => Some(UiEvent::ModalCancel),
                             Some(PanelButton::ModalScrollUp) => Some(UiEvent::ModalScrollUp),
                             Some(PanelButton::ModalScrollDown) => Some(UiEvent::ModalScrollDown),
-                            Some(PanelButton::ModalSearchStart) => Some(UiEvent::ModalSearchStart),
-                            Some(PanelButton::ModalFilterAll) => Some(UiEvent::ModalFilterAll),
-                            Some(PanelButton::ModalFilterOn) => Some(UiEvent::ModalFilterOn),
-                            Some(PanelButton::ModalFilterOff) => Some(UiEvent::ModalFilterOff),
                             _ => None,
                         }
                     } else if paused {
@@ -1900,7 +2061,6 @@ pub fn run_game(
                             PanelButton::Eject => Some(UiEvent::Eject),
                             PanelButton::Reset => Some(UiEvent::Reset),
                             PanelButton::Notebook => Some(UiEvent::TogglePause),
-                            PanelButton::Cheats => Some(UiEvent::OpenCheatsModal),
                             PanelButton::Achievements => Some(UiEvent::OpenAchievementsModal),
                             // The shelf's own list button is shelf-side.
                             PanelButton::ShelfAchievements => None,
@@ -1934,18 +2094,100 @@ pub fn run_game(
                             | PanelButton::ModalConfirm
                             | PanelButton::ModalCancel
                             | PanelButton::ModalScrollUp
-                            | PanelButton::ModalScrollDown
-                            | PanelButton::ModalSearchStart
-                            | PanelButton::ModalFilterAll
-                            | PanelButton::ModalFilterOn
-                            | PanelButton::ModalFilterOff => None,
+                            | PanelButton::ModalScrollDown => None,
                         })
                     }
                 }
                 other => Some(other),
             })
             .collect();
-        for ev in events {
+        // Com a tela do Cheat Genius no ar só valem Desligar, Ejetar e fechar:
+        // nada de notas, estados ou modais por cima da ROM do adaptador.
+        let events: Vec<UiEvent> = if genius_run.is_some() {
+            events
+                .into_iter()
+                .filter(|e| matches!(e, UiEvent::Quit | UiEvent::Eject | UiEvent::CloseRequested))
+                .collect()
+        } else {
+            events
+        };
+        let mut events: std::collections::VecDeque<UiEvent> = events.into();
+        // Mouse na jogada: o destaque do pad sai dos modais.
+        if events.iter().any(|e| matches!(e, UiEvent::Click(..))) {
+            pad_flow = false;
+        }
+        // --- Gamepad dentro do jogo ---
+        let overlay_now = paused || modal != Modal::None;
+        let mut swallow_menu_btns = false;
+        if overlay_now {
+            // Overlay aberto: os botões físicos navegam (o jogo está parado).
+            chord.reset_latched();
+            if nav_edges != 0 {
+                pad_flow = true;
+            }
+            if modal != Modal::None {
+                let d = |neg: u16, pos: u16| {
+                    (nav_edges & pos != 0) as i32 - (nav_edges & neg != 0) as i32
+                };
+                let (dx, dy) = (d(bit::LEFT, bit::RIGHT), d(bit::UP, bit::DOWN));
+                let page = d(bit::LB, bit::RB) * 5;
+                if dx != 0 || dy != 0 || page != 0 {
+                    cab.move_modal_cursor(dx, dy, page);
+                }
+                if nav_edges & bit::A != 0 {
+                    match cab.modal_cursor() {
+                        Some(i) => events.push_back(UiEvent::ModalPick(i as u16)),
+                        // Primeiro toque só mostra o destaque.
+                        None => cab.show_modal_cursor(),
+                    }
+                }
+                if nav_edges & bit::B != 0 {
+                    events.push_back(UiEvent::ModalCancel);
+                }
+            } else {
+                events.extend(book_pad_events(nav_edges));
+            }
+        } else {
+            let out = chord.update(pad_bits, frame_time);
+            swallow_menu_btns = out.swallow;
+            if out.fire {
+                // Abre o Menu do jogo (acorde Select+Start segurado).
+                let rows = game_menu_rows(powered, genius_run.is_some(), ra_session.is_some());
+                menu_acts = rows.iter().map(|(a, _)| *a).collect();
+                let labels: Vec<(String, bool)> =
+                    rows.into_iter().map(|(_, l)| (l, true)).collect();
+                cab.clear_modal();
+                modal = Modal::GameMenu;
+                cab.set_modal(tr!("Game menu", "Menu do jogo"), &labels);
+                pad_flow = true;
+                edges.swallow_held(pad_bits);
+                swallow_menu_btns = true;
+            }
+        }
+        if pad_flow && modal != Modal::None {
+            cab.show_modal_cursor();
+        }
+        // Acorde segurado ou botão que fechou um overlay: o jogo não vê.
+        let hide_pad = swallow_menu_btns;
+        // Dica única ~2 s depois do jogo começar (o acorde não tem outra
+        // pista na tela): só com um pad conectado.
+        if !hint_shown && powered && frames >= 120 {
+            hint_shown = true;
+            if !plat.gamepad_slots().is_empty() {
+                cab.push_osd(
+                    &[tr!(
+                        "hold Select+Start = menu",
+                        "segure Select+Start = menu"
+                    )],
+                    None,
+                    Duration::from_secs(4),
+                );
+            }
+        }
+        if input_gate && pad_bits == 0 {
+            input_gate = false;
+        }
+        while let Some(ev) = events.pop_front() {
             match ev {
                 UiEvent::Quit if fault.is_some() => {
                     // Desligar na falha: o core volta ao encaixe (a falha
@@ -1995,6 +2237,20 @@ pub fn run_game(
                             ra.reset();
                         }
                         log::info!("power on — resuming");
+                        if genius_boot {
+                            genius_boot = false;
+                            genius_run = launch_genius(
+                                &mut core,
+                                &spec.rom,
+                                &rom_bytes,
+                                &sram_path,
+                                &mut last_sram,
+                                &title,
+                                &cheat_defs,
+                                &cheat_state,
+                                &customs,
+                            );
+                        }
                     }
                 }
                 UiEvent::Eject => {
@@ -2043,7 +2299,23 @@ pub fn run_game(
                 }
                 UiEvent::CloseRequested => break 'run GameExit::Quit,
                 UiEvent::Reset => {
-                    if powered {
+                    if powered && genius_on && genius_run.is_none() {
+                        // O adaptador está no slot: reiniciar passa por ele de
+                        // novo, e é aqui que se muda os cheats.
+                        genius_run = launch_genius(
+                            &mut core,
+                            &spec.rom,
+                            &rom_bytes,
+                            &sram_path,
+                            &mut last_sram,
+                            &title,
+                            &cheat_defs,
+                            &cheat_state,
+                            &customs,
+                        );
+                        crate::sfx::play(cab, crate::sfx::Sfx::Reset);
+                        flash.insert(PanelButton::Reset, Instant::now());
+                    } else if powered {
                         core.reset();
                         crate::sfx::play(cab, crate::sfx::Sfx::Reset);
                         // Momentary rocker (plan revision) — springs back on
@@ -2217,25 +2489,6 @@ pub fn run_game(
                         &rows,
                     );
                 }
-                UiEvent::OpenCheatsModal if powered && !cheat_defs.is_empty() => {
-                    if ra_hardcore_active {
-                        cab.push_osd(
-                            &[
-                                tr!("HARDCORE MODE", "MODO HARDCORE"),
-                                tr!("cheats blocked", "cheats bloqueados"),
-                            ],
-                            None,
-                            Duration::from_secs(3),
-                        );
-                        continue;
-                    }
-                    modal = Modal::Cheats;
-                    cab.set_modal(
-                        "Cheats",
-                        &cheat_modal_rows(&cheat_rows(&cheat_defs, &cheat_state)),
-                    );
-                    cab.set_modal_searchable(true);
-                }
                 UiEvent::OpenPrintModal if powered => {
                     if all_slots_pinned(&notes_meta) {
                         log::warn!("print skipped: all {NOTE_SLOTS} slots pinned");
@@ -2249,7 +2502,7 @@ pub fn run_game(
                 UiEvent::ModalPick(i) => match modal {
                     // Save/load/print never have more than 15 rows — safe
                     // to narrow back to `u8` (`ModalPick` is `u16` only
-                    // because the Cheats modal, below, can run past 255).
+                    // because the achievements list can be longer).
                     Modal::SaveSlot => {
                         let path = state_file(&spec.save_dir, &title, i as u8);
                         match core.save_state() {
@@ -2299,30 +2552,15 @@ pub fn run_game(
                         modal = Modal::None;
                         cab.clear_modal();
                     }
-                    Modal::Cheats => {
-                        let idx = i as usize;
-                        if idx < cheat_defs.len() {
-                            cheat_state[idx] = !cheat_state[idx];
-                            // A single `cheat_set(idx, false, ...)` isn't
-                            // enough to actually undo a sustained memory
-                            // patch on every core (a real report: the row
-                            // showed off, the effect stayed on) — reset and
-                            // reapply every cheat's current state, the same
-                            // belt-and-suspenders sequence the boot-time
-                            // load above already uses.
-                            core.cheat_reset();
-                            for (j, (def, &on)) in cheat_defs.iter().zip(&cheat_state).enumerate() {
-                                core.cheat_set(j as u32, on, def.code);
+                    Modal::GameMenu => {
+                        let act = menu_acts.get(i as usize).copied();
+                        modal = Modal::None;
+                        cab.clear_modal();
+                        if let Some(act) = act {
+                            // Fica no começo da fila: roda já, na ordem.
+                            for e in menu_act_events(act, powered).into_iter().rev() {
+                                events.push_front(e);
                             }
-                            save_cheat_state(&cheat_path, &cheat_state);
-                            let rows = cheat_rows(&cheat_defs, &cheat_state);
-                            cab.set_cheats(&rows);
-                            cab.set_modal("Cheats", &cheat_modal_rows(&rows));
-                            log::info!(
-                                "cheat {:?}: {}",
-                                cheat_defs[idx].desc,
-                                if cheat_state[idx] { "on" } else { "off" }
-                            );
                         }
                     }
                     Modal::None => {}
@@ -2334,23 +2572,6 @@ pub fn run_game(
                 }
                 UiEvent::ModalScrollUp if modal != Modal::None => cab.scroll_modal(-1),
                 UiEvent::ModalScrollDown if modal != Modal::None => cab.scroll_modal(1),
-                UiEvent::ModalSearchStart if modal == Modal::Cheats => {
-                    note_edit = NoteEdit::CheatSearch;
-                    note_draft = cab.modal_search_query().to_string();
-                    cab.set_modal_draft(
-                        Some(&note_draft),
-                        NoteEdit::CheatSearch.limit(),
-                        NoteEdit::CheatSearch.heading(),
-                    );
-                    plat.start_text_input(cab);
-                }
-                UiEvent::ModalFilterAll if modal == Modal::Cheats => cab.set_modal_filter(None),
-                UiEvent::ModalFilterOn if modal == Modal::Cheats => {
-                    cab.set_modal_filter(Some(true))
-                }
-                UiEvent::ModalFilterOff if modal == Modal::Cheats => {
-                    cab.set_modal_filter(Some(false))
-                }
                 // The rest only make sense with the console on (or, for the
                 // pause-book trio, only while actually paused); ignored
                 // otherwise. `Click` never reaches this match — it's already
@@ -2360,14 +2581,9 @@ pub fn run_game(
                 | UiEvent::OpenSaveModal
                 | UiEvent::OpenLoadModal
                 | UiEvent::OpenAchievementsModal
-                | UiEvent::OpenCheatsModal
                 | UiEvent::OpenPrintModal
                 | UiEvent::ModalScrollUp
                 | UiEvent::ModalScrollDown
-                | UiEvent::ModalSearchStart
-                | UiEvent::ModalFilterAll
-                | UiEvent::ModalFilterOn
-                | UiEvent::ModalFilterOff
                 | UiEvent::NotePrev
                 | UiEvent::NoteNext
                 | UiEvent::NoteWriteStart
@@ -2387,16 +2603,17 @@ pub fn run_game(
         let all_pinned = all_slots_pinned(&notes_meta);
         let sig = (flashing_now, all_pinned);
         if Some(sig) != prev_sig {
-            cab.set_commands(&command_rows(
-                &flash,
-                !cheat_defs.is_empty(),
-                ra_session.is_some(),
-                all_pinned,
-            ));
+            cab.set_commands(&command_rows(&flash, ra_session.is_some(), all_pinned));
             prev_sig = Some(sig);
         }
         cab.set_reset_pressed(reset_pressed(&flash));
 
+        if let (Some(_), true) = (&fault, modal != Modal::None) {
+            // O Menu do jogo aberto sobre a falha: só o modal.
+            cab.present_modal();
+            pace_frame(&mut next, frame_time);
+            continue;
+        }
         if let Some(f) = &mut fault {
             f.frame(
                 &mut core,
@@ -2414,19 +2631,69 @@ pub fn run_game(
 
         if !powered {
             cab.set_session_time(session.now());
+            if modal != Modal::None {
+                // Menu do jogo com o console desligado (Ligar/Ejetar/Sair).
+                cab.present_modal();
+                pace_frame(&mut next, frame_time);
+                continue;
+            }
             cab.present_static(OFF_STATIC_LEVEL);
             pace_frame(&mut next, frame_time);
             continue;
         }
 
         if !paused && modal == Modal::None {
+            use sixteen_platform::PadButton as P;
             for port in 0..MAX_PORTS {
                 for (rb, pb) in PAD {
-                    core.set_button(port, rb, input.held(port, pb));
+                    // Select/Start engolidos enquanto o acorde está em curso;
+                    // `input_gate` zera tudo até soltar o botão que fechou
+                    // o overlay.
+                    let hidden = input_gate || (hide_pad && matches!(pb, P::Select | P::Start));
+                    core.set_button(port, rb, !hidden && input.held(port, pb));
                 }
             }
             core.run();
             frames += 1;
+            // Cheat Genius decidiu? Devolve o jogo ao core e aplica a escolha.
+            if let Some(sent) = genius_run {
+                if let Some(v) = crate::genius::poll(&mut core, sent) {
+                    genius_run = None;
+                    restore_game(&mut core, &spec.rom, &rom_bytes, &sram_path, &mut last_sram);
+                    audio.clear();
+                    let rows = if v.play {
+                        crate::genius::apply_verdict(&v, &mut cheat_state, &mut customs);
+                        save_cheat_state(&cheat_path, &cheat_state);
+                        if let Err(e) =
+                            write_atomic(&custom_path, crate::genius::serialize_customs(&customs))
+                        {
+                            log::warn!("custom cheats flush failed: {e}");
+                        }
+                        apply_cheats(&mut core, &cheat_defs, &cheat_state, &customs);
+                        log::info!(
+                            "cheat genius: jogar — {} do banco e {} próprio(s) ligados",
+                            cheat_state.iter().filter(|&&b| b).count(),
+                            customs.iter().filter(|c| c.on).count()
+                        );
+                        all_cheat_rows(&cheat_defs, &cheat_state, &customs)
+                    } else {
+                        // B: este jogo roda sem nenhum, o que estava salvo
+                        // continua salvo para a próxima vez.
+                        core.cheat_reset();
+                        log::info!("cheat genius: cancelado, jogando sem cheats");
+                        let off: Vec<crate::genius::Custom> = customs
+                            .iter()
+                            .map(|c| crate::genius::Custom {
+                                code: c.code.clone(),
+                                on: false,
+                            })
+                            .collect();
+                        all_cheat_rows(&cheat_defs, &vec![false; cheat_defs.len()], &off)
+                    };
+                    cab.set_cheats(&rows);
+                    continue;
+                }
+            }
             if spec.debug_note_capture && frames == debug_note_frame {
                 note_request = Some(note_slot);
             }
@@ -2457,7 +2724,7 @@ pub fn run_game(
 
             // RA evaluation (plan fase 3) — the real frame's RAM, before any
             // speculative run-ahead frames mutate the state further.
-            if let (true, Some(ra)) = (powered, &mut ra_session) {
+            if let (true, Some(ra)) = (powered && genius_run.is_none(), &mut ra_session) {
                 let mut unlocks = Vec::new();
                 core.with_memory(sixteen_emulation::MEMORY_SYSTEM_RAM, |ram| {
                     unlocks = ra.tick(ram);
@@ -2490,6 +2757,7 @@ pub fn run_game(
                 // O menu de imagem da TV mexe no filtro de verdade (só refaz
                 // a tabela quando o valor muda).
                 ntsc.set_picture(crate::ntsc_picture(cab.picture()));
+                ntsc.set_preset(crate::look_preset(cab.screen_look()));
                 // RF NTSC on RGB565 frames; anything else passes straight through.
                 let fref = if frame.format == EmuFormat::Rgb565 {
                     ntsc_frame(
@@ -2593,6 +2861,48 @@ pub fn run_game(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn game_menu_rows_follow_the_console_state() {
+        use super::{game_menu_rows, menu_act_events, MenuAct};
+        use sixteen_platform::UiEvent;
+        let acts = |p, g, r| -> Vec<MenuAct> {
+            game_menu_rows(p, g, r)
+                .into_iter()
+                .map(|(a, _)| a)
+                .collect()
+        };
+        let on = acts(true, false, false);
+        assert_eq!(on.first(), Some(&MenuAct::Continue));
+        assert!(on.contains(&MenuAct::Notes) && !on.contains(&MenuAct::Achievements));
+        assert!(acts(true, false, true).contains(&MenuAct::Achievements));
+        // Desligado ou com o Genius no ar: só Continuar/Ligar/Ejetar/Sair.
+        for v in [acts(false, false, true), acts(true, true, true)] {
+            assert!(!v.contains(&MenuAct::Save) && !v.contains(&MenuAct::Reset));
+            assert!(v.contains(&MenuAct::Power) && v.contains(&MenuAct::Eject));
+        }
+        // Ejetar ligado desliga primeiro.
+        assert_eq!(
+            menu_act_events(MenuAct::Eject, true),
+            vec![UiEvent::Quit, UiEvent::Eject]
+        );
+        assert_eq!(menu_act_events(MenuAct::Eject, false), vec![UiEvent::Eject]);
+        assert!(menu_act_events(MenuAct::Continue, true).is_empty());
+    }
+
+    #[test]
+    fn book_pad_buttons_map_to_the_panel_events() {
+        use super::book_pad_events;
+        use sixteen_platform::padnav::bit;
+        use sixteen_platform::UiEvent;
+        assert_eq!(book_pad_events(bit::LEFT), vec![UiEvent::NotePrev]);
+        assert_eq!(book_pad_events(bit::B), vec![UiEvent::TogglePause]);
+        assert_eq!(book_pad_events(bit::A | bit::DOWN), vec![]);
+        assert_eq!(
+            book_pad_events(bit::X | bit::START),
+            vec![UiEvent::NotePinToggle, UiEvent::NoteWriteStart]
+        );
+    }
+
     #[test]
     fn sanitize_dir_name_never_escapes_the_parent() {
         use super::sanitize_dir_name;

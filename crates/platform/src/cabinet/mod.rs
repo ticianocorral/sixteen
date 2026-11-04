@@ -27,6 +27,8 @@ mod chin;
 mod chrome;
 mod controls;
 mod geometry;
+mod looks;
+mod osk;
 mod panel;
 mod panel_art;
 mod pause;
@@ -35,6 +37,7 @@ mod text;
 mod tv;
 
 pub use blow::{BlowButton, BlowScene, Dust};
+pub use looks::{ScreenLines, ScreenLook};
 pub use rf::RfAudio;
 use tv::TvExtras;
 pub use tv::{Picture, TvSound, TvSpeaker};
@@ -44,6 +47,8 @@ use chin::*;
 use chrome::*;
 use controls::*;
 use geometry::*;
+use looks::LookState;
+pub use osk::{layout as osk_layout, Osk, OskAct, OskLayout, OskOutcome, TextField};
 use panel::*;
 use panel_art::*;
 use pause::*;
@@ -382,6 +387,11 @@ pub struct Cabinet {
     /// Clickable buttons on the settings panel drawn last frame —
     /// `hit_settings_button` scans this.
     settings_buttons: Vec<(SettingsButton, Rect)>,
+    /// O foco do controle (anel em volta de um botão do painel/queixo/
+    /// nameplate) e quantos quadros ele ainda vale — a tela dona renova a
+    /// cada quadro; sem renovação o anel some sozinho (não vaza de uma
+    /// tela para outra).
+    pad_focus: Option<(PadFocus, u8)>,
     /// The audio subsystem handle, for the ambient static hiss (plan
     /// revision: "som de chiado de tv fora do ar") — the hiss engine itself
     /// lives here because `present_static` is where "TV fora do ar" happens.
@@ -449,6 +459,8 @@ pub struct Cabinet {
     /// A TV e o quarto: menu de imagem, burn-in, sons do tubo,
     /// alto-falante e luz do quarto (`tv.rs`).
     tvx: TvExtras,
+    /// O visual da tela e os efeitos por cima da imagem (`looks.rs`).
+    looks: LookState,
     /// The "CH 3" channel banner's deadline during gameplay (plan revision:
     /// "quando ligar o console, mostrar por 3 segundos e remover da tela")
     /// — `None` means not showing. The static path (`present_static`)
@@ -547,6 +559,17 @@ enum ChinOsd {
         hardcore: bool,
     },
     None,
+}
+
+/// Um botão físico/de painel que o foco do controle pode apontar — o
+/// anel é desenhado em volta dele ([`Cabinet::set_pad_focus`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PadFocus {
+    Panel(PanelButton),
+    Shelf(ShelfButton),
+    Settings(SettingsButton),
+    Tv(TvControl),
+    Arrow(UpdateArrow),
 }
 
 /// Um controle físico do queixo da TV (ver `Cabinet::hit_tv_controls`).
@@ -678,18 +701,8 @@ pub enum PanelButton {
     /// Opens a modal to pick which save-state slot to load, mirroring
     /// `SaveState`.
     LoadState,
-    /// Opens the Cheats modal (plan revision — split out of the notebook,
-    /// which had no natural home for a checklist next to the photo album).
-    /// Absent from the panel entirely for a cartridge with no curated
-    /// cheats, same "hide rather than show an empty screen" rule as the
-    /// other modal-opening buttons.
-    Cheats,
     /// One slot row inside whichever modal (`SaveState`/`LoadState`/
-    /// `PrintScreen`) is open right now, or one cheat row inside the Cheats
-    /// modal (plan revision — same click addresses both a pick and a
-    /// toggle; which it means depends on which modal is open). `u16`, not
-    /// `u8` (plan revision): a database-heavy game's Cheats list can run
-    /// well past 255 rows.
+    /// `PrintScreen`) is open right now.
     ModalSlot(u16),
     /// Confirm the modal's text step (naming a print).
     ModalConfirm,
@@ -699,15 +712,6 @@ pub enum PanelButton {
     /// so only clickable) once the row count overflows the card.
     ModalScrollUp,
     ModalScrollDown,
-    /// Click the search box on a searchable modal (plan revision — today
-    /// only Cheats) to start typing a filter.
-    ModalSearchStart,
-    /// On a searchable modal (today only Cheats): show every row, only the
-    /// ones checked on, or only the ones off (plan revision) — a segmented
-    /// three-way control, one of the three always "active" (`lit`).
-    ModalFilterAll,
-    ModalFilterOn,
-    ModalFilterOff,
     /// Drawn only on the pause book screen (not the side panel): resume play.
     PauseContinue,
     /// Pause book: step the right page (the photo album) to an earlier/
@@ -881,42 +885,25 @@ struct ModalRow {
     enabled: bool,
 }
 
-/// A modal dialog (plan revision) — save/load-state, "which slot for this
-/// print", and the Cheats checklist: a title, a grid of rows, and a Cancel
-/// button; lighter than the two-page pause book, since picking (or, for
-/// Cheats, toggling) a row is the whole job here. Once a print's slot is
+/// A modal dialog (plan revision) — save/load-state and "which slot for
+/// this print": a title, a grid of rows, and a Cancel button; lighter than
+/// the two-page pause book, since picking a row is the whole job here. Once a print's slot is
 /// picked, `draft` replaces the row grid with a text field (name it) plus
 /// Confirm/Cancel — same idea as the pause book's own draft mode
 /// (`PauseNote::draft`), just a lighter home for it.
 struct ModalInfo {
     title: String,
     rows: Vec<ModalRow>,
-    /// Index of the first visible row-of-columns (plan revision — a
-    /// database-heavy Cheats list can run to thousands of rows, so
-    /// `draw_modal` only ever renders a page of them at a time). Preserved
-    /// across a `set_modal` call that keeps the dialog open (Cheats
-    /// refreshing its own checkmarks after a toggle) so a click deep in a
-    /// long list doesn't jump the view back to the top; reset to 0 only on
-    /// a fresh open (see `Cabinet::set_modal`) or a new search filter (see
-    /// `Cabinet::set_modal_search`).
+    /// Index of the first visible row-of-columns — `draw_modal` only ever
+    /// renders a page of rows at a time. Preserved across a `set_modal`
+    /// call that keeps the dialog open; reset to 0 only on a fresh open
+    /// (see `Cabinet::set_modal`).
     scroll: usize,
-    /// Whether this modal offers a search box at all (plan revision — only
-    /// Cheats does; Save/Load/Print's lists are always small enough that
-    /// hunting for one by eye is fine). Set once by whoever opens the
-    /// modal, alongside `set_modal`.
-    searchable: bool,
-    /// Current filter text (plan revision) — empty means "show every row".
-    /// A row matches when its label contains this, case-insensitively.
-    /// Preserved across `set_modal` the same way `scroll` is.
-    search_query: String,
-    /// On/off state filter (plan revision, Cheats-only like `search_query`
-    /// — drawn only when `searchable`): `None` shows every row, `Some(true)`
-    /// only the ones checked on, `Some(false)` only the ones off. Derived
-    /// per-row from the `[x] `/`[ ] ` prefix `cheat_modal_rows` already
-    /// encodes into the label for display — see `row_checked` — rather
-    /// than threading a second parallel array through `set_modal` just for
-    /// this. Preserved across `set_modal` the same way `search_query` is.
-    cheat_filter: Option<bool>,
+    /// Linha destacada pelo gamepad e se ela aparece (só depois que o pad
+    /// mexeu; o mouse apaga). Com o destaque ligado `draw_modal` rola a
+    /// grade para mantê-la visível.
+    cursor: usize,
+    cursor_on: bool,
     draft: Option<String>,
     draft_limit: usize,
     draft_heading: String,
@@ -929,9 +916,8 @@ struct ModalInfo {
 /// clickable row per entry, rebuilt every frame by the caller since several
 /// labels are live state (e.g. a "(feito!)" flash) — see
 /// `Cabinet::set_commands`. `cheats` (item 4, plan §4.4) is
-/// informational-only here now — `(description, on)` pairs, only the ones
-/// that are on get drawn, plain text; toggling lives in its own Cheats modal
-/// (plan revision), reachable from a `commands` row like any other.
+/// informational-only — `(description, on)` pairs, only counted ("N cheats
+/// ativados"); choosing them happens in the Cheat Genius at power-on.
 struct PanelInfo {
     has_logo: bool,
     has_cartridge: bool,
@@ -1094,6 +1080,8 @@ struct CrtMesh {
     indices: Vec<i32>,
     w: u32,
     h: u32,
+    /// A curvatura com que foi feita (o visual da tela a muda).
+    warp: f32,
 }
 
 /// The chamfered ring from the window edge to the recessed screen.
@@ -1336,8 +1324,10 @@ impl Cabinet {
             volume: 8,
             volume_osd_until: None,
             tv_power_buttons: None,
+            pad_focus: None,
             foley: None,
             tvx: TvExtras::new(),
+            looks: LookState::default(),
             ch3_until: None,
             tv_channel: 3,
             canvas_rect,
@@ -1616,8 +1606,8 @@ impl Cabinet {
         // stops moving (sub-pixel after three rounds; eight for free).
         let (mut cx, mut cy) = (dx, dy);
         for _ in 0..8 {
-            cy = dy / (1.0 - CRT_WARP * cx * cx);
-            cx = dx / (1.0 - CRT_WARP * cy * cy);
+            cy = dy / (1.0 - crt_warp() * cx * cx);
+            cx = dx / (1.0 - crt_warp() * cy * cy);
         }
         if !(-1.0..=1.0).contains(&cx) || !(-1.0..=1.0).contains(&cy) {
             // In the recess between the warped picture's corner and the
@@ -1772,10 +1762,9 @@ impl Cabinet {
 
     /// Update the side panel's cheat list (plan §4.4): `cheats` is
     /// `(description, on)` pairs in the curated order, shown informationally
-    /// here (only the ones that are on, plain text) — toggling lives in the
-    /// Cheats modal now (plan revision: its own menu, not a page inside the
-    /// notebook). Call once at game start and again on every toggle — the
-    /// list is always tiny. A no-op before `set_panel`.
+    /// here (only the ones that are on are counted) — choosing them happens
+    /// in the Cheat Genius at power-on. Call at game start and again after
+    /// every Cheat Genius verdict. A no-op before `set_panel`.
     pub fn set_cheats(&mut self, cheats: &[(String, bool)]) {
         if let Some(panel) = &mut self.panel {
             panel.cheats = cheats.to_vec();
@@ -1863,26 +1852,18 @@ impl Cabinet {
         }
     }
 
-    /// Open (or replace) a save/load-state, print slot, or Cheats picker
-    /// (plan revision): `title` names the dialog, `rows` is one `(label,
+    /// Open (or replace) a save/load-state or print slot picker (plan
+    /// revision): `title` names the dialog, `rows` is one `(label,
     /// enabled)` pair per slot in order — a disabled row (e.g. "Carregar"
     /// on an empty slot, or a pinned print slot) still shows, just dimmed
-    /// and unclickable. Scroll position, `searchable`, and any active
-    /// search filter all carry over from whatever modal was already open
-    /// (Cheats calls this again after every toggle, to redraw its
-    /// checkmarks, without wanting the view to jump back to the top or
-    /// forget the filter) — only a genuinely fresh open (no modal was
-    /// showing) starts scrolled to the top with no filter and not
-    /// searchable; call `set_modal_searchable` right after opening one that
-    /// should be.
+    /// and unclickable. The scroll position carries over from whatever
+    /// modal was already open; only a genuinely fresh open (no modal was
+    /// showing) starts scrolled to the top.
     pub fn set_modal(&mut self, title: &str, rows: &[(String, bool)]) {
         let scroll = self.modal.as_ref().map_or(0, |m| m.scroll);
-        let searchable = self.modal.as_ref().is_some_and(|m| m.searchable);
-        let search_query = self
-            .modal
-            .as_ref()
-            .map_or_else(String::new, |m| m.search_query.clone());
-        let cheat_filter = self.modal.as_ref().and_then(|m| m.cheat_filter);
+        let (cursor, cursor_on) = self.modal.as_ref().map_or((0, false), |m| {
+            (m.cursor.min(rows.len().saturating_sub(1)), m.cursor_on)
+        });
         self.modal = Some(ModalInfo {
             title: title.to_string(),
             rows: rows
@@ -1893,53 +1874,41 @@ impl Cabinet {
                 })
                 .collect(),
             scroll,
-            searchable,
-            search_query,
-            cheat_filter,
+            cursor,
+            cursor_on,
             draft: None,
             draft_limit: 0,
             draft_heading: String::new(),
         });
     }
 
-    /// Set the Cheats modal's on/off state filter (plan revision): `None`
-    /// shows every row, `Some(true)`/`Some(false)` only the ones checked
-    /// on/off. Resets `scroll` to 0, same reasoning as `set_modal_search`.
-    /// A no-op before `set_modal`.
-    pub fn set_modal_filter(&mut self, filter: Option<bool>) {
+    /// Liga o destaque do gamepad no modal aberto (sem mexer na linha).
+    pub fn show_modal_cursor(&mut self) {
         if let Some(m) = &mut self.modal {
-            m.cheat_filter = filter;
-            m.scroll = 0;
+            m.cursor_on = true;
         }
     }
 
-    /// Mark whether the open modal offers a search box (plan revision —
-    /// today only the Cheats modal does). Call once, right after opening
-    /// it — `set_modal`'s own refreshes (Cheats redrawing its checkmarks
-    /// after each toggle) carry this forward on their own.
-    pub fn set_modal_searchable(&mut self, searchable: bool) {
+    /// Move o destaque: `dy` passos na lista (dá a volta), `dx` entre as
+    /// colunas, `page` salta linhas sem dar a volta (LB/RB). Liga o destaque.
+    pub fn move_modal_cursor(&mut self, dx: i32, dy: i32, page: i32) {
         if let Some(m) = &mut self.modal {
-            m.searchable = searchable;
+            let n = m.rows.len();
+            let cols = if n > 8 { 2 } else { 1 };
+            m.cursor_on = true;
+            m.cursor = crate::padnav::move_cursor(m.cursor, n, cols, dx, dy);
+            if page != 0 {
+                m.cursor = crate::padnav::page_cursor(m.cursor, n, page);
+            }
         }
     }
 
-    /// Set the modal's search filter (plan revision): empty clears it. A
-    /// new filter resets `scroll` to 0 — whatever page was showing under
-    /// the old filter is unlikely to mean anything under the new one. A
-    /// no-op before `set_modal`.
-    pub fn set_modal_search(&mut self, query: &str) {
-        if let Some(m) = &mut self.modal {
-            m.search_query = query.to_string();
-            m.scroll = 0;
-        }
-    }
-
-    /// The modal's current search filter, e.g. to pre-fill the search
-    /// box's text field when the player reopens it to refine a query.
-    /// Empty (not `None`) before `set_modal` — same "nothing to filter" as
-    /// an explicitly cleared search.
-    pub fn modal_search_query(&self) -> &str {
-        self.modal.as_ref().map_or("", |m| m.search_query.as_str())
+    /// A linha destacada, se o gamepad a está usando (`None` com o mouse).
+    pub fn modal_cursor(&self) -> Option<usize> {
+        self.modal
+            .as_ref()
+            .filter(|m| m.cursor_on && !m.rows.is_empty())
+            .map(|m| m.cursor)
     }
 
     /// Scroll the modal's row grid by `delta` visual rows (negative = up) —
@@ -1949,6 +1918,7 @@ impl Cabinet {
     /// here too.
     pub fn scroll_modal(&mut self, delta: i32) {
         if let Some(m) = &mut self.modal {
+            m.cursor_on = false; // rolou com o mouse: o destaque do pad sai
             m.scroll = (m.scroll as i32 + delta).max(0) as usize;
         }
     }
@@ -1981,10 +1951,67 @@ impl Cabinet {
             .map(|(b, _)| *b)
     }
 
+    /// Aponta o foco do controle para um botão (anel em volta dele, no
+    /// próximo `present`); `None` apaga. Vale por poucos quadros — a tela
+    /// dona chama a cada quadro.
+    pub fn set_pad_focus(&mut self, focus: Option<PadFocus>) {
+        self.pad_focus = focus.map(|f| (f, 3));
+    }
+
+    /// Os botões do painel da estante desenhados no último quadro, em ordem
+    /// de leitura (de cima para baixo, esquerda para a direita) — o que a navegação por controle percorre.
+    pub fn shelf_button_list(&self) -> Vec<ShelfButton> {
+        let mut v: Vec<&(ShelfButton, Rect)> = self.shelf_buttons.iter().collect();
+        v.sort_by_key(|(_, r)| (r.y(), r.x()));
+        v.into_iter().map(|(b, _)| *b).collect()
+    }
+
+    /// Idem para o painel da tela inicial.
+    pub fn panel_button_list(&self) -> Vec<PanelButton> {
+        let mut v: Vec<&(PanelButton, Rect)> = self.panel_buttons.iter().collect();
+        v.sort_by_key(|(_, r)| (r.y(), r.x()));
+        v.into_iter().map(|(b, _)| *b).collect()
+    }
+
+    /// O retângulo (coordenadas de canvas) do botão focado, se foi
+    /// desenhado no último quadro.
+    fn pad_focus_rect(&self, f: PadFocus) -> Option<Rect> {
+        fn find<B: PartialEq>(list: &[(B, Rect)], want: B) -> Option<Rect> {
+            list.iter().find(|(b, _)| *b == want).map(|(_, r)| *r)
+        }
+        match f {
+            PadFocus::Panel(b) => find(&self.panel_buttons, b),
+            PadFocus::Shelf(b) => find(&self.shelf_buttons, b),
+            PadFocus::Settings(b) => find(&self.settings_buttons, b),
+            PadFocus::Tv(t) => self.tv_power_buttons.map(|c| match t {
+                TvControl::Power => c.power,
+                TvControl::VolUp => c.vol_up,
+                TvControl::VolDown => c.vol_down,
+                TvControl::Channel => c.ch,
+                TvControl::Menu => c.menu,
+            }),
+            PadFocus::Arrow(UpdateArrow::App) => self.update_arrows.0,
+            PadFocus::Arrow(UpdateArrow::Core) => self.update_arrows.1,
+        }
+    }
+
+    fn draw_pad_focus(&mut self) {
+        let Some((f, ttl)) = self.pad_focus else {
+            return;
+        };
+        self.pad_focus = (ttl > 1).then_some((f, ttl - 1));
+        if let Some(r) = self.pad_focus_rect(f) {
+            self.canvas.set_viewport(Some(self.canvas_rect));
+            draw_focus_ring(&mut self.canvas, r);
+            self.canvas.set_viewport(None);
+        }
+    }
+
     /// Present of every frame, through the trace watchdog (`SIXTEEN_TRACE=
     /// 1`): present is where a GPU/compositor/display stall shows up — telling
     /// it apart from a slow app loop is the whole point of the trace.
     fn present_and_time(&mut self) {
+        self.draw_pad_focus();
         self.feed_tv_sound();
         let _span = super::TraceSpan::new("present");
         self.canvas.present();
@@ -2160,11 +2187,16 @@ impl Cabinet {
         let src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        let mut src = src;
+        let mut looks = std::mem::take(&mut self.looks);
         if !matches!(phase, TvPhase::Dead) {
+            looks.prepare(&mut self.canvas, &mesh, &src);
             let _ = self
                 .canvas
                 .render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+            looks.draw(&mut self.canvas, &mesh, &mut src);
         }
+        self.looks = looks;
         // A máscara da fase por cima do que ficou no vidro (mesma do
         // estático: faixas mortas, borda âmbar, ponto do afterglow, vidro
         // morto inteiro).
@@ -2282,9 +2314,11 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
 
         self.prepare_glass();
-        let src = self.src.take().unwrap();
+        let mut src = self.src.take().unwrap();
         let mesh = self.mesh.take().unwrap();
         let bezel = self.bezel.take().unwrap();
+        let mut looks = std::mem::take(&mut self.looks);
+        looks.prepare(&mut self.canvas, &mesh, &src);
         self.ensure_brand_logo();
         let panel_info = self.panel.as_ref();
         let session = self.session;
@@ -2320,6 +2354,7 @@ impl Cabinet {
             // vivo faz no gameplay).
             if !matches!(phase, TvPhase::Dead) {
                 let _ = c.render_geometry(&mesh.verts, Some(&src.tex), &mesh.indices[..]);
+                looks.draw(c, &mesh, &mut src);
             }
             draw_tv_glass_phase(c, screen, &phase);
             tv::draw_glass(c, font, &mesh, screen, &glass);
@@ -2375,6 +2410,7 @@ impl Cabinet {
                 .and_then(|s| s.save_bmp(path))
                 .map_err(|e| PlatformError::Sdl(e.to_string()));
         });
+        self.looks = looks;
         self.src = Some(src);
         self.mesh = Some(mesh);
         self.bezel = Some(bezel);
@@ -2438,7 +2474,7 @@ impl Cabinet {
 
     fn ensure_mesh(&mut self, dst: Rect) {
         let (w, h) = (dst.width(), dst.height());
-        if matches!(&self.mesh, Some(m) if m.w == w && m.h == h) {
+        if matches!(&self.mesh, Some(m) if m.w == w && m.h == h && m.warp == crt_warp()) {
             return;
         }
         self.mesh = Some(build_crt_mesh(dst, 1.0));
@@ -2449,12 +2485,14 @@ impl Cabinet {
     fn ensure_fade_meshes(&mut self, alpha: f32) {
         self.ensure_mesh(self.screen);
         let base = self.mesh.as_ref().unwrap();
-        if !matches!(&self.fade_mesh, Some(m) if m.w == base.w && m.h == base.h) {
+        if !matches!(&self.fade_mesh, Some(m) if m.w == base.w && m.h == base.h && m.warp == base.warp)
+        {
             self.fade_mesh = Some(CrtMesh {
                 verts: base.verts.clone(),
                 indices: base.indices.clone(),
                 w: base.w,
                 h: base.h,
+                warp: base.warp,
             });
         }
         let alpha = alpha.clamp(0.0, 1.0);
@@ -2471,7 +2509,6 @@ impl Cabinet {
         if !matches!(&self.bezel, Some(b) if b.key == key) {
             self.bezel = Some(build_bezel_mesh(out_w, out_h, screen, key));
         }
-        self.light_bezel();
     }
 
     // --- 2D path (selector) --------------------------------------------
@@ -2645,6 +2682,7 @@ impl Cabinet {
         self.ensure_brand_logo(); // a marca do queixo na captura
         let font = &mut self.font;
         let images = &self.images;
+        let focus = self.pad_focus.map(|(f, _)| f);
         let shelf_panel = self.shelf_panel.as_ref();
         let nameplate = self.nameplate.as_str();
         let nameplate_updates = self.nameplate_updates;
@@ -2669,7 +2707,12 @@ impl Cabinet {
             // Os controles do queixo no BMP — a captura bate com a janela
             // real, que os desenha em toda a moldura.
             chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), tv_on);
-            let _ = draw_shelf_panel(c, font, images, shelf_panel, panel);
+            let btns = draw_shelf_panel(c, font, images, shelf_panel, panel);
+            if let Some(PadFocus::Shelf(want)) = focus {
+                if let Some((_, r)) = btns.iter().find(|(b, _)| *b == want) {
+                    draw_focus_ring(c, *r);
+                }
+            }
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
             c.set_viewport(None);
@@ -3953,6 +3996,36 @@ impl Screen<'_> {
         let mut indices = Vec::with_capacity(30);
         for k in 1..=10 {
             indices.extend_from_slice(&[0, k, k % 10 + 1]);
+        }
+        let _ = self
+            .canvas
+            .render_geometry(&verts, None::<&Texture>, &indices[..]);
+    }
+
+    /// Uma elipse cheia centrada em (cx, cy) — os botões redondos do
+    /// controle desenhado na tela de controles.
+    pub fn ellipse(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, c: (u8, u8, u8, u8)) {
+        const SEG: usize = 40;
+        let color = FColor::RGBA(
+            c.0 as f32 / 255.0,
+            c.1 as f32 / 255.0,
+            c.2 as f32 / 255.0,
+            c.3 as f32 / 255.0,
+        );
+        let vtx = |x: f32, y: f32| Vertex {
+            position: sdl3::render::FPoint::new(x, y),
+            color,
+            tex_coord: sdl3::render::FPoint::new(0.0, 0.0),
+        };
+        let mut verts = Vec::with_capacity(SEG + 1);
+        verts.push(vtx(cx, cy));
+        for k in 0..SEG {
+            let t = k as f32 / SEG as f32 * std::f32::consts::TAU;
+            verts.push(vtx(cx + rx * t.cos(), cy + ry * t.sin()));
+        }
+        let mut indices = Vec::with_capacity(SEG * 3);
+        for k in 1..=SEG as i32 {
+            indices.extend_from_slice(&[0, k, k % SEG as i32 + 1]);
         }
         let _ = self
             .canvas

@@ -31,7 +31,19 @@ fn main() -> Result<()> {
     let max_frames: Option<u64> = arg(&args, "--frames").and_then(|s| s.parse().ok());
     let shot = arg(&args, "--shot").map(PathBuf::from);
     let preset_filter = arg(&args, "--filter").map(str::to_string);
+    // Foco do controle para o screenshot: header:filter | panel:N | osk:texto.
+    if let Some(spec) = arg(&args, "--debug-pad") {
+        shelf::set_debug_pad(spec);
+    }
+    // Cartão da sugestão da noite: `--debug-night-shot --shot out.bmp --frames N`.
+    let debug_night = args.iter().any(|a| a == "--debug-night-shot");
+    if debug_night {
+        shelf::set_debug_night();
+    }
     let debug_history = args.iter().any(|a| a == "--debug-history-shot");
+    // Álbum de prints: `--debug-album-shot --shot out.bmp [--notes-dir D]
+    // [--album-view] [--album-filter] [--album-cursor N]`.
+    let debug_album = args.iter().any(|a| a == "--debug-album-shot");
     // O móvel da estante: `--theme metal|hifi|memphis|arcade`.
     let theme = match arg(&args, "--theme") {
         Some("metal") => ShelfTheme::Metal,
@@ -57,6 +69,25 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if let (true, Some(path)) = (debug_album, &shot) {
+        let notes = arg(&args, "--notes-dir")
+            .map(PathBuf::from)
+            .unwrap_or_else(dirs::notes_dir);
+        let cursor = arg(&args, "--album-cursor")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        sixteen_app::album::capture_album_preview(
+            &mut cab,
+            &notes,
+            path,
+            args.iter().any(|a| a == "--album-view"),
+            args.iter().any(|a| a == "--album-filter"),
+            cursor,
+        )?;
+        log::info!("wrote {} (album preview)", path.display());
+        return Ok(());
+    }
+
     let opts = ShelfOpts {
         order,
         max_frames,
@@ -65,6 +96,7 @@ fn main() -> Result<()> {
         preset_filter,
         ra: None,
         theme,
+        night_pick: debug_night,
     };
     match shelf::run(&mut plat, &mut cab, &catalog, &opts)? {
         Pick::Play { rom, .. } => {
@@ -85,6 +117,12 @@ fn main() -> Result<()> {
             eprintln!(
                 "historico's live loop isn't wired up in `selector` — use `sixteen`, or \
                  --debug-history-shot --shot for a headless preview"
+            );
+            std::process::exit(1);
+        }
+        Pick::Album => {
+            eprintln!(
+                "the album isn't wired up in `selector` — use `sixteen`, or --debug-album-shot"
             );
             std::process::exit(1);
         }

@@ -14,16 +14,20 @@
 //! - [`shelf`] — the selector grid (`selector`, and `sixteen` between games).
 //! - [`update_check`] — startup checks for a newer release/snes9x core.
 
+pub mod album;
 pub mod config;
 pub mod console_art;
 mod contato;
+mod controls_screen;
 pub mod core_update;
 pub mod dat_update;
 pub mod devmenu;
 pub mod dirs;
 pub mod exemplo;
+pub mod genius;
 pub mod idle;
 pub mod manual;
+pub mod night_pick;
 pub mod ra;
 pub mod rom_rename;
 pub mod runner;
@@ -44,7 +48,8 @@ pub fn apply_tv_settings(cfg: &config::Config, cab: &mut Cabinet) {
     });
     cab.set_flyback(cfg.flyback_whine);
     cab.set_burn_in(cfg.burn_in);
-    cab.set_room_light(cfg.room_light);
+    cab.set_screen_look(cfg.screen_look);
+    cab.set_screen_lines(cfg.screen_lines);
     let [brilho, contraste, cor, nitidez] = cfg.tv_picture;
     cab.set_picture(Picture {
         brilho,
@@ -62,6 +67,20 @@ pub fn sync_tv_picture(cfg: &mut config::Config, cab: &Cabinet) -> bool {
     let changed = cfg.tv_picture != now;
     cfg.tv_picture = now;
     changed
+}
+
+/// O sinal (preset do filtro NTSC) de cada visual da tela.
+pub fn look_preset(look: sixteen_platform::ScreenLook) -> sixteen_ntsc::Preset {
+    use sixteen_ntsc::Preset;
+    use sixteen_platform::ScreenLook as L;
+    match look {
+        L::Rf => Preset::Rf,
+        L::Composite => Preset::Composite,
+        L::SVideo | L::Trinitron => Preset::SVideo,
+        L::Pvm => Preset::Rgb,
+        L::Lcd => Preset::Sharp,
+        L::Mono => Preset::Monochrome,
+    }
 }
 
 /// O menu de imagem da TV em ajustes do filtro NTSC: 50 = o preset puro,

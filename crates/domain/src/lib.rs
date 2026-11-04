@@ -9,7 +9,7 @@ pub mod nointro;
 pub mod rom;
 
 pub use catalog::{Catalog, CatalogEntry, CatalogError, Order, RomRow};
-pub use cheats::{for_title as cheats_for_title, CheatDef};
+pub use cheats::{for_title as cheats_for_title, is_valid_code as is_valid_cheat_code, CheatDef};
 pub use infos::InfosData;
 pub use library::{scan, ScannedRom, ROM_EXTS};
 pub use nointro::{NoIntroDat, NoIntroError};

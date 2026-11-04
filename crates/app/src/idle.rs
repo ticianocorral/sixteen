@@ -26,7 +26,9 @@ use std::sync::mpsc;
 use anyhow::Result;
 #[allow(unused_imports)]
 use sixteen_platform::tr;
-use sixteen_platform::{Cabinet, MenuMode, MenuNav, PanelButton, Platform, Screen, UpdateArrow};
+use sixteen_platform::{
+    Cabinet, MenuMode, MenuNav, PadFocus, PanelButton, Platform, Screen, TvControl, UpdateArrow,
+};
 
 use crate::core_update::{self, CoreUpdateMsg};
 use crate::update_check::UpdateNotice;
@@ -298,6 +300,112 @@ impl Download {
     }
 }
 
+impl Download {
+    /// Começa o download do núcleo (o caminho do controle — o do mouse tem a
+    /// mesma lógica inline). `panel`: o botão/seta do painel, que também
+    /// reabre o estado "baixando" mesmo depois de instalado.
+    fn start_core(&mut self, panel: bool) {
+        if self.rx.is_some() {
+            return;
+        }
+        match core_update::core_download_url() {
+            Some(url) => {
+                let (tx, rx) = mpsc::channel();
+                let dest = crate::dirs::core_dir();
+                std::thread::spawn(move || core_update::download_and_install(&url, &dest, &tx));
+                self.rx = Some(rx);
+                self.failed = false;
+                if panel {
+                    self.done = false;
+                    self.label = tr!("downloading...".to_string(), "baixando...".to_string());
+                }
+            }
+            None => {
+                self.label = tr!(
+                    "not available for this system — check settings".to_string(),
+                    "indisponível neste sistema — veja as configurações".to_string()
+                );
+            }
+        }
+    }
+
+    /// Começa o download do `nointro.dat`.
+    fn start_dat(&mut self) {
+        if self.rx.is_some() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        let dest = crate::dat_update::dat_path();
+        std::thread::spawn(move || crate::dat_update::download_and_install(&dest, &tx));
+        self.rx = Some(rx);
+    }
+}
+
+/// Um alvo do foco do controle na tela inicial.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdleFocus {
+    Panel(PanelButton),
+    Arrow(UpdateArrow),
+    /// O botão POWER da TV — sem ele, quem só tem controle não liga a TV.
+    Power,
+}
+
+/// Os alvos que o controle percorre, em ordem: botões do painel (em ordem
+/// de leitura), as setas verdes de update e, por último, o POWER da TV.
+/// `drawn` é a lista de botões que o painel desenhou no último quadro.
+fn idle_items(drawn: &[PanelButton], app_update: bool, core_stale: bool) -> Vec<IdleFocus> {
+    let mut v: Vec<IdleFocus> = drawn
+        .iter()
+        .filter(|b| {
+            matches!(
+                b,
+                PanelButton::Insert
+                    | PanelButton::Settings
+                    | PanelButton::ConsoleManual
+                    | PanelButton::Dev
+                    | PanelButton::CoreDownload
+            )
+        })
+        .map(|b| IdleFocus::Panel(*b))
+        .collect();
+    if app_update {
+        v.push(IdleFocus::Arrow(UpdateArrow::App));
+    }
+    if core_stale {
+        v.push(IdleFocus::Arrow(UpdateArrow::Core));
+    }
+    v.push(IdleFocus::Power);
+    v
+}
+
+/// O foco efetivo: o escolhido, se ainda existe; senão o padrão — "Inserir
+/// cartucho", ou o download do núcleo quando falta, ou o primeiro da lista.
+fn resolve_focus(items: &[IdleFocus], chosen: Option<IdleFocus>) -> IdleFocus {
+    if let Some(f) = chosen.filter(|f| items.contains(f)) {
+        return f;
+    }
+    [
+        IdleFocus::Panel(PanelButton::Insert),
+        IdleFocus::Panel(PanelButton::CoreDownload),
+    ]
+    .into_iter()
+    .find(|f| items.contains(f))
+    .or_else(|| items.first().copied())
+    .unwrap_or(IdleFocus::Power)
+}
+
+/// Passo do foco: Cima/Esquerda para trás, Baixo/Direita para frente, com
+/// volta nas pontas.
+fn step_focus(items: &[IdleFocus], cur: IdleFocus, forward: bool) -> IdleFocus {
+    let n = items.len().max(1);
+    let at = items.iter().position(|f| *f == cur).unwrap_or(0);
+    items[if forward {
+        (at + 1) % n
+    } else {
+        (at + n - 1) % n
+    }]
+}
+
 /// Run the idle screen until the player opens the shelf or quits.
 /// `static_level` is the signal-off snow to show — the steady dim hiss at
 /// startup or after Esc on the shelf, or whatever level a just-ejected game
@@ -362,6 +470,19 @@ pub fn run(
     let mut update_status = String::new();
     let mut update_rects: (UpdateBtn, UpdateBtn) = ((0, 0, 1, 1), (0, 0, 1, 1));
     let mut console_manual: Option<ConsoleManual> = None;
+    // Jogar só com o controle: o foco da tela de setup (0 núcleo, 1 DAT,
+    // 2 continuar), o da tela inicial, a confirmação de sair (B) e se a
+    // legenda dos botões já apareceu nesta visita.
+    let mut setup_focus: usize = if !core_installed {
+        0
+    } else if !dat_installed {
+        1
+    } else {
+        2
+    };
+    let mut idle_focus: Option<IdleFocus> = None;
+    let mut confirm_quit = false;
+    let mut legend_shown = false;
 
     loop {
         let core_was_done = core.done;
@@ -490,6 +611,27 @@ pub fn run(
             log::info!("devmode: on");
         }
 
+        // "Sair do SixteeN?": B na tela inicial não sai de uma vez (um B de
+        // sobra no controle fecharia o app). A/Start confirma, B volta.
+        if confirm_quit {
+            for nav in &m.nav {
+                match nav {
+                    MenuNav::Confirm | MenuNav::Start => return Ok(IdleExit::Quit),
+                    MenuNav::Back => confirm_quit = false,
+                    _ => {}
+                }
+            }
+            if let Some((x, y)) = m.click {
+                let (ox, oy) = cab.window_to_output(x, y);
+                if cab.hit_close_button(ox, oy) {
+                    return Ok(IdleExit::Quit);
+                }
+            }
+            cab.frame_idle_2d(SETUP_BG, draw_quit_confirm);
+            crate::runner::pace_frame(&mut next, frame);
+            continue;
+        }
+
         if setup {
             let (w, h) = cab.screen_size();
             let mut dismiss = false;
@@ -539,8 +681,25 @@ pub fn run(
             // "continuar" — Back still quits.
             for nav in &m.nav {
                 match nav {
-                    MenuNav::Confirm => dismiss = true,
-                    MenuNav::Back => return Ok(IdleExit::Quit),
+                    MenuNav::Up => setup_focus = setup_focus.saturating_sub(1),
+                    MenuNav::Down => setup_focus = (setup_focus + 1).min(2),
+                    // A no botão em foco: baixa o núcleo/DAT ou continua.
+                    MenuNav::Confirm => match setup_focus {
+                        0 if !core.done => core.start_core(false),
+                        1 if !dat.done => dat.start_dat(),
+                        2 => dismiss = true,
+                        _ => {}
+                    },
+                    // X: baixa o que falta, na ordem (núcleo primeiro).
+                    MenuNav::Alt => {
+                        if !core.done {
+                            core.start_core(false);
+                        } else if !dat.done {
+                            dat.start_dat();
+                        }
+                    }
+                    MenuNav::Start => dismiss = true,
+                    MenuNav::Back => confirm_quit = true,
                     _ => {}
                 }
             }
@@ -562,6 +721,7 @@ pub fn run(
                         &dat_label,
                         dat_done,
                         dat_busy,
+                        setup_focus,
                     )
                 };
                 cab.frame_idle_2d(SETUP_BG, render);
@@ -589,8 +749,8 @@ pub fn run(
             let mut close = false;
             for nav in &m.nav {
                 match nav {
-                    MenuNav::Left => man.prev(),
-                    MenuNav::Right => man.next(),
+                    MenuNav::Left | MenuNav::PageUp => man.prev(),
+                    MenuNav::Right | MenuNav::PageDown => man.next(),
                     MenuNav::Back => close = true,
                     _ => {}
                 }
@@ -637,9 +797,15 @@ pub fn run(
                 let u = update_view.as_ref().expect("checado acima");
                 (u.tag.clone(), u.changelog.clone(), u.asset_url.clone())
             };
+            // Os dois botões da tela — pelo mouse ou pelo controle (A age no
+            // botão principal, B volta).
+            let mut press_voltar = false;
+            let mut press_btn = false;
             for nav in &m.nav {
-                if matches!(nav, MenuNav::Back) && update_rx.is_none() {
-                    update_view = None;
+                match nav {
+                    MenuNav::Back if update_rx.is_none() => press_voltar = true,
+                    MenuNav::Confirm => press_btn = true,
+                    _ => {}
                 }
             }
             if let Some((x, y)) = m.click {
@@ -650,50 +816,50 @@ pub fn run(
                 if let Some((sx, sy)) = cab.hit_screen_point(ox, oy) {
                     let (btn, voltar) = update_rects;
                     if in_update_rect(sx, sy, voltar) {
-                        update_view = None;
-                    } else if in_update_rect(sx, sy, btn) && update_applied {
-                        // "reiniciar agora": o pacote já está aplicado no
-                        // disco — relança e encerra a sessão atual.
-                        match crate::update_check::relaunch() {
-                            Ok(()) => return Ok(IdleExit::Quit),
-                            Err(e) => {
-                                update_status = tr!(
-                                    format!("couldn't relaunch ({e}) — open the app again"),
-                                    format!("não consegui relançar ({e}) — abra o app de novo")
-                                );
-                            }
-                        }
-                    } else if in_update_rect(sx, sy, btn)
-                        && update_rx.is_none()
-                        && apply_rx.is_none()
-                        && asset_url.is_some()
-                    {
-                        // "Atualizar": baixa o asset da plataforma para o
-                        // diretório de updates e aplica em seguida (plan
-                        // revision: "ao clicar em atualizar o app, ele faz
-                        // o download mas nao atualiza nada" — o apply só
-                        // acontecia no arranque seguinte, sem sinal nenhum).
-                        let (tx, rx) = mpsc::channel();
-                        let (ptx, prx) = mpsc::channel();
-                        let url = asset_url.unwrap_or_default();
-                        let dest = crate::dirs::update_dir();
-                        std::thread::spawn(move || {
-                            let result = crate::update_check::download_asset(&url, &dest, &ptx)
-                                .map(|p| {
-                                    p.file_name()
-                                        .unwrap_or_default()
-                                        .to_string_lossy()
-                                        .into_owned()
-                                });
-                            let _ = tx.send(result);
-                        });
-                        update_rx = Some(rx);
-                        update_progress_rx = Some(prx);
-                        update_pct = None;
-                        update_status =
-                            tr!("downloading...".to_string(), "baixando...".to_string());
+                        press_voltar = true;
+                    } else if in_update_rect(sx, sy, btn) {
+                        press_btn = true;
                     }
                 }
+            }
+            if press_voltar {
+                update_view = None;
+            } else if press_btn && update_applied {
+                // "reiniciar agora": o pacote já está aplicado no
+                // disco — relança e encerra a sessão atual.
+                match crate::update_check::relaunch() {
+                    Ok(()) => return Ok(IdleExit::Quit),
+                    Err(e) => {
+                        update_status = tr!(
+                            format!("couldn't relaunch ({e}) — open the app again"),
+                            format!("não consegui relançar ({e}) — abra o app de novo")
+                        );
+                    }
+                }
+            } else if press_btn && update_rx.is_none() && apply_rx.is_none() && asset_url.is_some()
+            {
+                // "Atualizar": baixa o asset da plataforma para o
+                // diretório de updates e aplica em seguida (plan
+                // revision: "ao clicar em atualizar o app, ele faz
+                // o download mas nao atualiza nada" — o apply só
+                // acontecia no arranque seguinte, sem sinal nenhum).
+                let (tx, rx) = mpsc::channel();
+                let (ptx, prx) = mpsc::channel();
+                let url = asset_url.unwrap_or_default();
+                let dest = crate::dirs::update_dir();
+                std::thread::spawn(move || {
+                    let result = crate::update_check::download_asset(&url, &dest, &ptx).map(|p| {
+                        p.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned()
+                    });
+                    let _ = tx.send(result);
+                });
+                update_rx = Some(rx);
+                update_progress_rx = Some(prx);
+                update_pct = None;
+                update_status = tr!("downloading...".to_string(), "baixando...".to_string());
             }
             let busy = update_rx.is_some() || apply_rx.is_some();
             let status = update_status.clone();
@@ -826,14 +992,78 @@ pub fn run(
                 _ => {}
             }
         }
+        // O controle na tela inicial: d-pad passeia pelos botões do painel,
+        // pelas setas de update e pelo POWER da TV (anel lavanda); A ativa o
+        // foco; Start abre as configurações; X baixa o núcleo quando falta;
+        // B pergunta se quer sair.
+        let items = idle_items(&cab.panel_button_list(), app_update.is_some(), core_stale);
+        let mut focus = resolve_focus(&items, idle_focus);
         for nav in m.nav {
             match nav {
-                // Same gate as the panel buttons above: without the core
-                // there's nowhere to go but out — Confirm is inert, Back
-                // still quits.
-                MenuNav::Confirm if !core_missing && cab.tv_on() => return Ok(IdleExit::OpenShelf),
-                MenuNav::Back => return Ok(IdleExit::Quit),
+                MenuNav::Up | MenuNav::Left => {
+                    focus = step_focus(&items, focus, false);
+                    idle_focus = Some(focus);
+                }
+                MenuNav::Down | MenuNav::Right => {
+                    focus = step_focus(&items, focus, true);
+                    idle_focus = Some(focus);
+                }
+                MenuNav::Confirm => match focus {
+                    IdleFocus::Power => cab.apply_tv_control(TvControl::Power),
+                    IdleFocus::Panel(PanelButton::Insert) if !core_missing => {
+                        if cab.tv_on() {
+                            return Ok(IdleExit::OpenShelf);
+                        }
+                        // Sem TV ligada a estante não abre: o A liga a TV
+                        // (o mouse teria o botão POWER para isso).
+                        cab.apply_tv_control(TvControl::Power);
+                    }
+                    IdleFocus::Panel(PanelButton::Settings) if !core_missing => {
+                        return Ok(IdleExit::OpenSettings)
+                    }
+                    IdleFocus::Panel(PanelButton::Dev) if cab.dev_mode() => {
+                        return Ok(IdleExit::OpenDev)
+                    }
+                    IdleFocus::Panel(PanelButton::ConsoleManual) => {
+                        console_manual = ConsoleManual::open()
+                    }
+                    IdleFocus::Panel(PanelButton::CoreDownload) => core.start_core(true),
+                    IdleFocus::Arrow(UpdateArrow::App) if app_update.is_some() => {
+                        update_view = app_update.clone();
+                        update_status.clear();
+                    }
+                    IdleFocus::Arrow(UpdateArrow::Core) if core_stale => core.start_core(true),
+                    _ => {}
+                },
+                MenuNav::Start if !core_missing => return Ok(IdleExit::OpenSettings),
+                MenuNav::Alt if core_missing => core.start_core(true),
+                MenuNav::Back => confirm_quit = true,
                 _ => {}
+            }
+        }
+        // O anel só aparece para quem está usando o controle; a primeira vez
+        // acende a legenda dos botões no OSD do queixo.
+        if plat.last_input_was_pad() {
+            if let Some(f) = items.contains(&focus).then_some(focus) {
+                cab.set_pad_focus(Some(match f {
+                    IdleFocus::Panel(b) => PadFocus::Panel(b),
+                    IdleFocus::Arrow(a) => PadFocus::Arrow(a),
+                    IdleFocus::Power => PadFocus::Tv(TvControl::Power),
+                }));
+            }
+            if !legend_shown {
+                legend_shown = true;
+                cab.push_osd(
+                    &[
+                        tr!(
+                            "D-pad choose   A confirm   Start settings",
+                            "D-pad escolhe   A confirma   Start configurações"
+                        ),
+                        tr!("B quit", "B sair"),
+                    ],
+                    None,
+                    Duration::from_secs(6),
+                );
             }
         }
         // A seta verde do núcleo não abre tela nenhuma: o download roda em
@@ -987,6 +1217,7 @@ fn draw_setup(
     dat_label: &str,
     dat_done: bool,
     dat_busy: bool,
+    focus: usize,
 ) {
     /// Same glyph metrics the platform font uses — `Screen::text` advances
     /// `GLYPH_W * scale` per char, `GLYPH_H * scale` per line.
@@ -1067,12 +1298,51 @@ fn draw_setup(
     );
 
     draw_button(d, &cont_r, tr!("let's play", "bora jogar"), SETUP_TEXT);
+    // O foco do controle: moldura lavanda em volta do botão escolhido.
+    let [core_f, dat_f, cont_f] = [core_r, dat_r, cont_r];
+    let fr = [core_f, dat_f, cont_f][focus.min(2)];
+    d.outline(
+        fr.0 - 6,
+        fr.1 - 6,
+        fr.2 + 12,
+        fr.3 + 12,
+        3,
+        (186, 138, 244, 255),
+    );
+    let legend = tr!(
+        "Up/Down choose  A confirm  Start let's play  B quit",
+        "Cima/Baixo escolhe  A confirma  Start bora jogar  B sair"
+    );
     d.text(
-        center_x(tr!("or press enter", "ou aperte enter"), 1),
+        center_x(legend, 1),
         cont_r.1 + cont_r.3 as i32 + 10,
         1,
         SETUP_DIM,
-        tr!("or press enter", "ou aperte enter"),
+        legend,
+    );
+}
+
+/// A pergunta de sair (B na tela inicial): o tubo inteiro vira o aviso,
+/// como o leitor de manual — A confirma, B volta.
+fn draw_quit_confirm(d: &mut Screen) {
+    const CELL: i32 = 9;
+    let (w, h) = d.size();
+    let (w, h) = (w as i32, h as i32);
+    let title = tr!("Quit SixteeN?", "Sair do SixteeN?");
+    let hint = tr!("A confirms, B goes back", "A confirma, B volta");
+    d.text(
+        (w - title.chars().count() as i32 * CELL * 3) / 2,
+        h * 38 / 100,
+        3,
+        SETUP_TEXT,
+        title,
+    );
+    d.text(
+        (w - hint.chars().count() as i32 * CELL * 2) / 2,
+        h * 38 / 100 + 90,
+        2,
+        SETUP_DIM,
+        hint,
     );
 }
 
@@ -1106,6 +1376,7 @@ pub fn capture_preview(
                 },
                 dat_installed,
                 false,
+                2,
             )
         };
         cab.capture_idle_2d(SETUP_BG, render, path)
@@ -1138,4 +1409,70 @@ pub fn capture_console_manual_preview(cab: &mut Cabinet, page: usize, path: &Pat
     };
     cab.capture_idle_2d(SETUP_BG, render, path)
         .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn items_follow_the_panel_then_arrows_then_power() {
+        let drawn = [
+            PanelButton::Insert,
+            PanelButton::Settings,
+            PanelButton::ConsoleManual,
+            PanelButton::Eject,
+        ];
+        let v = idle_items(&drawn, true, true);
+        assert_eq!(
+            v,
+            vec![
+                IdleFocus::Panel(PanelButton::Insert),
+                IdleFocus::Panel(PanelButton::Settings),
+                IdleFocus::Panel(PanelButton::ConsoleManual),
+                IdleFocus::Arrow(UpdateArrow::App),
+                IdleFocus::Arrow(UpdateArrow::Core),
+                IdleFocus::Power,
+            ]
+        );
+    }
+
+    #[test]
+    fn the_tv_can_always_be_powered_by_pad() {
+        // Nem o painel desenhou ainda: o POWER segue alcançável.
+        let v = idle_items(&[], false, false);
+        assert_eq!(v, vec![IdleFocus::Power]);
+        assert_eq!(resolve_focus(&v, None), IdleFocus::Power);
+    }
+
+    #[test]
+    fn default_focus_is_insert_or_the_core_download() {
+        let with_insert = idle_items(&[PanelButton::Settings, PanelButton::Insert], false, false);
+        assert_eq!(
+            resolve_focus(&with_insert, None),
+            IdleFocus::Panel(PanelButton::Insert)
+        );
+        let no_core = idle_items(
+            &[PanelButton::ConsoleManual, PanelButton::CoreDownload],
+            false,
+            false,
+        );
+        assert_eq!(
+            resolve_focus(&no_core, None),
+            IdleFocus::Panel(PanelButton::CoreDownload)
+        );
+        // Um foco que sumiu da lista cai no padrão.
+        assert_eq!(
+            resolve_focus(&no_core, Some(IdleFocus::Arrow(UpdateArrow::App))),
+            IdleFocus::Panel(PanelButton::CoreDownload)
+        );
+    }
+
+    #[test]
+    fn focus_steps_wrap_both_ways() {
+        let v = idle_items(&[PanelButton::Insert, PanelButton::Settings], false, false);
+        let last = *v.last().unwrap();
+        assert_eq!(step_focus(&v, last, true), v[0]);
+        assert_eq!(step_focus(&v, v[0], false), last);
+    }
 }

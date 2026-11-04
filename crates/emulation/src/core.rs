@@ -369,6 +369,16 @@ impl Core {
         Ok(())
     }
 
+    /// Unload the current game, leaving the core ready for another
+    /// `load_game` (Cheat Genius runs its own ROM first, then hands the
+    /// core back to the real cartridge). A no-op when nothing is loaded.
+    pub fn unload_game(&mut self) {
+        if self.loaded {
+            self.enter(|api| unsafe { (api.retro_unload_game)() });
+            self.loaded = false;
+        }
+    }
+
     pub fn refresh_av_info(&mut self) {
         let mut av: retro_system_av_info = unsafe { std::mem::zeroed() };
         self.enter(|api| unsafe { (api.retro_get_system_av_info)(&mut av) });

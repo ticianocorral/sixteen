@@ -27,6 +27,7 @@ de cartuchos. Se você já usou um SNES de verdade, vai se sentir em casa.
 14. [Curiosidade: o modo Dev](#14-curiosidade-o-modo-dev)
 15. [Onde ficam seus arquivos](#15-onde-ficam-seus-arquivos)
 16. [Problemas e soluções](#16-problemas-e-soluções)
+17. [Jogar só com o controle](#17-jogar-só-com-o-controle)
 
 ---
 
@@ -168,10 +169,9 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
   a janela tem espaço no queixo.)
 - O vidro estala de leve algumas vezes nos primeiros minutos depois de
   ligar a TV, enquanto esquenta.
-- A **luz do quarto** segue o relógio: de dia a janela reflete no vidro;
-  no fim da tarde a luz fica alaranjada; à noite o quarto escurece e a
-  moldura pega o brilho azul do tubo. Dá para desligar em Configurações →
-  vídeo.
+- O vidro da TV tem um brilho de luz: uma mancha difusa no alto à
+  esquerda, uma faixa diagonal e um aro claro na borda, acompanhando a
+  curva do tubo (ligada ou desligada).
 - O **nome do console** no queixo da TV, com a versão do app e do núcleo.
   **Setas verdes** acendem ao lado quando existe atualização do app ou do
   núcleo — clique nelas para atualizar (veja a [seção 13](#13-atualizações)).
@@ -227,6 +227,36 @@ O botão **"histórico"** mostra o ranking dos seus jogos **mais jogados**,
 com o tempo de cada um. O tempo só conta com o console **ligado** — igual
 a um SNES de verdade, ficar com o app aberto não soma tempo.
 
+### Sugestão da noite (opcional)
+
+Sem saber o que jogar? Ligue **Configurações → estante → Sugestão da
+noite** e aparece o botão **"sugestão"** no cabeçalho da estante (à
+esquerda do "álbum"). Ele sorteia um jogo com a ROM na biblioteca,
+dando preferência aos que você **nunca abriu** e aos que estão **parados
+há mais tempo**; jogo com pouco tempo de jogo também ganha uma ajuda. O
+cartão mostra a capa, o título e o motivo ("nunca jogado", "faz 3 meses
+que você não joga", "só 12 min jogados"). **A** joga, **X** sorteia outra
+(nunca repete a anterior na hora) e **B** fecha — o mouse usa os botões
+do cartão. Desligada (o padrão), o botão não aparece.
+
+### Álbum de prints
+
+O botão **"álbum"** (ou **Y** no controle, direto na estante) abre o
+**álbum de prints**: todas as capturas de tela que você guardou com o botão
+**Print** do painel, de **todos os jogos**, como fotos de polaroide numa
+página de couro — com a legenda que você escreveu e o nome do jogo embaixo.
+
+- **direcional** — move entre as fotos; **A** abre a foto grande.
+- **L / R** — troca o filtro: todos os jogos, ou só um jogo de cada vez.
+- Na foto grande, **esquerda/direita** (ou **L/R**) passam as fotos e
+  **B** volta para a grade; **B** na grade volta para a estante.
+- Com mouse ou toque: clique numa foto para abrir, use as setas **<** **>**
+  na tela (foto grande e filtro), e clique fora da foto para fechar.
+
+Sem nenhum print ainda, o álbum mostra uma dica: tire prints durante o
+jogo com o botão **Print** do painel. O álbum só mostra as fotos; para
+apagar ou trocar uma, use o livro de pausa (seção 9).
+
 > **Estante vazia?** Se aparecer "nenhuma rom encontrada", é porque a
 > pasta `roms/` está vazia (ou o app está apontando para outra pasta —
 > veja a [seção 15](#15-onde-ficam-seus-arquivos)).
@@ -279,6 +309,19 @@ jogando *agora*. Ele soma no tempo total do jogo quando você sai.
 diferentes, dá para remapear em **Configurações → controles**.
 
 Dá para conectar até **2 controles** — o teclado é sempre o jogador 1.
+
+**Menu do jogo só com o controle (Steam Deck inclusive):** o jogo usa todos
+os botões, então o menu abre com um acorde — **segure Select + Start por
+cerca de 1 segundo**. O jogo congela (e não recebe o Select/Start) e aparece
+o **Menu do jogo**: Continuar, Salvar estado, Carregar estado, Print,
+Anotações, Conquistas (com a conta RetroAchievements ativa), Reset,
+Desligar (ou Ligar), Ejetar e Sair do app. Uma dica ("segure Select+Start =
+menu") aparece na TV logo que o jogo começa.
+
+Com um menu ou um seletor de slots aberto: **direcional** move o destaque
+(←/→ trocam de coluna na lista de 15 prints), **A** escolhe, **B** cancela e
+**LB/RB** saltam de página nas listas longas (ex.: conquistas). Nenhum
+botão do Steam, grip traseiro ou trackpad é necessário.
 
 ### Mau contato: soprar o cartucho
 
@@ -378,6 +421,12 @@ quiser, e pronto. Se os 15 slots já estiverem ocupados, o botão avisa
 
 Para voltar ao jogo, clique em **"Continuar"**.
 
+**No controle:** abra o livro pelo Menu do jogo (Select + Start →
+"Anotações"). **←/→** passam os prints, **LB/RB** passam as anotações de
+texto, **X** fixa o print, **Y** nomeia, **Start** escreve a anotação,
+**Select** fixa a anotação e **B** volta ao jogo. Ao escrever, **Start**
+salva e **B** cancela.
+
 > Os prints são capturas da imagem de verdade do jogo — ficam salvos como
 > PNG na pasta `notes/` e podem ser usados fora do app também.
 
@@ -385,22 +434,35 @@ Para voltar ao jogo, clique em **"Continuar"**.
 
 ## 10. Cheats (códigos de trapaça)
 
-Se o jogo tiver códigos conhecidos (Game Genie, Pro Action Replay etc.),
-o comando **"Cheats"** aparece na lista. Ele abre uma janela com os cheats
-do jogo, prontos para ligar e desligar:
+Os cheats são escolhidos no **Cheat Genius**, uma tela própria, como um
+adaptador dos anos 90 no slot do console. Ao apertar **POWER** (e de novo a
+cada **RESET**), o Cheat Genius carrega e lista os códigos do jogo:
 
-- Clique na linha para **ligar/desligar** na hora — a caixinha
-  `[x]`/`[ ]` mostra o estado.
-- Use **"Buscar..."** para achar um cheat pelo nome e os filtros
-  **Todos / Ligados / Desligados** para encurtar a lista.
-- Os cheats ligados ficam contados no painel ("2 cheats ativados").
-- A escolha fica guardada: na próxima vez que jogar, os mesmos cheats
-  voltam ligados.
+| Botão | Faz |
+|---|---|
+| ↑ ↓ (segure para correr) · L/R | Move pela lista · pula uma página |
+| **A** | Liga/desliga o código |
+| **START** | Joga com os códigos marcados |
+| **B** | Cancela: joga **sem nenhum** (o que estava salvo continua salvo) |
+| **Y** | Digita um código novo (não precisa estar no banco) |
+| **X** | Marca um código seu para apagar (de novo desmarca) |
+
+No teclado de códigos aceita Game Genie (`C24F-74D4`), RAM (`7E036999`) e
+vários juntos com `+`. Código inválido é recusado na hora. Seus códigos
+ficam guardados por jogo e voltam no topo da lista. Para mudar os cheats
+durante o jogo, aperte **RESET** — como no aparelho de verdade.
+
+Os cheats ligados ficam contados no painel ("2 cheats ativados") e a
+escolha fica guardada: na próxima vez que jogar, os mesmos cheats voltam
+marcados.
+
+No **hardcore** das conquistas não há cheats: o Cheat Genius não aparece e
+o jogo liga direto.
 
 Os cheats vêm de um banco embutido no app (curado a partir do projeto
 libretro) — não precisa baixar nada. Ainda assim, **não existe cheat para
-todo jogo**: se o comando não aparecer, é que não há códigos para aquele
-título.
+todo jogo**: se a lista vier vazia, é que não há códigos para aquele
+título — dá para digitar os seus com **Y**.
 
 ---
 
@@ -449,10 +511,31 @@ Troque em **Configurações → conquistas → Modo hardcore**.
 ## 12. Configurações
 
 Abra pelo botão **"Configurações"** (na tela inicial ou na estante). Há
-cinco seções na coluna; tudo é salvo na hora.
+seis seções na coluna; tudo vale na hora e é salvo ao sair. **Voltar** sai
+das configurações de qualquer seção.
+
+### controles
+- O **controle de Super Nintendo** aparece desenhado na TV: o botão da
+  linha escolhida fica marcado e o que você aperta acende.
+- A primeira linha, **Mapear**, escolhe o que configurar: **teclado**,
+  **controle 1** ou **controle 2** (setas esquerda/direita ou clique). Cada
+  um tem o seu mapa — o controle 2 não precisa ser igual ao 1.
+- Clique num botão da lista e **aperte a tecla (no teclado) ou o botão (no
+  controle escolhido)** — Esc ou um clique cancelam. Os botões aparecem com
+  o nome impresso no seu controle (Xbox, PlayStation ou Nintendo).
+- Se você usar uma tecla ou botão que já era de outra ação, **as duas
+  trocam** e um aviso embaixo do controle conta o que mudou.
+- **Configurar tudo em sequência** — pede um botão de cada vez, de Cima até
+  Select.
+- **Testar botões** — tudo o que você aperta só acende no desenho. Sai com
+  Esc, um clique ou **Start + Select** juntos.
+- **Restaurar padrão (deste aparelho)** — aperte duas vezes para voltar ao
+  mapa de fábrica do aparelho escolhido.
+- Os botões do **console** (Power, Reset, Ejetar...) e da **interface** não
+  mudam — só os botões de jogar. Brilho, contraste, cor e nitidez ficam no
+  botão **MENU** da TV.
 
 ### jogo
-- **Controles** — abre o remapeamento de teclado e controle.
 - **Mau contato do cartucho** — *desligado* (padrão), *raro* ou *anos 90*:
   a chance de o primeiro POWER não subir o jogo até você soprar o cartucho
   (veja [Mau contato](#mau-contato-soprar-o-cartucho)).
@@ -460,27 +543,38 @@ cinco seções na coluna; tudo é salvo na hora.
   sopro, soprar no microfone de verdade limpa os contatos (Steam Deck, ROG
   Ally, notebook).
 
-### vídeo
+### imagem e som
 - **Tela cheia** — liga/desliga o modo tela cheia (padrão: ligada).
-- **Chiado da TV fora do ar** — o barulhinho de estática quando o console
-  está desligado. Nostálgicos: ligado. Padrão: desligado.
-- **Estante** — o móvel da estante: o móvel de madeira, o expositor de
-  metal da locadora, o rack de som preto (vidro fumê e frisos prateados), o
-  quarto anos 90 (papel de parede Memphis e móvel laqueado) ou o fliperama
-  (carpete fluorescente e neon).
 - **Som do jogo** — *3 em 1 estéreo* (padrão) ou *alto-falante da TV*:
   pequeno, mono e abafado, como o som saía da própria TV.
+- **Chiado da TV fora do ar** — o barulhinho de estática quando o console
+  está desligado. Nostálgicos: ligado. Padrão: desligado.
 - **Chiado do flyback (~15 kHz)** — o apito agudo de TV de tubo ligada.
   Tem quem nem escute e tem quem não aguente: padrão desligado.
 - **Burn-in do tubo** — horas no mesmo jogo marcam o HUD de leve no tubo,
   e a marca some com o tempo jogando outra coisa. Padrão: desligado.
-- **Luz do quarto** — *pela hora do dia* (padrão) ou *desligada*.
+- **Visual da tela** — como o jogo aparece na TV (esquerda/direita troca,
+  vale na hora): *TV de antena (RF)* (padrão: imagem mole, com chuvisco e
+  cores vazando), *Composite*, *S-Video* (mais limpo, scanlines leves),
+  *RGB / PVM* (monitor profissional: scanlines e máscara de pontos),
+  *Trinitron* (grade de apertura, cores vivas), *LCD nítido* (pixels
+  quadrados com grade, vidro plano) e *Preto e branco*. Brilho, contraste,
+  cor e nitidez continuam no botão MENU da TV e valem por cima de qualquer
+  visual. Em janelas pequenas as scanlines somem aos poucos, para não virar
+  moiré.
+- **Linhas e máscara** — escolhe as scanlines e a máscara à parte do
+  visual, para misturar: por exemplo a *TV de antena (RF)* com as
+  *scanlines RGB / PVM*. Opções: *do visual* (padrão, usa as do próprio
+  visual), *nenhuma*, *scanlines leves*, *scanlines RGB / PVM*, *grade de
+  apertura* e *grade de LCD*.
 
-### sistema
-- **Núcleo: baixar / atualizar** — instala ou atualiza o "cérebro" snes9x.
-  Aparece há quanto tempo o atual foi instalado.
-- **Verificar atualizações ao abrir** — o app procura novidades quando
-  abre (setas verdes na tela inicial). Pode desligar.
+### estante
+- **Tema** — o móvel da estante: o móvel de madeira, o expositor de metal
+  da locadora, o rack de som preto (vidro fumê e frisos prateados), o
+  quarto anos 90 (papel de parede Memphis e móvel laqueado) ou o fliperama
+  (carpete fluorescente e neon).
+- **Sugestão da noite** — liga/desliga o botão "sugestão" no cabeçalho da
+  estante (desligado por padrão; veja a [seção 6](#6-a-estante-de-jogos)).
 - **Renomear ROMs para o padrão No-Intro** — deixa os nomes dos arquivos
   na `roms/` no formato oficial dos catálogos ("Super Mario World (USA)").
   Os saves, anotações e artes de cada jogo **vão junto** com a renomeação.
@@ -490,13 +584,12 @@ cinco seções na coluna; tudo é salvo na hora.
 - Conta do RetroAchievements, teste de login e o seletor de **modo
   hardcore** (detalhes na [seção 11](#11-conquistas-retroachievements)).
 
-### controles
-- Lista de cada botão do SNES e a tecla/botão de controle que faz aquela
-  ação. Clique na linha e **aperte a tecla ou o botão que você quer** —
-  ele é capturado na hora (Esc cancela). Se você atribuir uma tecla já em
-  uso, ela muda de lugar (fica vazia na ação antiga).
-- Os botões do **console** (Power, Reset, Ejetar...) e da **interface**
-  não mudam — só os botões de jogar.
+### sistema
+- **Núcleo: baixar / atualizar** — instala ou atualiza o "cérebro" snes9x.
+  Aparece há quanto tempo o atual foi instalado.
+- **Verificar atualizações ao abrir** — o app procura novidades quando
+  abre (setas verdes na tela inicial). Pode desligar.
+- **Idioma** — português ou inglês, vale na hora.
 
 ---
 
@@ -584,13 +677,98 @@ saves, notas, artes e preferências.
 | **EJETAR não faz nada** | O console está ligado. Desligue com POWER primeiro — é uma proteção de propósito. |
 | **O jogo não aparece com arte/capa** | Os arquivos de arte precisam ter exatamente o mesmo nome da ROM (sem extensão) e estar nas pastas certas de `assets/`. |
 | **A atualização baixou mas o app não mudou** | Feche e abra o app: o pacote pendente em `update/` é aplicado na abertura. |
-| **Sem som na TV fora do ar** | Normal: o chiado da estática é opcional — ligue em Configurações → vídeo. |
+| **Sem som na TV fora do ar** | Normal: o chiado da estática é opcional — ligue em Configurações → imagem e som. |
 | **O jogo vai "lento" ou instável** | Diminua o Run-ahead em Configurações → jogo (ou ponha 0). |
 
 **Última ferramenta:** com o app fechado, você pode apagar (ou renomear)
 subpastas específicas para "zerar" uma parte sem perder o resto — por
 exemplo, apagar `config/sixteen.cfg` volta todas as preferências ao
 padrão; apagar `saves/Nome do Jogo/` apaga o progresso daquele jogo.
+
+---
+
+## 17. Jogar só com o controle
+
+Tudo fora do jogo funciona só com um controle — mouse e teclado são
+opcionais. O mapa abaixo usa os nomes do controle Xbox (no Steam Deck: **A**
+embaixo, **B** à direita, **X** à esquerda, **Y** em cima; **LB/RB** são os
+ombros e **LT/RT** os gatilhos). Nenhum comando exige o botão Steam/Guide,
+o menu rápido (…), os botões traseiros (L4/R4/L5/R5), os trackpads nem os
+cliques de analógico (L3/R3) — então o Deck funciona do jeito que vem.
+
+**Tela inicial**
+
+| Botão | O que faz |
+|---|---|
+| Direcional | Anda pelos botões do painel (Estante, Manual do console, Configurações), pelas setas verdes de update e pelo **POWER** da TV (o foco aparece como um anel lavanda) |
+| **A** | Ativa o que está em foco. Em "Estante de games" com a TV desligada, liga a TV primeiro |
+| **Start** | Abre as Configurações |
+| **X** | Baixa o núcleo, quando ele falta |
+| **B** | Pergunta "Sair do SixteeN?" — **A** confirma, **B** volta |
+
+Na **primeira execução**: **Cima/Baixo** escolhem entre baixar o núcleo,
+baixar o DAT e "bora jogar"; **A** ativa, **X** baixa o que falta, **Start**
+continua. Na tela de **update do app**, **A** atualiza (ou reinicia) e **B**
+volta.
+
+**Estante**
+
+| Botão | O que faz |
+|---|---|
+| Direcional | Anda pela grade e pelos favoritos |
+| **A** | Joga o jogo em foco |
+| **B** | Volta à tela inicial |
+| **X** | Favorita / desfavorita o jogo |
+| **Y** | Abre o álbum de prints |
+| **Select** | Abre o histórico |
+| **Start** | Abre as Configurações |
+| **LB / RB** | Página acima / abaixo |
+| **LT / RT** | Aba anterior / próxima do painel (informações, capa traseira, cartucho, manual) |
+| **Cima** na fileira de cima | Foca o cabeçalho: sugestão (se ligada), álbum, atualizar, histórico e a caixa de busca (**Esquerda/Direita** escolhem, **A** abre — a busca abre o teclado na tela —, **Baixo** ou **B** voltam aos jogos) |
+| **Direita** na última coluna | Foca o painel lateral: favoritar, conquistas, capa traseira, cartucho, manual, configurações, voltar (**Cima/Baixo** escolhem, **A** abre, **Esquerda** ou **B** voltam aos jogos) |
+
+No cartão da **sugestão da noite**: **A** joga, **X** (ou **Y**) sorteia
+outra e **B** fecha.
+
+Uma legenda no pé da tela lembra os botões da zona em que você está. Dentro
+da capa ampliada, do manual (**LB/RB** viram a página) e da lista de
+conquistas, **B** fecha.
+
+**Configurações**
+
+| Botão | O que faz |
+|---|---|
+| **LB / RB** (ou **LT / RT**) | Seção anterior / próxima — controles, jogo, imagem e som, estante, conquistas, sistema |
+| **Cima / Baixo** | Escolhe a linha |
+| **Esquerda / Direita** | Ajusta a linha (liga/desliga, opções) |
+| **A** | Muda / executa / abre a linha. Nos campos das conquistas (usuário, chave, senha) abre o teclado na tela |
+| **B** | Sai das configurações |
+
+Na seção **controles**, ao escolher um botão a mapear: aperte o botão
+desejado no controle; **segurar B por ~1 segundo** cancela (a dica mostra o
+progresso) e, sem apertar nada por 5 segundos, a captura desiste sozinha. B
+também pode ser mapeado — é só dar um toque rápido. O botão Guide/Steam
+nunca é mapeado.
+
+**Teclado na tela**
+
+Aparece sozinho quando você abre um campo de texto com o controle (ou
+aperta qualquer botão do controle com o campo aberto). Digitar no teclado de
+verdade — ou no teclado do Steam (**Steam + X**) — continua funcionando e
+esconde a grade.
+
+| Botão | O que faz |
+|---|---|
+| Direcional | Move pela grade (dá a volta nas bordas) |
+| **A** | Digita a tecla (ou aciona **Aa**, **#@!**, espaço, apagar, **OK**) |
+| **X** | Apaga o caractere antes do cursor |
+| **Y** | Alterna minúsculas → maiúscula (vale uma letra) → símbolos e acentos |
+| **LB / RB** | Move o cursor dentro do texto |
+| **Start** | Confirma (o mesmo que **OK**) |
+| **B** | Cancela e descarta o texto |
+
+Senhas aparecem como `*`. Letras, números e `@ . _ - : / +` estão na grade;
+os acentos ficam na camada de símbolos.
 
 ---
 

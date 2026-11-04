@@ -114,10 +114,7 @@ pub enum UiEvent {
     /// during the row-picking step; the naming step that can follow
     /// (`OpenPrintModal`) is polled via `Platform::poll_text_entry` instead,
     /// same as the notebook's own text editor, so it never produces a
-    /// `Click`/`UiEvent` at all (see `PanelButton::ModalConfirm`). `u16`,
-    /// not `u8` (plan revision): the Cheats modal can run into the
-    /// thousands of rows for a database-heavy game, well past what a byte
-    /// addresses.
+    /// `Click`/`UiEvent` at all (see `PanelButton::ModalConfirm`).
     ModalPick(u16),
     /// Back out of whichever modal is open, discarding any choice so far —
     /// only reachable during the row-picking step, same caveat as
@@ -125,29 +122,9 @@ pub enum UiEvent {
     ModalCancel,
     /// Scroll whichever modal's row grid is open one page up/down — only
     /// reachable (and only drawn at all) when there are more rows than fit
-    /// in the card at once (plan revision: the Cheats modal made lists
-    /// long enough that this stopped being hypothetical).
+    /// in the card at once (a small window).
     ModalScrollUp,
     ModalScrollDown,
-    /// Click the Cheats modal's search box — only drawn (and only
-    /// clickable) on a modal that's marked searchable, which today is only
-    /// Cheats (plan revision: the libretro-database expansion made
-    /// scrolling through everything by hand impractical for some games'
-    /// 1000+-cheat lists). Polled via `Platform::poll_text_entry`, same
-    /// keyboard-typing exception as the notebook's own editors.
-    ModalSearchStart,
-    /// On a searchable modal (today only Cheats): switch its on/off state
-    /// filter to show every row, only the ones checked on, or only the
-    /// ones off (plan revision).
-    ModalFilterAll,
-    ModalFilterOn,
-    ModalFilterOff,
-    /// Open the Cheats modal — a checklist of curated codes for this
-    /// cartridge (plan revision: its own menu, split out of the notebook,
-    /// which was getting crowded and had no room for a "pausar pra editar"
-    /// hint to make sense of it). Toggling a row (`ModalPick`) flips it and
-    /// keeps the modal open, unlike the other three modals' one-shot pick.
-    OpenCheatsModal,
     OpenAchievementsModal,
     /// Pause book: step the right page (the photo album) to an earlier/
     /// later print slot.
@@ -228,24 +205,38 @@ impl KeyMap {
         Keycode::from_name(name)
     }
 
-    /// Rebind a pad button; the previous key(s) for it are dropped.
-    pub fn bind_pad(&mut self, key_name: &str, button: PadButton) -> Result<(), String> {
+    /// Rebind a pad button. One key per action and one action per key: if
+    /// the key already drove another action, the two **swap** — that action
+    /// takes over the key `button` had — so nothing is ever left unbound by a
+    /// rebind. Returns the action that moved, if any.
+    pub fn bind_pad(
+        &mut self,
+        key_name: &str,
+        button: PadButton,
+    ) -> Result<Option<PadButton>, String> {
         let k = Self::parse_key(key_name).ok_or_else(|| format!("unknown key {key_name:?}"))?;
-        self.pad.retain(|&(kk, bb)| kk != k && bb != button);
-        self.pad.push((k, button));
-        Ok(())
+        Ok(swap_bind(&mut self.pad, k, button))
     }
 
-    /// `(action token, SDL key name)` for every current bind — for writing
-    /// out a config file.
+    /// `(action token, SDL key name)` for every SNES button, in libretro
+    /// order — an unbound action comes back with an empty name.
     pub fn describe(&self) -> Vec<(String, String)> {
-        let mut v = Vec::new();
-        for b in PadButton::ALL {
-            if let Some(&(k, _)) = self.pad.iter().find(|&&(_, bb)| bb == b) {
-                v.push((b.token().to_string(), k.name()));
-            }
-        }
-        v
+        PadButton::ALL
+            .iter()
+            .map(|&b| {
+                let name = self.key_for(b).map(|k| k.name()).unwrap_or_default();
+                (b.token().to_string(), name)
+            })
+            .collect()
+    }
+
+    /// The key that drives `b`, if any.
+    pub fn key_for(&self, b: PadButton) -> Option<Keycode> {
+        self.pad.iter().find(|&&(_, bb)| bb == b).map(|&(k, _)| k)
+    }
+
+    pub(crate) fn pairs(&self) -> &[(Keycode, PadButton)] {
+        &self.pad
     }
 
     pub(crate) fn pad_for(&self, k: Keycode) -> Option<PadButton> {
@@ -276,14 +267,18 @@ impl PadMap {
 
     /// Rebind a SNES button to an SDL gamepad-button name (`"south"`,
     /// `"dpad_up"`, …). One button per action and one action per button —
-    /// the previous pairs on either side are dropped, like [`KeyMap::bind_pad`].
-    pub fn bind(&mut self, button_name: &str, b: PadButton) -> Result<(), String> {
+    /// a taken button swaps, like [`KeyMap::bind_pad`]. Returns the action
+    /// that moved, if any.
+    pub fn bind(&mut self, button_name: &str, b: PadButton) -> Result<Option<PadButton>, String> {
         let Some(btn) = PadBtn::from_string(button_name) else {
             return Err(format!("unknown gamepad button {button_name:?}"));
         };
-        self.pad.retain(|&(bb, pb)| bb != btn && pb != b);
-        self.pad.push((btn, b));
-        Ok(())
+        Ok(swap_bind(&mut self.pad, btn, b))
+    }
+
+    /// The gamepad button that drives `b`, if any.
+    pub fn button_for(&self, b: PadButton) -> Option<PadBtn> {
+        self.pad.iter().find(|&&(_, pb)| pb == b).map(|&(bb, _)| bb)
     }
 
     /// `(action token, SDL gamepad button name)` for every SNES button, in
@@ -307,6 +302,34 @@ impl PadMap {
     pub(crate) fn pairs(&self) -> &[(PadBtn, PadButton)] {
         &self.pad
     }
+}
+
+/// Binds `input` to `b` in a one-to-one pair table. If `input` already drove
+/// another action, that action takes `b`'s previous input (or is left
+/// unbound when `b` had none). Returns the action that moved.
+fn swap_bind<T: Copy + PartialEq>(
+    pairs: &mut Vec<(T, PadButton)>,
+    input: T,
+    b: PadButton,
+) -> Option<PadButton> {
+    let previous = pairs.iter().find(|&&(_, pb)| pb == b).map(|&(i, _)| i);
+    if previous == Some(input) {
+        return None;
+    }
+    pairs.retain(|&(_, pb)| pb != b);
+    let mut moved = None;
+    if let Some(pos) = pairs.iter().position(|&(i, _)| i == input) {
+        let other = pairs[pos].1;
+        moved = Some(other);
+        match previous {
+            Some(prev) => pairs[pos] = (prev, other),
+            None => {
+                pairs.remove(pos);
+            }
+        }
+    }
+    pairs.push((input, b));
+    moved
 }
 
 /// The factory layout every X-input-style pad ships with.
@@ -356,5 +379,40 @@ impl Input {
 
     pub(crate) fn clear_pads(&mut self) {
         self.pads = [[false; 12]; MAX_PORTS];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn taking_a_bound_key_swaps_instead_of_unbinding() {
+        let mut m = KeyMap::defaults();
+        // X drives A; give it to B (which had Z): A must end up on Z.
+        let moved = m.bind_pad("X", PadButton::B).unwrap();
+        assert_eq!(moved, Some(PadButton::A));
+        assert_eq!(m.key_for(PadButton::B).unwrap().name(), "X");
+        assert_eq!(m.key_for(PadButton::A).unwrap().name(), "Z");
+        // Every action still listed, in a stable order.
+        let d = m.describe();
+        assert_eq!(d.len(), 12);
+        assert!(d.iter().all(|(_, k)| !k.is_empty()));
+    }
+
+    #[test]
+    fn rebinding_to_the_same_key_is_a_no_op() {
+        let mut m = KeyMap::defaults();
+        assert_eq!(m.bind_pad("Z", PadButton::B).unwrap(), None);
+        assert_eq!(m.key_for(PadButton::B).unwrap().name(), "Z");
+    }
+
+    #[test]
+    fn pad_buttons_swap_too() {
+        let mut m = PadMap::defaults();
+        let moved = m.bind(&PadBtn::East.string(), PadButton::B).unwrap();
+        assert_eq!(moved, Some(PadButton::A));
+        assert_eq!(m.button_for(PadButton::B), Some(PadBtn::East));
+        assert_eq!(m.button_for(PadButton::A), Some(PadBtn::South));
     }
 }

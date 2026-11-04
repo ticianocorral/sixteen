@@ -462,8 +462,8 @@ pub(super) fn draw_flat_key(canvas: &mut WindowCanvas, rect: Rect, p: &FlatKeyPa
 /// inside — clipped to fit the box, with a trailing `...` if it doesn't
 /// (plan revision: `text` used to just draw past the box's edge unclipped
 /// when too long for it, visually merging into whatever sat next to it —
-/// harmless while every label here was short, a real problem once the
-/// Cheats modal started passing database-length descriptions through).
+/// harmless while every label here was short, a real problem once longer
+/// labels started coming through).
 /// Returns the box's rect for hit-testing.
 pub(super) fn draw_button(
     canvas: &mut WindowCanvas,

@@ -2,6 +2,19 @@
 //! (CRT curvo e moldura).
 
 use super::*;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+/// A curvatura do tubo em vigor (o visual da tela a muda); a malha, o
+/// brilho do vidro e o clique na tela leem daqui.
+static WARP: AtomicU32 = AtomicU32::new(CRT_WARP.to_bits());
+
+pub(super) fn crt_warp() -> f32 {
+    f32::from_bits(WARP.load(Ordering::Relaxed))
+}
+
+pub(super) fn set_crt_warp(w: f32) {
+    WARP.store(w.to_bits(), Ordering::Relaxed);
+}
 
 pub(super) fn resolve_aspect(a: f32) -> f32 {
     if a > 0.0 {
@@ -112,6 +125,7 @@ pub(super) fn build_bezel_mesh(
 /// outline — curves. `alpha` (1.0 normally) lets a caller fade the whole tube in.
 pub(super) fn build_crt_mesh(dst: Rect, alpha: f32) -> CrtMesh {
     let n = CRT_GRID;
+    let warp = crt_warp();
     let (ox, oy) = (dst.x() as f32, dst.y() as f32);
     let (dw, dh) = (dst.width() as f32, dst.height() as f32);
 
@@ -124,8 +138,8 @@ pub(super) fn build_crt_mesh(dst: Rect, alpha: f32) -> CrtMesh {
             let cy = v * 2.0 - 1.0;
 
             // Barrel: corners move toward the centre, mid-edges stay put.
-            let dx = cx * (1.0 - CRT_WARP * cy * cy);
-            let dy = cy * (1.0 - CRT_WARP * cx * cx);
+            let dx = cx * (1.0 - warp * cy * cy);
+            let dy = cy * (1.0 - warp * cx * cx);
 
             let px = ox + (dx * 0.5 + 0.5) * dw;
             let py = oy + (dy * 0.5 + 0.5) * dh;
@@ -158,5 +172,6 @@ pub(super) fn build_crt_mesh(dst: Rect, alpha: f32) -> CrtMesh {
         indices,
         w: dst.width(),
         h: dst.height(),
+        warp,
     }
 }

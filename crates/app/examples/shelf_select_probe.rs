@@ -33,6 +33,7 @@ fn main() -> anyhow::Result<()> {
         preset_filter: None,
         ra: None,
         theme: Default::default(),
+        night_pick: false,
     };
     let _ = shelf::run(&mut plat, &mut cab, &catalog, &opts1)?;
     plat.push_synthetic_click_later(493, 339, Duration::from_secs(2));
@@ -44,6 +45,7 @@ fn main() -> anyhow::Result<()> {
         preset_filter: None,
         ra: None,
         theme: Default::default(),
+        night_pick: false,
     };
     let _ = shelf::run(&mut plat, &mut cab, &catalog, &opts2)?;
     println!("saiu; frames em /tmp/shelf_visit1.bmp e /tmp/shelf_visit2.bmp");

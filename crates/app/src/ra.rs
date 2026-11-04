@@ -378,6 +378,16 @@ fn points_from_json(a: &serde_json::Value) -> u32 {
     }
 }
 
+/// Assinatura de validação que o `awardachievement` espera (`v`): MD5 de
+/// id da conquista + usuário + flag hardcore ("0"/"1"), concatenados — o
+/// mesmo que o rcheevos manda em `rc_api_init_award_achievement_request`.
+fn award_signature(achievement_id: u32, user: &str, hardcore: bool) -> String {
+    use md5::Digest;
+    let mut h = md5::Md5::new();
+    h.update(format!("{achievement_id}{user}{}", u8::from(hardcore)));
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Award one unlocked achievement through the Connect route —
 /// authenticated with the login token (`connect_login`), not the web key.
 /// `hardcore` maps straight to the API's `h` flag. Returns the server
@@ -399,6 +409,7 @@ pub fn award(
             ("a", &achievement_id.to_string()),
             ("h", if hardcore { "1" } else { "0" }),
             ("m", hash),
+            ("v", &award_signature(achievement_id, user, hardcore)),
         ])
         .map_err(net_err)?;
     let body: serde_json::Value = resp.into_json().map_err(|e| format!("resposta: {e}"))?;
@@ -1293,6 +1304,16 @@ pub fn prefetch_badges(rom_path: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn award_signature_is_md5_of_id_user_hardcore() {
+        // md5("1234UserA1")
+        assert_eq!(award_signature(1234, "UserA", true).len(), 32);
+        assert_ne!(
+            award_signature(1234, "UserA", true),
+            award_signature(1234, "UserA", false)
+        );
+    }
 
     #[test]
     fn encode_leaves_safe_chars_and_escapes_the_rest() {

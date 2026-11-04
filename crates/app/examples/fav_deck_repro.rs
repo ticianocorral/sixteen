@@ -39,6 +39,7 @@ fn main() -> anyhow::Result<()> {
         preset_filter: None,
         ra: None,
         theme: Default::default(),
+        night_pick: false,
     };
     let _ = shelf::run(&mut plat, &mut cab, &catalog, &opts)?;
     println!("saiu; frame final em /tmp/fav_after.bmp");

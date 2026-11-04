@@ -45,6 +45,7 @@ fn main() -> anyhow::Result<()> {
         preset_filter: None,
         ra: None,
         theme: Default::default(),
+        night_pick: false,
     };
     let _pick = shelf::run(&mut plat, &mut cab, &catalog, &opts)?;
     println!("first run pick ok (quit by frame cap)");

@@ -72,6 +72,9 @@ pub enum Preset {
     Rgb,
     Monochrome,
     Rf,
+    /// Pixel nítido: sem artefatos, franjas nem vazamento de cor, só a
+    /// resolução máxima do filtro.
+    Sharp,
 }
 
 impl Preset {
@@ -100,6 +103,13 @@ impl Preset {
                 s.fringing = -0.2;
                 s.bleed = -1.0;
             }
+            Preset::Sharp => {
+                s.sharpness = 0.4;
+                s.resolution = 1.0;
+                s.artifacts = -1.0;
+                s.fringing = -1.0;
+                s.bleed = -1.0;
+            }
             // Composite, but softer and noisier: the antenna/RF look.
             Preset::Rf => {
                 s.resolution = -0.2;
@@ -119,6 +129,7 @@ impl Preset {
             Preset::Rgb => "rgb",
             Preset::Monochrome => "monochrome",
             Preset::Rf => "rf",
+            Preset::Sharp => "sharp",
         }
     }
 }

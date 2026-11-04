@@ -4,14 +4,16 @@
 mod audio;
 mod cabinet;
 mod input;
+pub mod padnav;
 pub mod sysinfo;
 pub mod tr;
 
 pub use audio::{AudioIn, AudioOut};
 pub use cabinet::{
-    prepare_art, BlowButton, BlowScene, Cabinet, Dust, FrameRef, HltbBar, HltbBars, IgdbSection,
-    PanelButton, PanelSection, Picture, PixelFormat, PreparedArt, RaStatus, RfAudio, Screen,
-    SettingsButton, SettingsPanelInfo, ShelfButton, ShelfPanelInfo, TvControl, TvPower, TvSound,
+    osk_layout, prepare_art, BlowButton, BlowScene, Cabinet, Dust, FrameRef, HltbBar, HltbBars,
+    IgdbSection, Osk, OskAct, OskLayout, OskOutcome, PadFocus, PanelButton, PanelSection, Picture,
+    PixelFormat, PreparedArt, RaStatus, RfAudio, Screen, ScreenLines, ScreenLook, SettingsButton,
+    SettingsPanelInfo, ShelfButton, ShelfPanelInfo, TextField, TvControl, TvPower, TvSound,
     TvSpeaker, UpdateArrow, BRAND, DEMO_BADGE_IMG, RA_LOGO_IMG,
 };
 pub use input::{Input, KeyMap, PadButton, PadMap, UiEvent, MAX_PORTS};
@@ -126,6 +128,21 @@ pub enum MenuNav {
     PageDown,
     Home,
     End,
+    /// Y/triangle (North) — an extra, screen-specific action; the shelf
+    /// uses it to open the print album, the album to cycle the filter.
+    Extra,
+    /// X/square (West) — the secondary action: favorite on the shelf,
+    /// backspace on the on-screen keyboard.
+    Alt,
+    /// Select/Back/View — Histórico on the shelf.
+    Select,
+    /// Start/Menu — "Configurações" on the shelf/idle, OK on the on-screen
+    /// keyboard.
+    Start,
+    /// Left/right analog trigger (LT/RT), as edge-triggered buttons — tab
+    /// switching (settings sections are on LB/RB; the shelf panel tabs here).
+    TabPrev,
+    TabNext,
 }
 
 /// One step of the Konami code, input-agnostic — arrows on the keyboard,
@@ -168,6 +185,23 @@ enum KonamiFeed {
     Mismatch,
 }
 
+/// A connected gamepad, as the controls screen shows it.
+#[derive(Debug, Clone)]
+pub struct GamepadInfo {
+    pub name: String,
+    pub family: PadFamily,
+}
+
+/// The face-button labelling the pad's maker uses — the controls screen
+/// names `south`/`east`/... the way they're printed on that pad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PadFamily {
+    Xbox,
+    PlayStation,
+    Nintendo,
+    Generic,
+}
+
 /// One frame's worth of menu input.
 #[derive(Default)]
 pub struct MenuInput {
@@ -186,6 +220,8 @@ pub struct MenuInput {
     /// frame — the settings screen binds whichever arrives first, key or
     /// pad button.
     pub captured_pad: Option<GamepadBtn>,
+    /// The port (index among the connected pads) `captured_pad` came from.
+    pub captured_pad_port: Option<usize>,
     /// Set only in capture mode: Escape cancels the capture instead of being
     /// captured as the new binding.
     pub capture_cancelled: bool,
@@ -224,6 +260,13 @@ pub struct TextEntryInput {
     pub cancel: bool,
     /// Left click this frame, in window coordinates.
     pub click: Option<(i32, i32)>,
+    /// Gamepad presses this frame (rising edges, same buttons as
+    /// `poll_menu`: d-pad, A=`Confirm`, B=`Back`, X=`Alt`, Y=`Extra`,
+    /// Start, Select, LB/RB=`PageUp`/`PageDown`, LT/RT=`TabPrev`/`TabNext`)
+    /// — what the on-screen keyboard ([`Osk`]) drives from. B already sets
+    /// `cancel` and Start `commit` too, so a caller without the widget still
+    /// can't get a pad user stuck.
+    pub pad: Vec<MenuNav>,
 }
 
 /// Drops control characters from pasted text. Every text field in the app
@@ -286,10 +329,14 @@ pub struct Platform {
     /// Testing hook headless: quando `Some`, sobrepõe a posição real do
     /// cursor que o `poll_menu` reporta (não há mouse de verdade lá).
     debug_pointer: Option<(i32, i32)>,
-    /// SNES-button layout of the gamepads — the pair table `sample_gamepads`
-    /// walks. Defaults to the factory layout; the settings screen swaps pairs
-    /// through `set_pad_map` (persisted by the app).
-    pad_map: PadMap,
+    /// SNES-button layout of each gamepad port — the pair tables
+    /// `sample_gamepads` walks. Defaults to the factory layout; the settings
+    /// screen swaps pairs through `set_pad_map` (persisted by the app).
+    pad_maps: [PadMap; MAX_PORTS],
+    /// Freeze the port order: the controls screen maps "controle 1" and
+    /// "controle 2" separately, so a press on the second pad must not
+    /// promote it to the first slot mid-mapping.
+    hold_pad_order: bool,
     /// Whether `poll_menu` is currently watching for the Konami code — on
     /// only while the app's idle (home) screen runs, so the sequence never
     /// half-triggers (or swallows a pad Back/Confirm) anywhere else.
@@ -299,9 +346,15 @@ pub struct Platform {
     konami_step: usize,
     /// Cliques sintéticos agendados (testes de UI) pendentes de disparo.
     scheduled_clicks: Vec<(Instant, i32, i32)>,
+    /// Rising-edge tracking for the LT/RT triggers (as menu buttons).
+    trig_prev: [bool; 2],
+    /// A última entrada veio de um controle (ou toque) — o teclado na tela
+    /// só aparece por padrão quando isto é verdade. Teclado e mouse
+    /// zeram.
+    last_input_pad: bool,
 }
 
-const MENU_PAD_MAP: [(PadBtn, MenuNav); 8] = [
+const MENU_PAD_MAP: [(PadBtn, MenuNav); 12] = [
     (PadBtn::DPadUp, MenuNav::Up),
     (PadBtn::DPadDown, MenuNav::Down),
     (PadBtn::DPadLeft, MenuNav::Left),
@@ -310,7 +363,14 @@ const MENU_PAD_MAP: [(PadBtn, MenuNav); 8] = [
     (PadBtn::East, MenuNav::Back),
     (PadBtn::LeftShoulder, MenuNav::PageUp),
     (PadBtn::RightShoulder, MenuNav::PageDown),
+    (PadBtn::North, MenuNav::Extra),
+    (PadBtn::West, MenuNav::Alt),
+    (PadBtn::Back, MenuNav::Select),
+    (PadBtn::Start, MenuNav::Start),
 ];
+
+/// Gatilho analógico apertado além daqui (de 0..32767) conta como botão.
+const TRIGGER_PRESS: i16 = 16_000;
 
 /// A keydown's Konami step, when it has one — arrow keys for the directions,
 /// the letters B and A for the finish (the classic keyboard form of the
@@ -338,7 +398,7 @@ fn konami_nav_step(nav: MenuNav) -> Option<KonamiStep> {
         MenuNav::Right => Some(KonamiStep::Right),
         MenuNav::Back => Some(KonamiStep::B),
         MenuNav::Confirm => Some(KonamiStep::A),
-        MenuNav::PageUp | MenuNav::PageDown | MenuNav::Home | MenuNav::End => None,
+        _ => None,
     }
 }
 
@@ -382,6 +442,24 @@ impl Platform {
         // `present` bloqueando em FIFO derruba o tick à metade e o jogo vai
         // em câmera lenta. Um SDL_RENDER_VSYNC no ambiente vence.
         sdl3::hint::set("SDL_RENDER_VSYNC", "0");
+        // Pads clones de "Switch Pro Controller" (RetroFlag de SNES e
+        // similares, VID/PID 057e:2009): o driver hidapi do SDL os reivindica
+        // com handshake e um watchdog que, sem input por 100 ms, manda um
+        // ForceUSB SÍNCRONO na thread principal — cada write trava ~1 s até o
+        // timeout do USB e a interface engasga em ondas. Os dois hints vão
+        // JUNTOS: sem o hidapi, o GCController da Apple ("MFI") engole o pad
+        // e espera o protocolo Switch que o clone não fala (abre e nenhum
+        // botão chega); sem MFI também, ele cai no IOKit bruto, que lê os
+        // reports de joystick genérico que o pad manda de verdade. Já
+        // corrigido uma vez (7465cba) e perdido numa limpeza (3e371b7): NÃO
+        // remover. Rumble e giro, que o app não usa, ficam de fora.
+        // Só no macOS: no Linux/Steam Deck o hidapi é o que faz o Pro
+        // Controller de verdade funcionar bem, e lá o clone em XInput entra
+        // como Xbox.
+        if cfg!(target_os = "macos") {
+            sdl3::hint::set("SDL_JOYSTICK_HIDAPI_SWITCH", "0");
+            sdl3::hint::set("SDL_JOYSTICK_MFI", "0");
+        }
         // LINUX: vídeo x11 sempre (XWayland no Plasma e no gamescope) — o
         // caminho wayland do SDL apresenta mal no modo de jogo. Um
         // SDL_VIDEODRIVER no ambiente vence.
@@ -405,10 +483,13 @@ impl Platform {
             menu_prev: [false; MENU_PAD_MAP.len()],
             menu_pointer: None,
             debug_pointer: None,
-            pad_map: PadMap::defaults(),
+            pad_maps: std::array::from_fn(|_| PadMap::defaults()),
+            hold_pad_order: false,
             konami_watch: false,
             konami_step: 0,
             scheduled_clicks: Vec::new(),
+            trig_prev: [false; 2],
+            last_input_pad: false,
         };
         me.sync_gamepads();
         Ok(me)
@@ -451,7 +532,7 @@ impl Platform {
     /// first pad is idle and a later one has a button down, that one moves to
     /// the front — the pad in the player's hands is player 1.
     fn promote_active_pad(&mut self) {
-        if self.gamepads.len() < 2 {
+        if self.gamepads.len() < 2 || self.hold_pad_order {
             return;
         }
         let pressed = |pad: &Gamepad| {
@@ -571,6 +652,16 @@ impl Platform {
         let _span = TraceSpan::new("poll_menu");
         let mut out = MenuInput::default();
         for event in self.event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
+                Event::FingerDown { .. } => self.last_input_pad = true,
+                // Clique de mouse de verdade = teclado/mouse; o clique
+                // sintetizado do toque (SDL_TOUCH_MOUSEID) segue "controle".
+                Event::MouseButtonDown { which, .. } => {
+                    self.last_input_pad = which == u32::MAX;
+                }
+                _ => {}
+            }
             if let Some(pos) = left_click_at(&event) {
                 out.click = Some(pos);
                 continue;
@@ -605,8 +696,9 @@ impl Platform {
                         out.captured_key = Some(k.name());
                     }
                 }
-                Event::GamepadButtonDown { button, .. } if mode == MenuMode::CaptureKey => {
+                Event::GamepadButtonDown { button, which, .. } if mode == MenuMode::CaptureKey => {
                     out.captured_pad = Some(button);
+                    out.captured_pad_port = self.gamepads.iter().position(|(id, _)| *id == which);
                 }
                 // Nav mode normally ignores the keyboard entirely (no
                 // keyboard shortcuts) — the one exception is the Konami
@@ -631,6 +723,7 @@ impl Platform {
         }
         self.refresh_gamepads_if_changed();
         self.promote_active_pad();
+        let wheel_len = out.nav.len();
         // Gamepad: rising edges only.
         let pad = self.gamepads.first().map(|(_, pad)| pad);
         for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
@@ -664,6 +757,12 @@ impl Platform {
                 }
             }
             self.menu_prev[i] = down;
+        }
+        out.nav.extend(self.trigger_edges());
+        // Botão de controle apertado neste quadro (a roda do mouse também
+        // vira `Up`/`Down`, mas já estava em `nav` antes do laço dos botões).
+        if out.nav.len() > wheel_len {
+            self.last_input_pad = true;
         }
         // A posição do cursor é estado contínuo (o hover da estante lê a
         // cada frame), não evento — e o override headless tem precedência.
@@ -715,6 +814,16 @@ impl Platform {
         let _span = TraceSpan::new("poll_text_entry");
         let mut out = TextEntryInput::default();
         for event in self.event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { .. } | Event::TextInput { .. } => self.last_input_pad = false,
+                Event::FingerDown { .. } => self.last_input_pad = true,
+                // Clique de mouse de verdade = teclado/mouse; o clique
+                // sintetizado do toque (SDL_TOUCH_MOUSEID) segue "controle".
+                Event::MouseButtonDown { which, .. } => {
+                    self.last_input_pad = which == u32::MAX;
+                }
+                _ => {}
+            }
             if let Some(pos) = left_click_at(&event) {
                 out.click = Some(pos);
                 continue;
@@ -766,7 +875,68 @@ impl Platform {
             }
         }
         self.refresh_gamepads_if_changed();
+        out.pad = self.pad_edges();
+        if !out.pad.is_empty() {
+            self.last_input_pad = true;
+        }
+        for nav in &out.pad {
+            match nav {
+                MenuNav::Back => out.cancel = true,
+                MenuNav::Start => out.commit = true,
+                _ => {}
+            }
+        }
         out
+    }
+
+    /// Whether gamepad port `port` has the raw SDL button `btn` down right
+    /// now (state, not an event) — the controls screen's "hold B to cancel".
+    pub fn gamepad_button_held(&self, port: usize, btn: GamepadBtn) -> bool {
+        self.gamepads
+            .get(port)
+            .map(|(_, pad)| pad.button(btn))
+            .unwrap_or(false)
+    }
+
+    /// Whether the last thing the player touched was a gamepad (or the
+    /// touchscreen) rather than the keyboard/mouse — the on-screen keyboard
+    /// opens by default only then ([`Osk::begin`]). A keystroke while it's
+    /// open means they have a real keyboard, and it steps aside.
+    pub fn last_input_was_pad(&self) -> bool {
+        self.last_input_pad
+    }
+
+    /// Gamepad rising edges for the text-entry side (no Konami, no mouse).
+    fn pad_edges(&mut self) -> Vec<MenuNav> {
+        let mut v = Vec::new();
+        let pad = self.gamepads.first().map(|(_, pad)| pad);
+        for (i, (btn, nav)) in MENU_PAD_MAP.iter().enumerate() {
+            let down = pad.map(|p| p.button(*btn)).unwrap_or(false);
+            if down && !self.menu_prev[i] {
+                v.push(*nav);
+            }
+            self.menu_prev[i] = down;
+        }
+        v.extend(self.trigger_edges());
+        v
+    }
+
+    /// LT/RT as edge-triggered `TabPrev`/`TabNext`.
+    fn trigger_edges(&mut self) -> Vec<MenuNav> {
+        use sdl3::gamepad::Axis;
+        let vals = match self.gamepads.first() {
+            Some((_, p)) => [p.axis(Axis::TriggerLeft), p.axis(Axis::TriggerRight)],
+            None => [0, 0],
+        };
+        let mut v = Vec::new();
+        for (i, nav) in [MenuNav::TabPrev, MenuNav::TabNext].into_iter().enumerate() {
+            let down = vals[i] > TRIGGER_PRESS;
+            if down && !self.trig_prev[i] {
+                v.push(nav);
+            }
+            self.trig_prev[i] = down;
+        }
+        v
     }
 
     /// Copy `text` to the OS clipboard — the text fields' Cmd/Ctrl+C. The
@@ -844,10 +1014,98 @@ impl Platform {
         out
     }
 
-    /// Swap the gamepad SNES-button layout (settings screen); takes effect on
-    /// the next `poll`.
-    pub fn set_pad_map(&mut self, map: PadMap) {
-        self.pad_map = map;
+    /// Estado físico dos botões (máscara `padnav::bit`) de todos os pads
+    /// ligados, OU entre eles — a navegação do jogo (acorde Select+Start e
+    /// menus) usa os botões SDL de verdade, não o layout SNES remapeado.
+    pub fn pad_bits(&self) -> u16 {
+        use padnav::bit;
+        const MAP: [(PadBtn, u16); 12] = [
+            (PadBtn::DPadUp, bit::UP),
+            (PadBtn::DPadDown, bit::DOWN),
+            (PadBtn::DPadLeft, bit::LEFT),
+            (PadBtn::DPadRight, bit::RIGHT),
+            (PadBtn::South, bit::A),
+            (PadBtn::East, bit::B),
+            (PadBtn::West, bit::X),
+            (PadBtn::North, bit::Y),
+            (PadBtn::LeftShoulder, bit::LB),
+            (PadBtn::RightShoulder, bit::RB),
+            (PadBtn::Start, bit::START),
+            (PadBtn::Back, bit::SELECT),
+        ];
+        let mut bits = 0;
+        for (_, pad) in &self.gamepads {
+            for (btn, b) in MAP {
+                if pad.button(btn) {
+                    bits |= b;
+                }
+            }
+        }
+        bits
+    }
+
+    /// Swap port `port`'s gamepad SNES-button layout (settings screen);
+    /// takes effect on the next `poll`.
+    pub fn set_pad_map(&mut self, port: usize, map: PadMap) {
+        if let Some(m) = self.pad_maps.get_mut(port) {
+            *m = map;
+        }
+    }
+
+    /// Keep the gamepads in their ports (no promotion of the pad being
+    /// pressed to port 0) while `on` — the controls screen's mapping.
+    pub fn set_hold_pad_order(&mut self, on: bool) {
+        self.hold_pad_order = on;
+    }
+
+    /// The pads connected right now, one per port, in port order.
+    pub fn gamepad_slots(&self) -> Vec<GamepadInfo> {
+        use sdl3::gamepad::GamepadType as T;
+        self.gamepads
+            .iter()
+            .take(MAX_PORTS)
+            .map(|(_, pad)| {
+                let family = match pad.r#type() {
+                    T::Xbox360 | T::XboxOne => PadFamily::Xbox,
+                    T::PS3 | T::PS4 | T::PS5 => PadFamily::PlayStation,
+                    T::NintendoSwitchPro
+                    | T::NintendoSwitchJoyconLeft
+                    | T::NintendoSwitchJoyconRight
+                    | T::NintendoSwitchJoyconPair => PadFamily::Nintendo,
+                    _ => PadFamily::Generic,
+                };
+                GamepadInfo {
+                    name: pad.name().unwrap_or_default(),
+                    family,
+                }
+            })
+            .collect()
+    }
+
+    /// Which SNES buttons are held right now, read straight from the
+    /// devices (no events): `[0]` the keyboard through `keymap`, `[1 + n]`
+    /// gamepad port *n* through its own layout — the controls screen's live
+    /// tester.
+    pub fn live_buttons(&self, keymap: &KeyMap) -> [[bool; 12]; 1 + MAX_PORTS] {
+        use sdl3::keyboard::Scancode;
+        let mut out = [[false; 12]; 1 + MAX_PORTS];
+        let kb = self.event_pump.keyboard_state();
+        for &(k, b) in keymap.pairs() {
+            // SAFETY: a null modstate is allowed by SDL_GetScancodeFromKey.
+            if let Some(sc) = unsafe { Scancode::from_keycode(k, std::ptr::null_mut()) } {
+                if kb.is_scancode_pressed(sc) {
+                    out[0][b as usize] = true;
+                }
+            }
+        }
+        for (port, (_, pad)) in self.gamepads.iter().take(MAX_PORTS).enumerate() {
+            for (btn, mapped) in self.pad_maps[port].pairs() {
+                if pad.button(*btn) {
+                    out[1 + port][*mapped as usize] = true;
+                }
+            }
+        }
+        out
     }
 
     /// Turn the Konami code watcher on/off (the app's idle screen turns it on
@@ -860,8 +1118,8 @@ impl Platform {
 
     fn sample_gamepads(&self, input: &mut Input) {
         input.clear_pads();
-        for (port, (_, pad)) in self.gamepads.iter().enumerate() {
-            for (btn, mapped) in self.pad_map.pairs() {
+        for (port, (_, pad)) in self.gamepads.iter().take(MAX_PORTS).enumerate() {
+            for (btn, mapped) in self.pad_maps[port].pairs() {
                 if pad.button(*btn) {
                     input.set_pad(port, *mapped, true);
                 }

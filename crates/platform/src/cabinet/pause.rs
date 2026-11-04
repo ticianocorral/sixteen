@@ -218,20 +218,23 @@ pub(super) fn draw_pause_book(
 
         let pin_btn = Rect::new(lx, pin_del_y, half, btn_h as u32);
         let del_btn = Rect::new(lx + half as i32 + 8, pin_del_y, half, btn_h as u32);
-        buttons.push((
-            PanelButton::PauseTextPin,
-            draw_button(
-                canvas,
-                font,
-                pin_btn,
-                if pause.text_pinned {
-                    tr!("Pinned", "Fixado")
-                } else {
-                    tr!("Pin", "Fixar")
-                },
-                true,
-            ),
-        ));
+        // Fixar só em telas maiores que 800p (o painel lateral não comporta
+        // a nota fixada em 720p/800p); desafixar sempre é permitido.
+        let can_pin = out_h > 800 || pause.text_pinned;
+        let text_pin = draw_button(
+            canvas,
+            font,
+            pin_btn,
+            if pause.text_pinned {
+                tr!("Pinned", "Fixado")
+            } else {
+                tr!("Pin", "Fixar")
+            },
+            can_pin,
+        );
+        if can_pin {
+            buttons.push((PanelButton::PauseTextPin, text_pin));
+        }
         buttons.push((
             PanelButton::PauseTextDelete,
             draw_button(
@@ -330,20 +333,21 @@ pub(super) fn draw_pause_book(
 
     let pin_btn = Rect::new(rx, pin_y, half, btn_h as u32);
     let name_btn = Rect::new(rx + half as i32 + 8, pin_y, half, btn_h as u32);
-    buttons.push((
-        PanelButton::PauseNotePin,
-        draw_button(
-            canvas,
-            font,
-            pin_btn,
-            if pause.pinned {
-                tr!("Pinned", "Fixado")
-            } else {
-                tr!("Pin", "Fixar")
-            },
-            true,
-        ),
-    ));
+    let can_pin = out_h > 800 || pause.pinned;
+    let note_pin = draw_button(
+        canvas,
+        font,
+        pin_btn,
+        if pause.pinned {
+            tr!("Pinned", "Fixado")
+        } else {
+            tr!("Pin", "Fixar")
+        },
+        can_pin,
+    );
+    if can_pin {
+        buttons.push((PanelButton::PauseNotePin, note_pin));
+    }
     buttons.push((
         PanelButton::PauseNoteName,
         draw_button(
@@ -381,13 +385,52 @@ pub(super) fn draw_pause_book(
                 canvas,
                 font,
                 continue_btn,
-                tr!("Back to the game", "Voltar ao jogo"),
+                tr!("Back to the game (B)", "Voltar ao jogo (B)"),
                 true,
             ),
         ));
+        // Dica do gamepad logo abaixo do botão (só cabe com a faixa baixa
+        // folgada; some em janelas muito pequenas).
+        let hint_y = btn_y + bottom_btn_h + 4;
+        if hint_y + GLYPH_H as i32 <= out_h as i32 {
+            let hint = tr!(
+                "< > screenshot   LB/RB note   X pin   Y name   Start write   Select pin note",
+                "< > print   LB/RB nota   X fixar   Y nomear   Start escrever   Select fixar nota"
+            );
+            let w = GLYPH_W as i32 * hint.chars().count() as i32;
+            draw_text_absolute(
+                canvas,
+                font,
+                (out_w as i32 - w) / 2,
+                hint_y,
+                TextStyle::new(1, PANEL_DIM),
+                hint,
+                usize::MAX,
+            );
+        }
     }
 
     buttons
+}
+
+/// Moldura do destaque do gamepad numa linha do modal: borda dupla clara e
+/// uma setinha à esquerda, legíveis mesmo sobre uma linha apagada.
+fn draw_cursor_frame(canvas: &mut WindowCanvas, rect: Rect) {
+    canvas.set_draw_color(Color::RGB(PANEL_WARN.0, PANEL_WARN.1, PANEL_WARN.2));
+    for k in 0..2i32 {
+        let r = Rect::new(
+            rect.x() - k - 1,
+            rect.y() - k - 1,
+            rect.width() + 2 * (k as u32 + 1),
+            rect.height() + 2 * (k as u32 + 1),
+        );
+        let _ = canvas.draw_rect(r);
+    }
+    // Tinta translúcida por dentro, para o destaque ler de longe.
+    canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    canvas.set_draw_color(Color::RGBA(PANEL_WARN.0, PANEL_WARN.1, PANEL_WARN.2, 46));
+    let _ = canvas.fill_rect(rect);
+    canvas.set_blend_mode(sdl3::render::BlendMode::None);
 }
 
 /// Draw the modal dialog: a single centered card on a plain background,
@@ -476,32 +519,13 @@ pub(super) fn draw_modal(
         return buttons;
     }
 
-    // Row-picking step. A search filter (plan revision — only Cheats sets
-    // `searchable`) narrows which of `modal.rows` take part below; each
-    // survivor keeps its *original* index (`ModalSlot(i)` has to, since
-    // that index is what the click handler uses to look the row back up
-    // in `cheat_defs`/`cheat_state`) — same "iterate everything, skip what
-    // doesn't apply this frame" shape the scroll clipping below already
-    // uses, just one more skip condition.
-    let query = modal.search_query.trim();
-    let visible: Vec<usize> = modal
-        .rows
-        .iter()
-        .enumerate()
-        .filter(|(_, row)| query.is_empty() || contains_ignore_ascii_case(&row.label, query))
-        .filter(|(_, row)| match modal.cheat_filter {
-            None => true,
-            Some(want_on) => row_checked(&row.label) == Some(want_on),
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    let cols = if visible.len() > 8 { 2usize } else { 1usize };
-    let rows_per_col = visible.len().div_ceil(cols).max(1);
+    // Row-picking step.
+    let n_rows = modal.rows.len();
+    let cols = if n_rows > 8 { 2usize } else { 1usize };
+    let rows_per_col = n_rows.div_ceil(cols).max(1);
     let col_gap = 16i32;
-    // Wide enough for the longest label in the *unfiltered* list (so
-    // narrowing a search doesn't make the card leap wider/narrower every
-    // keystroke), but never so wide it'd spill past the window — whatever
+    // Wide enough for the longest label, but never so wide it'd spill past
+    // the window — whatever
     // doesn't fit even then still clips with an ellipsis (`draw_button`),
     // this is just about not truncating the common case. Floors at 200 to
     // keep Save/Load/Print (short "Slot N" labels) exactly as wide as
@@ -523,22 +547,14 @@ pub(super) fn draw_modal(
     let card_w = card_w.min(out_w.saturating_sub(40));
 
     // How many rows fit without any scroll UI eating into the budget —
-    // matches every dialog that's had room to just show everything so far
-    // (save/load's 10, print's 15). Only once a list (the Cheats modal, for
-    // a database-heavy game) overflows even a generous card does scrolling
-    // — and the two extra rows it costs — enter the picture at all.
-    // Two extra rows on a searchable modal: the search box, and the
-    // on/off state filter (plan revision) right below it.
-    let search_h = if modal.searchable {
-        ((btn_h + 8) * 2) as u32
-    } else {
-        0
-    };
+    // save/load's 10 and print's 15 normally just show everything; only a
+    // list that overflows the card (a small window) scrolls, and only then
+    // do the two extra rows it costs enter the picture at all.
     let max_card_h = out_h.saturating_sub(40);
-    let fixed_overhead = pad as u32 * 2 + GLYPH_H + 16 + search_h + 12 + btn_h as u32;
+    let fixed_overhead = pad as u32 * 2 + GLYPH_H + 16 + 12 + btn_h as u32;
     let budget_no_scroll = max_card_h.saturating_sub(fixed_overhead) as i32;
     let rows_that_fit = (budget_no_scroll / row_h).max(1) as usize;
-    let scrollable = !visible.is_empty() && rows_per_col > rows_that_fit;
+    let scrollable = n_rows > 0 && rows_per_col > rows_that_fit;
     let visible_rows = if scrollable {
         let scroll_ui_h = (btn_h + 8) * 2;
         let budget = budget_no_scroll - scroll_ui_h;
@@ -547,7 +563,17 @@ pub(super) fn draw_modal(
         rows_per_col
     };
     let scroll = if scrollable {
-        modal.scroll.min(rows_per_col - visible_rows)
+        let mut sc = modal.scroll.min(rows_per_col - visible_rows);
+        if modal.cursor_on && !modal.rows.is_empty() {
+            // O destaque do pad manda: rola a grade até ele aparecer.
+            let line = modal.cursor % rows_per_col;
+            if line < sc {
+                sc = line;
+            } else if line >= sc + visible_rows {
+                sc = line + 1 - visible_rows;
+            }
+        }
+        sc
     } else {
         0
     };
@@ -574,24 +600,16 @@ pub(super) fn draw_modal(
         &modal.title,
         usize::MAX,
     );
-    let filtering_active = modal.searchable && (!query.is_empty() || modal.cheat_filter.is_some());
-    if scrollable || filtering_active {
+    if scrollable {
         // Same "counter next to a scale-2 heading" placement the naming
         // step's char counter already uses, just against the title instead
-        // of a draft's text — no extra row spent on it. Reflects the
-        // *filtered* count when a search and/or the on/off filter is
-        // active, so "3/1209" (say) reads as "these 3 are what matched",
-        // not a bound on the game's real cheat count.
-        let counter = if visible.is_empty() {
-            "0".to_string()
-        } else {
-            format!(
-                "{}-{}/{}",
-                scroll + 1,
-                (scroll + visible_rows).min(rows_per_col),
-                rows_per_col
-            )
-        };
+        // of a draft's text — no extra row spent on it.
+        let counter = format!(
+            "{}-{}/{}",
+            scroll + 1,
+            (scroll + visible_rows).min(rows_per_col),
+            rows_per_col
+        );
         let counter_w = (GLYPH_W as i32) * counter.chars().count() as i32;
         draw_text_absolute(
             canvas,
@@ -605,122 +623,48 @@ pub(super) fn draw_modal(
     }
     cy += GLYPH_H as i32 + 16;
 
-    if modal.searchable {
-        let label = if modal.search_query.is_empty() {
-            tr!("Search...", "Buscar...").to_string()
-        } else {
-            tr!(
-                format!("Search: \"{}\"", modal.search_query),
-                format!("Buscar: \"{}\"", modal.search_query)
-            )
-        };
-        let search_box = Rect::new(x, cy, inner_w, btn_h as u32);
+    if scrollable {
+        let up = Rect::new(x, cy, inner_w, btn_h as u32);
         buttons.push((
-            PanelButton::ModalSearchStart,
-            draw_button(canvas, font, search_box, &label, true),
-        ));
-        cy += btn_h + 8;
-
-        // On/off state filter (plan revision): a three-way segmented
-        // control, whichever matches `modal.cheat_filter` drawn `lit`
-        // (highlighted) — clicking either of the other two switches to it,
-        // clicking the active one is a harmless no-op (same "not guarded,
-        // the click just re-applies the same state" shape `Fixar`/`Fixado`
-        // already has for a print slot).
-        let seg_gap = 8i32;
-        let seg_w = ((inner_w as i32 - seg_gap * 2) / 3).max(1) as u32;
-        let all_btn = Rect::new(x, cy, seg_w, btn_h as u32);
-        let on_btn = Rect::new(x + (seg_w as i32 + seg_gap), cy, seg_w, btn_h as u32);
-        let off_btn = Rect::new(x + (seg_w as i32 + seg_gap) * 2, cy, seg_w, btn_h as u32);
-        buttons.push((
-            PanelButton::ModalFilterAll,
-            draw_button(
-                canvas,
-                font,
-                all_btn,
-                tr!("All", "Todos"),
-                modal.cheat_filter.is_none(),
-            ),
-        ));
-        buttons.push((
-            PanelButton::ModalFilterOn,
-            draw_button(
-                canvas,
-                font,
-                on_btn,
-                tr!("On", "Ligados"),
-                modal.cheat_filter == Some(true),
-            ),
-        ));
-        buttons.push((
-            PanelButton::ModalFilterOff,
-            draw_button(
-                canvas,
-                font,
-                off_btn,
-                tr!("Off", "Desligados"),
-                modal.cheat_filter == Some(false),
-            ),
+            PanelButton::ModalScrollUp,
+            draw_button(canvas, font, up, tr!("^ Up", "^ Cima"), scroll > 0),
         ));
         cy += btn_h + 8;
     }
 
-    if visible.is_empty() {
-        // Reachable with a search and/or the on/off filter active and
-        // nothing matching — opening the modal at all already requires a
-        // non-empty row list, so an *unfiltered* empty view can't happen.
-        draw_text_absolute(
-            canvas,
-            font,
-            x,
-            cy,
-            TextStyle::new(1, PANEL_DIM),
-            tr!("no cheats found", "nenhum cheat encontrado"),
-            usize::MAX,
-        );
-        cy += GLYPH_H as i32 + 12;
-    } else {
-        if scrollable {
-            let up = Rect::new(x, cy, inner_w, btn_h as u32);
-            buttons.push((
-                PanelButton::ModalScrollUp,
-                draw_button(canvas, font, up, tr!("^ Up", "^ Cima"), scroll > 0),
-            ));
-            cy += btn_h + 8;
+    let rows_top = cy;
+    for (i, row) in modal.rows.iter().enumerate() {
+        let col = i / rows_per_col;
+        let row_in_col = i % rows_per_col;
+        if row_in_col < scroll || row_in_col >= scroll + visible_rows {
+            continue; // scrolled out of view this frame
         }
+        let rx = x + col as i32 * (col_w as i32 + col_gap);
+        let ry = rows_top + (row_in_col - scroll) as i32 * row_h;
+        let rect = Rect::new(rx, ry, col_w, (row_h - 4) as u32);
+        buttons.push((
+            PanelButton::ModalSlot(i as u16),
+            draw_button(canvas, font, rect, &row.label, row.enabled),
+        ));
+        if modal.cursor_on && i == modal.cursor {
+            draw_cursor_frame(canvas, rect);
+        }
+    }
+    cy = rows_top + visible_rows as i32 * row_h;
 
-        let rows_top = cy;
-        for (pos, &i) in visible.iter().enumerate() {
-            let col = pos / rows_per_col;
-            let row_in_col = pos % rows_per_col;
-            if row_in_col < scroll || row_in_col >= scroll + visible_rows {
-                continue; // scrolled out of view this frame
-            }
-            let row = &modal.rows[i];
-            let rx = x + col as i32 * (col_w as i32 + col_gap);
-            let ry = rows_top + (row_in_col - scroll) as i32 * row_h;
-            let rect = Rect::new(rx, ry, col_w, (row_h - 4) as u32);
-            buttons.push((
-                PanelButton::ModalSlot(i as u16),
-                draw_button(canvas, font, rect, &row.label, row.enabled),
-            ));
-        }
-        cy = rows_top + visible_rows as i32 * row_h;
-
-        if scrollable {
-            let down = Rect::new(x, cy, inner_w, btn_h as u32);
-            buttons.push((
-                PanelButton::ModalScrollDown,
-                draw_button(
-                    canvas,
-                    font,
-                    down,
-                    tr!("v Down", "v Baixo"),
-                    scroll + visible_rows < rows_per_col,
-                ),
-            ));
-            cy += btn_h + 8;
-        }
+    if scrollable {
+        let down = Rect::new(x, cy, inner_w, btn_h as u32);
+        buttons.push((
+            PanelButton::ModalScrollDown,
+            draw_button(
+                canvas,
+                font,
+                down,
+                tr!("v Down", "v Baixo"),
+                scroll + visible_rows < rows_per_col,
+            ),
+        ));
+        cy += btn_h + 8;
     }
     cy += 12;
 
@@ -731,31 +675,4 @@ pub(super) fn draw_modal(
     ));
 
     buttons
-}
-
-/// Case-insensitive ASCII substring search — used to filter the Cheats
-/// modal's rows by the player's typed query. Byte-level, no allocation
-/// (contrast `str::to_lowercase`, which would allocate a fresh copy of
-/// every row's label on every frame the modal is open): fine for this
-/// database's plain-ASCII descriptions, same as `RomId`'s own comparisons
-/// elsewhere in the app.
-pub(super) fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
-    let (h, n) = (haystack.as_bytes(), needle.as_bytes());
-    n.is_empty() || h.len() >= n.len() && h.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))
-}
-
-/// Whether a Cheats modal row's label reads as checked on/off, from the
-/// `[x] `/`[ ] ` prefix `cheat_modal_rows` (the one and only place that
-/// builds these labels) always puts in front of the description —
-/// `None` for a row with neither prefix (every other modal's rows: "Slot
-/// N", never checkbox-shaped). Reused for the on/off state filter instead
-/// of threading a second parallel array through `set_modal` just for it.
-pub(super) fn row_checked(label: &str) -> Option<bool> {
-    if label.starts_with("[x] ") {
-        Some(true)
-    } else if label.starts_with("[ ] ") {
-        Some(false)
-    } else {
-        None
-    }
 }

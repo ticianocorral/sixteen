@@ -7,6 +7,138 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+### Adicionado
+- **Sugestão da noite** (opcional): Configurações → estante → "Sugestão da
+  noite" (chave `night_pick`, desligada por padrão) põe o botão "sugestão"
+  no cabeçalho da estante. Sorteia um jogo com ROM presente, favorecendo os
+  nunca abertos e os parados há mais tempo (e os de pouco tempo de jogo), e
+  mostra um cartão com capa, título e o motivo; **A** joga, **X** sorteia
+  outra, **B** fecha. Tudo no controle. Prévia headless:
+  `selector --debug-night-shot`.
+- **Jogo 100% no controle**: segurar **Select + Start** por ~0,8 s abre o
+  "Menu do jogo" (Continuar, Salvar/Carregar estado, Print, Anotações,
+  Conquistas, Reset, Desligar/Ligar, Ejetar, Sair do app) com o jogo
+  congelado e sem vazar Select/Start para ele. Nos modais (salvar, carregar,
+  print, conquistas) o direcional move um destaque, **A** escolhe, **B**
+  cancela e **LB/RB** saltam de página; no livro de pausa, ←/→ passam os
+  prints, LB/RB as anotações, **X** fixa, **Y** nomeia, **Start** escreve e
+  **B** volta. Uma dica na TV avisa do acorde ao começar o jogo.
+  Prévia headless: `emu-run --debug-shot-modal menu|print-pad`.
+- **Visual da tela**: nova opção em Configurações → imagem e som (e a chave
+  `screen_look` do `config.toml`) com sete looks — TV de antena (RF, o
+  padrão e idêntico ao de antes), Composite, S-Video, RGB / PVM, Trinitron,
+  LCD nítido e Preto e branco. Cada um combina um preset do filtro NTSC
+  (novo: `Sharp`, sem artefatos) com scanlines, máscara de aberturas, grade
+  de pixels de LCD ou brilho suave, desenhados sobre a mesma malha curva
+  da imagem, e com a curvatura do tubo própria (o LCD é plano).
+- **Linhas e máscara** (`screen_lines`: `auto`, `off`, `light`, `pvm`,
+  `grille`, `grid`): as scanlines e a máscara passam a ser escolhidas à
+  parte do sinal, então dá para ter a TV de antena (RF) com as scanlines
+  do monitor RGB. `auto` (padrão) usa as do próprio visual.
+- **Álbum de prints**: botão "álbum" na estante (ou **Y** no controle) que
+  junta os prints de todos os jogos numa página de couro, em polaroides com
+  a legenda à mão, o jogo e a data. Direcional move, **A** abre a foto
+  grande, **B** volta, **L/R** filtram por jogo; também responde a mouse e
+  toque. As imagens carregam em segundo plano, só as visíveis. Sem prints,
+  mostra uma dica. Prévia headless: `selector --debug-album-shot --shot
+  out.bmp [--notes-dir D] [--album-view] [--album-filter]`.
+- **Cheat Genius**: ao ligar o console com o cartucho (e ao apertar RESET),
+  uma ROM própria — carregada no mesmo core, antes do jogo — mostra uma tela
+  de carregamento e lista os cheats do jogo. **A** liga/desliga, **START**
+  joga com os marcados, **B** cancela e joga sem nenhum (o que estava salvo
+  continua salvo). **Y** abre um teclado de códigos (Game Genie
+  `XXXX-XXXX`, RAM `XXXXXXXX`, vários com `+`) para o que não está no banco;
+  **X** marca um código seu para apagar. Os códigos próprios ficam em
+  `saves/<jogo>/custom_cheats.txt`. Agora é o único jeito de usar cheats
+  (fica de fora só no hardcore das conquistas). A tela de carga tem uma
+  logo própria no clima das caixas de acessório dos anos 90 — o disco de
+  quatro cores do Genius (verde, vermelho, azul e amarelo, as cores dos
+  botões do Super Famicom), com os gomos acendendo um de cada vez, e
+  "CHEAT GENIUS" em letras gordas, em itálico e em arco, com degradê
+  amarelo → vermelho — e a lista mostra a versão pequena no topo (gerada por
+  `gen_logo.py`). A ROM é original (fonte 8x8 de domínio público);
+  o fonte está em `crates/app/cheat_genius/` e é montado com
+  `scripts/build_cheat_genius.sh` (precisa de `cc65` só para recompilar).
+- **Brilho do vidro da TV**: uma mancha de luz difusa no alto à esquerda,
+  uma faixa diagonal bem fraca e um aro claro na borda, acompanhando a
+  curva do tubo — ligada ou desligada.
+- **Controle 2 com mapa próprio** (`[gamepad2]` no `sixteen.cfg`): cada
+  controle tem os seus botões.
+- **Tela de controles nova**: o controle de Super Nintendo desenhado na TV,
+  com o botão escolhido marcado e o que você aperta acendendo; a primeira
+  linha escolhe o que mapear — **teclado**, **controle 1** ou
+  **controle 2** (com o nome do aparelho conectado). Os botões aparecem com
+  o nome impresso no controle (Xbox, PlayStation ou Nintendo) e as teclas
+  com nome de gente ("Seta cima", "Enter"). Novas ações: **Configurar tudo
+  em sequência**, **Testar botões** e **Restaurar padrão**.
+- **Fora do jogo, 100% no controle** (pensado no Steam Deck; nada exige
+  Guide/Steam, L4/R4/L5/R5, trackpads nem L3/R3):
+  - **Teclado na tela**: onde antes só se digitava no teclado (filtro da
+    estante, usuário/chave/senha das conquistas — a senha aparece mascarada
+    —, legenda de print) aparece uma grade de letras, números e símbolos
+    (`@ . _ - : / +`, acentos). Direcional move, **A** digita, **X** apaga,
+    **Y** alterna maiúscula/símbolos, **LB/RB** movem o cursor do texto,
+    **Start** confirma, **B** cancela. Abre sozinho quando a última entrada
+    foi do controle; o teclado de verdade e o do Steam (Steam+X) seguem
+    funcionando e escondem a grade ao digitar.
+  - **Estante**: **X** favorita, **Y** álbum, **Select** histórico,
+    **Start** configurações, **LT/RT** trocam a aba do painel. Cima no topo
+    da grade foca o cabeçalho (álbum, atualizar, histórico, filtro — **A**
+    abre o teclado) e Direita na última coluna foca o painel lateral
+    (favoritar, conquistas, capa traseira, cartucho, manual, configurações,
+    voltar). Legenda de botões no pé da tela e anel lavanda no foco.
+  - **Configurações**: **LB/RB** (ou LT/RT) trocam de seção, **Start** abre
+    a partir da estante e da tela inicial.
+  - **Tela inicial**: o direcional percorre os botões do painel, as setas
+    de update e o POWER da TV (antes só o mouse ligava a TV); **A** ativa,
+    **X** baixa o núcleo quando falta, **Start** abre as configurações. Na
+    tela de primeira execução, Cima/Baixo escolhem núcleo, DAT ou "bora
+    jogar". A tela de update do app agora também age com **A**.
+  - **Controles**: a captura de um botão se cancela segurando **B** por ~1 s
+    (com barra de progresso na dica) ou sozinha após 5 s; o botão
+    Guide/Steam nunca é mapeado.
+  Prévia headless do teclado: `sixteen --debug-settings osk --shot
+  out.bmp` e `selector --debug-pad osk:texto --frames 30 --shot out.bmp`
+  (também `header:filter` e `panel:N` para os focos).
+
+### Alterado
+- **Configurações reorganizadas** em seis seções: controles (agora a
+  primeira), jogo, imagem e som, estante, conquistas e sistema. O tema da
+  estante e o "Renomear ROMs" foram para **estante**; Voltar sai das
+  configurações de qualquer seção.
+- **Trocar um botão já usado troca os dois** (a outra ação fica com o botão
+  antigo) e avisa embaixo do controle — antes a outra ação ficava vazia.
+- **B na tela inicial pede confirmação** ("Sair do SixteeN? A confirma, B
+  volta") em vez de fechar o app na hora; o X da janela segue fechando
+  direto. Os botões **X**/**Y**/**Select**/**Start**/**LT**/**RT** dos
+  menus (antes sem função) ganharam usos — ver "Jogar só com o controle" no
+  manual.
+
+### Corrigido
+- **Controle clone de "Switch Pro Controller" (RetroFlag de SNES) no macOS
+  voltou a não travar a interface**: os hints `SDL_JOYSTICK_HIDAPI_SWITCH=0`
+  e `SDL_JOYSTICK_MFI=0` (da 7465cba) tinham sumido numa limpeza; voltaram,
+  agora só no macOS. Com o clone em modo Switch o macOS ainda o derruba e
+  reconecta a cada ~1,5 s (fora do app), então ele não manda botões — use o
+  modo XInput/DInput ou outro controle; no Steam Deck ele entra como Xbox.
+- Na tela de controles, dar a uma ação a tecla de outra fazia a outra
+  sumir da lista e desalinhava a coluna do controle, que passava a mostrar
+  e gravar o botão da ação errada.
+
+### Removido
+- **Luz do quarto pela hora do dia** (`room_light`): o reflexo da janela,
+  a luz do fim de tarde e o quarto escuro. Configs antigas com
+  `room_light` continuam abrindo normalmente.
+- **Modal "Cheats" do painel** (a lista com busca e filtros
+  Todos/Ligados/Desligados): os cheats agora são escolhidos só no Cheat
+  Genius, ao ligar o console. O contador "N cheats ativados" do painel
+  continua.
+- **Opção de ligar/desligar o Cheat Genius** (`cheat_genius`, em
+  Configurações → jogo). Configs antigas com `cheat_genius` continuam
+  abrindo normalmente.
+
 ## [1.7.0] - 2026-10-31
 
 ### Adicionado
