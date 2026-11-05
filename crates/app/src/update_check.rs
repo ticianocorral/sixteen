@@ -163,7 +163,10 @@ fn asset_for_platform(assets: &[GhAsset]) -> Option<UpdateAsset> {
     } else if cfg!(target_os = "linux") {
         ("-linux-", ".AppImage")
     } else {
-        ("-win", ".zip")
+        // Windows: não há apply automático (`apply_for_platform` recusa) —
+        // baixar centenas de MB que ficariam largados em `update/` não
+        // ajuda; a tela de update manda para a página de releases.
+        return None;
     };
     let a = assets
         .iter()
@@ -478,9 +481,14 @@ pub fn apply_pending_update() {
 #[cfg(target_os = "macos")]
 fn apply_macos_dmg(dmg: &Path) -> Result<(), String> {
     use std::process::Command;
-    let mnt = std::env::temp_dir().join("sixteen-update-mnt");
+    // Ponto de montagem na pasta do PRÓPRIO app, não no temp: sem `TMPDIR`
+    // (app aberto por script) o temp vira o `/tmp` compartilhado, e outro
+    // usuário poderia plantar um link entre o remove e o create.
+    let cache = crate::dirs::app_root().join("cache");
+    std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+    let mnt = cache.join("update-mnt");
     let _ = std::fs::remove_dir_all(&mnt);
-    std::fs::create_dir_all(&mnt).map_err(|e| e.to_string())?;
+    std::fs::create_dir(&mnt).map_err(|e| e.to_string())?;
     let out = Command::new("hdiutil")
         .args(["attach", "-nobrowse", "-readonly", "-mountpoint"])
         .arg(&mnt)
@@ -718,7 +726,16 @@ mod tests {
         } else if cfg!(target_os = "linux") {
             ("SixteeN-9.9.9-linux-x86_64", ".AppImage")
         } else {
-            ("SixteeN-9.9.9-windows-x86_64", ".zip")
+            // Windows não oferece update automático.
+            let url = format!("{RELEASE_DOWNLOAD_PREFIX}v9.9.9/SixteeN-9.9.9-windows-x86_64.zip");
+            let digest = format!("sha256:{}", "a".repeat(64));
+            assert!(asset_for_platform(&[gh(
+                "SixteeN-9.9.9-windows-x86_64.zip",
+                &url,
+                Some(&digest)
+            )])
+            .is_none());
+            return;
         };
         let file = format!("{name}{ext}");
         let good_url = format!("{RELEASE_DOWNLOAD_PREFIX}v9.9.9/{file}");

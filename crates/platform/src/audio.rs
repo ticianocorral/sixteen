@@ -12,6 +12,8 @@ pub struct AudioOut {
     stream: Option<AudioStreamOwner>,
     /// Source rate the core declared; kept for diagnostics.
     pub source_rate: u32,
+    /// Dispositivo pausado por [`AudioOut::set_paused`].
+    paused: std::cell::Cell<bool>,
 }
 
 impl AudioOut {
@@ -27,6 +29,7 @@ impl AudioOut {
         Ok(Self {
             stream: Some(stream),
             source_rate: sample_rate,
+            paused: std::cell::Cell::new(false),
         })
     }
 
@@ -36,6 +39,7 @@ impl AudioOut {
         Self {
             stream: None,
             source_rate: sample_rate,
+            paused: std::cell::Cell::new(false),
         }
     }
 
@@ -57,6 +61,34 @@ impl AudioOut {
             .and_then(|s| s.queued_bytes().ok())
             .map(|b| (b.max(0) as usize) / 4)
             .unwrap_or(0)
+    }
+
+    /// Pausa/retoma o DISPOSITIVO deste stream. Parado (jogo pausado, menu
+    /// aberto, console desligado), um stream aberto mixando silêncio mantém
+    /// a thread de áudio do SDL acordando ~100×/s e impede o PipeWire de
+    /// suspender a saída — no Steam Deck, codec e amplificador ligados à toa.
+    /// Ao pausar, a fila é descartada (nada de áudio velho na volta). Só
+    /// chama o SDL quando o estado muda.
+    pub fn set_paused(&self, paused: bool) {
+        if self.paused.get() == paused {
+            return;
+        }
+        self.paused.set(paused);
+        let Some(s) = &self.stream else {
+            return;
+        };
+        let r = if paused {
+            let _ = s.clear();
+            s.pause()
+        } else {
+            s.resume()
+        };
+        if let Err(e) = r {
+            log::warn!(
+                "áudio: {} falhou: {e}",
+                if paused { "pausar" } else { "retomar" }
+            );
+        }
     }
 
     pub fn clear(&self) {

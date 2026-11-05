@@ -404,6 +404,9 @@ pub struct Cabinet {
     /// `None` until the first hissing static frame after the toggle turns
     /// on.
     hiss: Option<AudioOut>,
+    /// A última vez que o chiado tinha algo na fila (ou foi enfileirado):
+    /// ~3 s parado e vazio, o stream fecha (`reap_idle_audio`).
+    hiss_last: Instant,
     /// XORSHIFT state for the hiss samples — same generator the power
     /// bursts use, so the texture of the noise matches.
     hiss_rng: u32,
@@ -459,6 +462,15 @@ pub struct Cabinet {
     /// the queued audio before the device ever plays it (the bug that made
     /// the first foley attempt silent).
     foley: Option<AudioOut>,
+    /// A última vez que o foley tinha algo na fila — o mesmo prazo de
+    /// fechamento do chiado.
+    foley_last: Instant,
+    /// O vidro morto (TV desligada) pronto numa textura, pelo tamanho do
+    /// tubo — antes eram ~7 mil chamadas de desenho por quadro.
+    dead_glass: Option<DeadGlass>,
+    /// O último quadro apresentado não tinha nada que mude com o tempo
+    /// (`frame_is_static`): o app pode espaçar os quadros.
+    frame_static: bool,
     /// A TV e o quarto: menu de imagem, burn-in, sons do tubo,
     /// alto-falante e luz do quarto (`tv.rs`).
     tvx: TvExtras,
@@ -1326,6 +1338,7 @@ impl Cabinet {
             core_status: None,
             static_hiss: false,
             hiss: None,
+            hiss_last: Instant::now(),
             hiss_rng: 0x2545_f491,
             window_hidden: false,
             tv_power: None, // abre com a TV ligada, como o PolyStnX
@@ -1334,6 +1347,9 @@ impl Cabinet {
             tv_power_buttons: None,
             pad_focus: None,
             foley: None,
+            foley_last: Instant::now(),
+            dead_glass: None,
+            frame_static: false,
             tvx: TvExtras::new(),
             looks: LookState::default(),
             ch3_until: None,
@@ -1964,7 +1980,7 @@ impl Cabinet {
     /// próximo `present`); `None` apaga. Vale por poucos quadros — a tela
     /// dona chama a cada quadro.
     pub fn set_pad_focus(&mut self, focus: Option<PadFocus>) {
-        self.pad_focus = focus.map(|f| (f, 3));
+        self.pad_focus = focus.map(|f| (f, PAD_FOCUS_TTL));
     }
 
     /// Os botões do painel da estante desenhados no último quadro, em ordem
@@ -2004,31 +2020,83 @@ impl Cabinet {
         }
     }
 
-    fn draw_pad_focus(&mut self) {
+    /// Devolve `false` quando o anel não foi renovado neste quadro (vai
+    /// sumir em poucos quadros: muda com o tempo).
+    fn draw_pad_focus(&mut self) -> bool {
         let Some((f, ttl)) = self.pad_focus else {
-            return;
+            return true;
         };
+        let renewed = ttl >= PAD_FOCUS_TTL;
         self.pad_focus = (ttl > 1).then_some((f, ttl - 1));
         if let Some(r) = self.pad_focus_rect(f) {
             self.canvas.set_viewport(Some(self.canvas_rect));
             draw_focus_ring(&mut self.canvas, r);
             self.canvas.set_viewport(None);
         }
+        renewed
     }
 
     /// Present of every frame, through the trace watchdog (`SIXTEEN_TRACE=
     /// 1`): present is where a GPU/compositor/display stall shows up — telling
     /// it apart from a slow app loop is the whole point of the trace.
-    fn present_and_time(&mut self) {
-        self.draw_pad_focus();
+    ///
+    /// `still`: o que ESTE quadro desenhou não muda com o tempo (a tela que
+    /// chama sabe — neve, transição, OSD com prazo). O anel de foco do
+    /// controle que está sumindo derruba junto (`frame_is_static`).
+    fn present_and_time(&mut self, still: bool) {
+        let ring_still = self.draw_pad_focus();
+        self.frame_static = still && ring_still;
         self.feed_tv_sound();
         let _span = super::TraceSpan::new("present");
         self.canvas.present();
     }
 
+    /// O último quadro apresentado é parado: nada nele muda com o tempo
+    /// (sem neve, sem transição do tubo, sem OSD/banner/menu com prazo,
+    /// sem cartucho em movimento, sem anel de foco sumindo). Só o que o
+    /// GABINETE desenha — o que o app pinta dentro do `frame_*` é dele.
+    /// Na dúvida, `false`. O app usa para espaçar os quadros.
+    pub fn frame_is_static(&self) -> bool {
+        self.frame_static
+    }
+
+    /// Algo com prazo na tela (ou prestes a entrar): o quadro não é
+    /// estático. Conservador — inclui avisos que só o gameplay desenha.
+    fn timed_overlay(&self) -> bool {
+        let now = Instant::now();
+        timed_overlay_at(&TimedOverlays {
+            now,
+            animating: self.animating(),
+            tv_menu: self.tvx.menu_visible(),
+            volume_osd: self.volume_osd_until,
+            ch3: self.ch3_until,
+            osd_until: self.osd_queue.iter().map(|e| e.until).max(),
+            cart_motion: self
+                .panel
+                .as_ref()
+                .is_some_and(|p| p.cartridge_motion.is_some()),
+        })
+    }
+
+    /// Janela escondida (`set_window_hidden`): ninguém vê, então os
+    /// `present_*`/`frame_*` não desenham nem apresentam nada — os rects
+    /// do hit-test ficam como estavam. Só o som do tubo segue a regra de
+    /// escondido (os estalos vencidos são descartados, o stream fecha).
+    fn skip_hidden(&mut self) -> bool {
+        if !self.window_hidden {
+            return false;
+        }
+        self.feed_tv_sound();
+        self.frame_static = true;
+        true
+    }
+
     /// Draw the modal dialog to the window, replacing the whole window like
     /// the pause book does (plan revision).
     pub fn present_modal(&mut self) {
+        if self.skip_hidden() {
+            return;
+        }
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
         let rect = cabinet_canvas_rect(real_w, real_h);
         self.canvas_rect = rect;
@@ -2044,7 +2112,8 @@ impl Cabinet {
             rect.height(),
         );
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // O diálogo é parado (sem neve nem OSD com prazo).
+        self.present_and_time(true);
     }
 
     /// Like [`Cabinet::present_modal`] but composited into an offscreen
@@ -2081,6 +2150,9 @@ impl Cabinet {
     /// used to sit next to it is gone, a dev-only leftover nobody used
     /// through the actual UI).
     pub fn present_pause(&mut self) {
+        if self.skip_hidden() {
+            return;
+        }
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
         let rect = cabinet_canvas_rect(real_w, real_h);
         self.canvas_rect = rect;
@@ -2097,7 +2169,8 @@ impl Cabinet {
             rect.height(),
         );
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // O livro da pausa é parado.
+        self.present_and_time(true);
     }
 
     /// Like [`Cabinet::present_pause`] but composited into an offscreen
@@ -2163,6 +2236,11 @@ impl Cabinet {
 
     /// Draw one frame to the window. `aspect_ratio <= 0` means "use 4:3".
     pub fn present_frame(&mut self, frame: &FrameRef, aspect_ratio: f32) {
+        if self.skip_hidden() {
+            // O jogo segue no caller; o quadro só não é desenhado.
+            self.frame_static = false;
+            return;
+        }
         if !self.upload(frame) {
             return;
         }
@@ -2251,10 +2329,9 @@ impl Cabinet {
             draw_ch_osd(&mut self.canvas, &mut self.font, self.screen, &label);
         }
         // The picture is back, so any queued hiss goes — cut, not faded
-        // (same rule the power bursts use for their own buzz).
-        if let Some(h) = &self.hiss {
-            h.clear();
-        }
+        // (same rule the power bursts use for their own buzz). O stream
+        // fecha junto (o dispositivo dorme); o estático reabre.
+        self.hiss = None;
         // O lado TV do frame de gameplay (plan revision: "tem que estar
         // sempre na tela"): o OSD de barrinhas do volume sobre a imagem
         // (a TV não deixa de ser TV com jogo rodando) e os controles
@@ -2290,7 +2367,8 @@ impl Cabinet {
             draw_perf_overlay(&mut self.canvas, &mut self.font, self.screen, band, &line);
         }
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // Gameplay: a imagem muda todo quadro.
+        self.present_and_time(false);
     }
 
     /// Render one frame into an offscreen target and save it as a BMP. Works
@@ -2604,9 +2682,13 @@ impl Cabinet {
     /// Draw a 2D frame: `draw` renders into a screen-sized buffer (coords
     /// 0..screen), which is then warped through the tube, framed and presented.
     pub fn frame_2d<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_2d(bg, draw);
         self.composite_screen();
-        self.present_and_time();
+        let still = !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Like [`Cabinet::frame_2d`], but for the shelf specifically (plan
@@ -2614,9 +2696,13 @@ impl Cabinet {
     /// column is reserved first), and the shelf's own info panel is drawn
     /// flat, outside the tube's warp, right after it.
     pub fn frame_shelf<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_shelf(bg, draw);
         self.composite_shelf();
-        self.present_and_time();
+        let still = !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Like [`Cabinet::frame_2d`] but composited into an offscreen target and
@@ -2785,14 +2871,40 @@ impl Cabinet {
     /// quadro com o estado da plataforma. Escondida, o chiado do estático
     /// e os sons do tubo (flyback e estalos) não enfileiram nada e as filas
     /// pendentes são esvaziadas na hora.
+    ///
+    /// Escondida, os streams do chiado e do tubo FECHAM (não só esvaziam):
+    /// aberto, um stream segura o dispositivo do SDL e o sink do PipeWire
+    /// acordados. Reabrem sozinhos no próximo som. Como o app chama todo
+    /// quadro, aqui também fecham os streams ociosos (`reap_idle_audio`).
     pub fn set_window_hidden(&mut self, hidden: bool) {
-        if hidden && !self.window_hidden {
-            if let Some(h) = &self.hiss {
-                h.clear();
-            }
+        if hidden {
+            self.hiss = None;
             self.tvx.silence_sound();
         }
         self.window_hidden = hidden;
+        self.reap_idle_audio();
+    }
+
+    /// Fecha o foley e o chiado parados há [`AUDIO_IDLE_CLOSE`] com a fila
+    /// vazia — a fila com algo renova o prazo, então nada audível é
+    /// cortado. Reabrem preguiçosamente no próximo som (`play_foley`,
+    /// `queue_static_hiss`).
+    fn reap_idle_audio(&mut self) {
+        let now = Instant::now();
+        if stream_idle(
+            self.foley.as_ref().map(|a| a.queued_frames()),
+            &mut self.foley_last,
+            now,
+        ) {
+            self.foley = None;
+        }
+        if stream_idle(
+            self.hiss.as_ref().map(|a| a.queued_frames()),
+            &mut self.hiss_last,
+            now,
+        ) {
+            self.hiss = None;
+        }
     }
 
     /// Queue a one-shot sound (mono `samples` at `rate`) on the cabinet's
@@ -2820,6 +2932,7 @@ impl Cabinet {
         if let Some(a) = &self.foley {
             a.queue(&buf);
         }
+        self.foley_last = Instant::now();
         true
     }
 
@@ -2832,9 +2945,7 @@ impl Cabinet {
         // ~94 ms secaria entre os quadros em estalos periódicos — e o
         // silêncio ainda poupa bateria. O que estava na fila é cortado.
         if self.window_hidden {
-            if let Some(h) = &self.hiss {
-                h.clear();
-            }
+            self.hiss = None;
             return;
         }
         if self.hiss.is_none() {
@@ -2871,6 +2982,7 @@ impl Cabinet {
         if let Some(a) = &self.hiss {
             a.queue(&buf);
         }
+        self.hiss_last = Instant::now();
     }
 
     // --- TV power/volume (plan revision: o conjunto físico do queixo) ---
@@ -2992,10 +3104,8 @@ impl Cabinet {
             Some(TvPower::Collapsing { frames }) => {
                 if frames + 1 >= TV_COLLAPSE_FRAMES {
                     self.tv_power = Some(TvPower::Off);
-                    // O hiss morre com a TV.
-                    if let Some(h) = &self.hiss {
-                        h.clear();
-                    }
+                    // O hiss morre com a TV (o stream fecha junto).
+                    self.hiss = None;
                 } else {
                     self.tv_power = Some(TvPower::Collapsing { frames: frames + 1 });
                 }
@@ -3043,8 +3153,42 @@ impl Cabinet {
     /// Desenha por cima do vidro o que a fase manda (`tv_phase`). Wrapper
     /// do desenho puro — a função livre os captures (que não podem pegar
     /// `&mut self`) também usam.
+    ///
+    /// O vidro morto (`Dead`) sai de uma textura pronta ([`DeadGlass`],
+    /// refeita só quando o tamanho do tubo muda) em vez das ~7 mil
+    /// chamadas de desenho por quadro; os captures seguem no desenho
+    /// direto — a mesma imagem.
     fn draw_tv_phase_glass(&mut self, phase: &TvPhase) {
-        draw_tv_glass_phase(&mut self.canvas, self.screen, phase);
+        let screen = self.screen;
+        if matches!(phase, TvPhase::Dead) && screen.width() > 0 && screen.height() > 0 {
+            let size = (screen.width(), screen.height());
+            if self.dead_glass.as_ref().is_none_or(|g| g.size != size) {
+                self.dead_glass = self.build_dead_glass(size);
+            }
+            if let Some(g) = &self.dead_glass {
+                let _ = self.canvas.copy(&g.tex, None, Some(screen.into()));
+                // O desenho direto termina com o modo Blend (o reflexo);
+                // quem vem depois herda o mesmo estado.
+                self.canvas.set_blend_mode(BlendMode::Blend);
+                return;
+            }
+        }
+        draw_tv_glass_phase(&mut self.canvas, screen, phase);
+    }
+
+    /// Sobe o vidro morto (`dead_glass_rgba`) numa textura estática.
+    /// `None` se a textura não sair — o chamador cai no desenho direto.
+    fn build_dead_glass(&mut self, size: (u32, u32)) -> Option<DeadGlass> {
+        let (w, h) = size;
+        let mut tex = self
+            .canvas
+            .create_texture_static(SdlFormat::RGBA32, w, h)
+            .ok()?;
+        tex.set_blend_mode(BlendMode::None);
+        tex.set_scale_mode(SdlScaleMode::Nearest);
+        tex.update(None, &dead_glass_rgba(w, h), (w * 4) as usize)
+            .ok()?;
+        Some(DeadGlass { size, tex })
     }
 
     /// Um frame do queixo: os controles físicos (Power knob, VOL-/VOL+,
@@ -3187,6 +3331,9 @@ impl Cabinet {
     }
 
     fn present_static_with(&mut self, level: f32, blow: Option<&BlowScene>) {
+        if self.skip_hidden() {
+            return;
+        }
         // A fase do tubo avança por frame e sabe o que este frame desenha;
         // a neve: desligada, nível zero (nada para a textura — o vidro morto
         // é desenhado por cima); em transição, o normal (a máscara do vidro
@@ -3277,8 +3424,9 @@ impl Cabinet {
         // pendente é cortado na hora (nada de neve sonora no vidro morto).
         if self.static_hiss && self.tv_on() {
             self.queue_static_hiss(level);
-        } else if let Some(h) = &self.hiss {
-            h.clear();
+        } else {
+            // Corta e fecha (o dispositivo dorme); religada, reabre.
+            self.hiss = None;
         }
         let panel_tv_on = self.tv_on();
         self.panel_buttons = draw_panel(
@@ -3315,7 +3463,10 @@ impl Cabinet {
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // Só o vidro morto é parado: ligada ou em transição há neve
+        // (regerada a ~30 Hz) ou a máscara do tubo andando.
+        let still = dead && !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Like [`Cabinet::present_static`] but composited into an offscreen
@@ -3481,6 +3632,9 @@ impl Cabinet {
         static_level: f32,
         shelf_alpha: f32,
     ) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_2d(bg, draw);
         self.update_noise_tex(static_level);
         let canvas_rect = self.canvas_rect;
@@ -3525,7 +3679,8 @@ impl Cabinet {
         );
 
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // A neve por baixo é desenhada sempre: nunca parado.
+        self.present_and_time(false);
     }
 
     /// Like [`Cabinet::frame_2d_fade_in`], but for the shelf specifically
@@ -3540,6 +3695,9 @@ impl Cabinet {
         static_level: f32,
         shelf_alpha: f32,
     ) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_shelf(bg, draw);
         // Estante já opaca (o repouso, alpha 1.0): o buffer dela é limpo com
         // `bg` opaco e cobre o tubo inteiro, então a neve por baixo não
@@ -3604,7 +3762,9 @@ impl Cabinet {
         self.minimize_button = draw_minimize_button(&mut self.canvas, &mut self.font);
 
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        // Parado só com a estante opaca (sem neve) e nada com prazo.
+        let still = !snow && !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Fill the noise texture for the current window size at `level` (1.0 =
@@ -3665,6 +3825,10 @@ impl Cabinet {
         );
         let img_w = sw.saturating_sub(pad as u32 * 2);
         let img_h = (sh as i32 - pad * 2 - btn_h - 14).max(60) as u32;
+        // Escondida: o rect do botão sai igual, só não desenha.
+        if self.skip_hidden() {
+            return btn;
+        }
         self.paint_shelf((10, 10, 11), |d| {
             d.image_fit(id, pad, pad, img_w, img_h);
             // O "voltar" na linguagem fósforo (plan revision): sem caixa,
@@ -3682,7 +3846,8 @@ impl Cabinet {
             );
         });
         self.composite_shelf();
-        self.present_and_time();
+        let still = !self.timed_overlay();
+        self.present_and_time(still);
         btn
     }
 
@@ -3816,9 +3981,13 @@ impl Cabinet {
     /// flat panel on the right), so the TV keeps the same proportions
     /// everywhere.
     pub fn frame_settings<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_shelf(bg, draw);
         self.composite_settings();
-        self.present_and_time();
+        let still = !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Like [`Cabinet::frame_2d`], but in the idle screen's own layout (plan
@@ -3829,6 +3998,9 @@ impl Cabinet {
     /// and stays clickable around it. Hit-testing inside `draw` pairs with
     /// `window_to_screen`.
     pub fn frame_idle_2d<F: FnOnce(&mut Screen)>(&mut self, bg: (u8, u8, u8), draw: F) {
+        if self.skip_hidden() {
+            return;
+        }
         self.paint_shelf(bg, draw);
         self.composite_screen();
         let panel = panel_rect(self.canvas_rect.width(), self.canvas_rect.height());
@@ -3847,7 +4019,8 @@ impl Cabinet {
             panel_tv_on,
         );
         self.canvas.set_viewport(None);
-        self.present_and_time();
+        let still = !self.timed_overlay();
+        self.present_and_time(still);
     }
 
     /// Like [`Cabinet::capture_shelf`], but drawing the settings panel
@@ -4523,6 +4696,56 @@ impl Cabinet {
     }
 }
 
+/// Quadros que o anel de foco do controle vale a cada `set_pad_focus` —
+/// a tela dona renova todo quadro; menos que isto = não renovado.
+const PAD_FOCUS_TTL: u8 = 3;
+
+/// Quanto um stream de som (foley, chiado) fica aberto parado e de fila
+/// vazia antes de fechar — o dispositivo do SDL e o sink do PipeWire só
+/// dormem sem stream aberto.
+const AUDIO_IDLE_CLOSE: Duration = Duration::from_secs(3);
+
+/// O prazo de fechamento de um stream: `queued` é a fila dele (`None` =
+/// fechado). Fila com algo renova `last`; vazia há `AUDIO_IDLE_CLOSE`,
+/// `true` = pode fechar (nada audível fica para trás).
+fn stream_idle(queued: Option<usize>, last: &mut Instant, now: Instant) -> bool {
+    match queued {
+        None => false,
+        Some(q) if q > 0 => {
+            *last = now;
+            false
+        }
+        Some(_) => now.saturating_duration_since(*last) >= AUDIO_IDLE_CLOSE,
+    }
+}
+
+/// O que pode estar na tela com prazo, num instante — a entrada pura de
+/// [`timed_overlay_at`].
+struct TimedOverlays {
+    now: Instant,
+    /// Transição do tubo (aquecer/colapsar) em curso.
+    animating: bool,
+    /// O menu OSD de imagem aberto (fecha sozinho por tempo).
+    tv_menu: bool,
+    volume_osd: Option<Instant>,
+    ch3: Option<Instant>,
+    /// O maior prazo da fila de avisos do queixo.
+    osd_until: Option<Instant>,
+    /// O cartucho entrando/saindo do slot do painel.
+    cart_motion: bool,
+}
+
+/// Algo com prazo ainda vivo: o quadro muda com o tempo.
+fn timed_overlay_at(o: &TimedOverlays) -> bool {
+    let live = |t: Option<Instant>| t.is_some_and(|t| o.now < t);
+    o.animating
+        || o.tv_menu
+        || o.cart_motion
+        || live(o.volume_osd)
+        || live(o.ch3)
+        || live(o.osd_until)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -4534,6 +4757,83 @@ mod tests {
         );
         assert_eq!(perf_line(60, None, None), "60 FPS");
         assert_eq!(perf_line(60, Some(61), None), "60 FPS  CPU 61C");
+    }
+
+    #[test]
+    fn stream_closes_after_quiet_empty_seconds() {
+        use super::{stream_idle, AUDIO_IDLE_CLOSE};
+        use std::time::{Duration, Instant};
+        let t0 = Instant::now();
+        let mut last = t0;
+        assert!(
+            !stream_idle(None, &mut last, t0 + AUDIO_IDLE_CLOSE),
+            "fechado"
+        );
+        assert!(!stream_idle(
+            Some(0),
+            &mut last,
+            t0 + Duration::from_secs(1)
+        ));
+        // Fila com algo: renova o prazo, mesmo depois dos 3 s.
+        let t4 = t0 + Duration::from_secs(4);
+        assert!(!stream_idle(Some(500), &mut last, t4));
+        assert_eq!(last, t4);
+        assert!(!stream_idle(
+            Some(0),
+            &mut last,
+            t4 + Duration::from_secs(2)
+        ));
+        assert!(stream_idle(Some(0), &mut last, t4 + AUDIO_IDLE_CLOSE));
+    }
+
+    #[test]
+    fn timed_overlays_break_static_until_they_expire() {
+        use super::{timed_overlay_at, TimedOverlays};
+        use std::time::{Duration, Instant};
+        let now = Instant::now();
+        let base = || TimedOverlays {
+            now,
+            animating: false,
+            tv_menu: false,
+            volume_osd: None,
+            ch3: None,
+            osd_until: None,
+            cart_motion: false,
+        };
+        assert!(!timed_overlay_at(&base()));
+        let later = Some(now + Duration::from_secs(1));
+        let gone = Some(now - Duration::from_millis(1));
+        assert!(timed_overlay_at(&TimedOverlays {
+            animating: true,
+            ..base()
+        }));
+        assert!(timed_overlay_at(&TimedOverlays {
+            tv_menu: true,
+            ..base()
+        }));
+        assert!(timed_overlay_at(&TimedOverlays {
+            cart_motion: true,
+            ..base()
+        }));
+        assert!(timed_overlay_at(&TimedOverlays {
+            volume_osd: later,
+            ..base()
+        }));
+        assert!(timed_overlay_at(&TimedOverlays {
+            ch3: later,
+            ..base()
+        }));
+        assert!(timed_overlay_at(&TimedOverlays {
+            osd_until: later,
+            ..base()
+        }));
+        // Prazos vencidos não contam (o quadro já não os mostra).
+        assert!(!timed_overlay_at(&TimedOverlays {
+            volume_osd: gone,
+            ch3: gone,
+            osd_until: gone,
+            ..base()
+        }));
     }
 
     use super::{

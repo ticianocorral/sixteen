@@ -386,11 +386,17 @@ impl TvExtras {
         self.flyback = on;
     }
 
-    /// Esvazia a fila do som do tubo (a janela sumiu).
+    /// Cala o som do tubo (a janela sumiu): fecha o stream — a fila vai
+    /// junto e o dispositivo de áudio pode dormir. Reabre sozinho no
+    /// próximo estalo/flyback (`feed_sound`).
     pub(super) fn silence_sound(&mut self) {
-        if let Some(amb) = &self.amb {
-            amb.clear();
-        }
+        self.amb = None;
+    }
+
+    /// O menu OSD de imagem está na tela (ele some sozinho por tempo —
+    /// `MENU_IDLE` —, então um quadro com ele não é estático).
+    pub(super) fn menu_visible(&self) -> bool {
+        self.menu.is_some()
     }
 
     /// Alimenta o stream do tubo: o flyback e os estalos —
@@ -418,6 +424,13 @@ impl TvExtras {
         }
         let whine = self.flyback && tv_on;
         if !whine && self.tick.is_none() {
+            // Nada a tocar: com a fila já tocada até o fim, fecha o stream
+            // (aberto, ele segura o dispositivo do SDL e o sink do PipeWire
+            // acordados — codec e amplificador ligados no Deck mesmo nos
+            // menus parados). O próximo estalo/flyback reabre.
+            if amb_can_close(self.amb.as_ref().map(|a| a.queued_frames())) {
+                self.amb = None;
+            }
             return;
         }
         if self.amb.is_none() {
@@ -549,6 +562,12 @@ impl TvExtras {
             menu: self.menu.filter(|_| tv_on).map(|(i, _)| (i, self.picture)),
         }
     }
+}
+
+/// O stream do tubo pode fechar? Só aberto (`Some`) e com a fila vazia
+/// — o que ainda está na fila toca até o fim antes.
+fn amb_can_close(queued: Option<usize>) -> bool {
+    queued == Some(0)
 }
 
 /// O que vai no vidro por cima da imagem: o brilho, o fantasma do
@@ -750,6 +769,23 @@ fn draw_picture_menu(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn amb_closes_only_open_and_drained() {
+        assert!(!amb_can_close(None), "fechado já está");
+        assert!(!amb_can_close(Some(120)), "a fila ainda toca");
+        assert!(amb_can_close(Some(0)));
+    }
+
+    #[test]
+    fn silence_drops_the_stream_and_menu_counts_as_timed() {
+        let mut tv = TvExtras::new();
+        tv.silence_sound();
+        assert!(tv.amb.is_none());
+        assert!(!tv.menu_visible());
+        tv.menu_press();
+        assert!(tv.menu_visible(), "o menu some por tempo: não é estático");
+    }
 
     #[test]
     fn menu_cycles_and_adjusts() {

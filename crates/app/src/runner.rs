@@ -313,6 +313,12 @@ pub(crate) fn idle_paced(frame: Duration, plat: &Platform, cab: &Cabinet) -> Dur
     if plat.window_hidden() {
         // Ninguém vendo: ~10 Hz basta para ouvir os eventos da volta.
         frame * 6
+    } else if plat.idle_for() >= IDLE_AFTER && cab.frame_is_static() {
+        // Nada no último quadro muda sozinho (estante opaca, livro de
+        // pausa, menu, TV desligada…): ~20 Hz. O que a tela desenha por
+        // conta própria (barra de download, cursor) segue legível nesse
+        // ritmo, e qualquer input volta aos 60 Hz no quadro seguinte.
+        frame * 3
     } else if plat.idle_for() >= IDLE_AFTER && !cab.animating() {
         frame * 2
     } else {
@@ -1644,10 +1650,26 @@ pub fn run_game(
             // nunca por cima do `sram.srm` que pode estar bom. Se uma sessão
             // anterior já gravou ao lado, o jogo continua DELE (senão o
             // primeiro flush desta sessão apagaria aquele progresso).
-            if let Ok(Some(bytes)) = read_sram(&aside) {
-                let n = core.load_sram(&bytes);
-                log::info!("SRAM: loaded {n} bytes from {}", aside.display());
+            let mut target = aside.clone();
+            match read_sram(&aside) {
+                Ok(Some(bytes)) => {
+                    let n = core.load_sram(&bytes);
+                    log::info!("SRAM: loaded {n} bytes from {}", aside.display());
+                }
+                Ok(None) => {}
+                // O de lado também não lê: esta sessão grava num terceiro
+                // arquivo, com a hora no nome — nenhum save existente é
+                // sobrescrito, nunca.
+                Err(e2) => {
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    target = sram_path.with_file_name(format!("sram-sessao-{stamp}.srm"));
+                    log::error!("SRAM: {} também não leu ({e2})", aside.display());
+                }
             }
+            let aside = target;
             log::error!(
                 "SRAM: {} não pôde ser lido ({e}); esta sessão grava em {}",
                 sram_path.display(),
@@ -2268,6 +2290,13 @@ pub fn run_game(
         };
         let mut events: std::collections::VecDeque<UiEvent> = events.into();
         plat.set_playing(powered && !paused && modal == Modal::None && !plat.window_hidden());
+        // O gabinete sabe da janela escondida também aqui (não só no
+        // `pace_ui`): falha e Cheat Genius seguem no ritmo do jogo, mas sem
+        // desenhar o que ninguém vê.
+        cab.set_window_hidden(plat.window_hidden());
+        // Sem som de jogo a tocar (desligado, pausado, menu aberto e sem a
+        // cena de falha, que tem o seu zumbido): o dispositivo dorme.
+        audio.set_paused(!powered || ((paused || modal != Modal::None) && fault.is_none()));
         // Janela minimizada com o jogo correndo: pausa — emular, filtrar e
         // desenhar o que ninguém vê é bateria jogada fora. Na volta o livro
         // de pausa está esperando, como se o jogador tivesse pausado.

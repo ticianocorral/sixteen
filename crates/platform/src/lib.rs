@@ -700,8 +700,12 @@ impl Platform {
         if let Some(i) = self.gamepads.iter().skip(1).position(|(_, p)| pressed(p)) {
             let pad = self.gamepads.remove(i + 1);
             self.gamepads.insert(0, pad);
+            // Na partida, a promoção mexe só DENTRO da ordem guardada: vagas
+            // de quem caiu e pads além das portas continuam lá.
             if self.game_engaged.is_some() {
-                self.game_order = self.gamepads.iter().map(|(id, _)| *id).collect();
+                let promoted = self.gamepads[0].0;
+                self.game_order.retain(|id| *id != promoted);
+                self.game_order.insert(0, promoted);
             }
         }
     }
@@ -1113,6 +1117,17 @@ impl Platform {
         }
     }
 
+    /// Os botões de menu segurados AGORA contam como já vistos: a próxima
+    /// tela só reage a um aperto novo. Para telas que abrem no meio de uma
+    /// ação (o aviso de jogo que falhou, com o A ainda apertado do jogo — o
+    /// laço do jogo usa `poll`, que não mantém as bordas dos menus).
+    pub fn prime_menu_edges(&mut self) {
+        let pad = self.gamepads.first().map(|(_, p)| p);
+        for (i, (btn, _)) in MENU_PAD_MAP.iter().enumerate() {
+            self.menu_prev[i] = pad.is_some_and(|p| pad_held(p, *btn));
+        }
+    }
+
     /// A janela está minimizada/escondida: ninguém vê o que se desenha.
     pub fn window_hidden(&self) -> bool {
         self.window_hidden
@@ -1127,8 +1142,19 @@ impl Platform {
     /// largada já conta como "jogou" quando os menus vinham sendo usados no
     /// controle (foi ele quem escolheu o jogo).
     pub fn set_game_session(&mut self, on: bool) {
+        // Semeia com as portas atuais e, depois delas, os demais conectados
+        // (um 3º pad — o controle embutido do Deck com dois externos — fica
+        // na fila em vez de roubar a vaga de quem cair).
         self.game_order = if on {
-            self.gamepads.iter().map(|(id, _)| *id).collect()
+            let mut order: Vec<JoystickId> = self.gamepads.iter().map(|(id, _)| *id).collect();
+            if let Ok(all) = self.gamepad_subsystem.gamepads() {
+                for id in all {
+                    if !order.contains(&id) {
+                        order.push(id);
+                    }
+                }
+            }
+            order
         } else {
             Vec::new()
         };
@@ -1514,5 +1540,27 @@ mod tests {
         assert_eq!(konami_nav_step(MenuNav::Back), Some(B));
         assert_eq!(konami_nav_step(MenuNav::Confirm), Some(A));
         assert_eq!(konami_nav_step(MenuNav::PageUp), None);
+    }
+
+    #[test]
+    fn third_pad_waits_in_line_instead_of_taking_a_vacancy() {
+        // Portas: P1 = 1, P2 = 2; o 3º pad (9) está conectado, fora das
+        // portas, e já entra na ordem semeada.
+        let mut order = ids(&[1, 2, 9]);
+        let mut engaged = ids(&[1, 2]);
+        // P2 cai: o 9 sobe para a porta 2 por enquanto (ordem compactada)...
+        assert_eq!(
+            reorder_for_game(&mut order, &mut engaged, &ids(&[1, 9])),
+            ids(&[1, 9])
+        );
+        assert!(
+            !engaged.contains(&JoystickId::new(9)),
+            "...sem herdar a vaga do P2"
+        );
+        // ...e o P2 que volta (id 5) retoma a vaga dele, à frente do 9.
+        assert_eq!(
+            reorder_for_game(&mut order, &mut engaged, &ids(&[1, 9, 5])),
+            ids(&[1, 5, 9])
+        );
     }
 }

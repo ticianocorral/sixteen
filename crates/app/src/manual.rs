@@ -127,7 +127,7 @@ pub fn render_page(path: &Path, page: usize, max: u32) -> Result<Option<PageImag
     let Some((w, h, bytes)) = largest_page_image(&doc, page_id) else {
         return Ok(None);
     };
-    let img = image::load_from_memory(&bytes)
+    let img = crate::imgutil::decode_limited(&bytes, crate::imgutil::ART_MAX_SIDE)
         .ok()
         .or_else(|| raw_to_image(w, h, &bytes))
         .context("decodificando a imagem da página")?;
@@ -180,7 +180,10 @@ fn largest_page_image(doc: &PdfDocument, page_id: lopdf::ObjectId) -> Option<(i6
         let Some(h) = get_resolve(doc, &dict_obj, b"Height").and_then(|o| int_of(&o)) else {
             continue;
         };
-        if w <= 0 || h <= 0 {
+        // Dimensões vêm do PDF (arquivo de fora): fora de 1..=ART_MAX_SIDE a
+        // imagem nem entra — e `w * h` abaixo nunca estoura.
+        let side = i64::from(crate::imgutil::ART_MAX_SIDE);
+        if w <= 0 || h <= 0 || w > side || h > side {
             continue;
         }
         let Some(data) = stream_data(doc, stream) else {

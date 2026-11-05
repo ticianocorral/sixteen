@@ -421,7 +421,10 @@ pub fn award(
             ("m", hash),
             ("v", &award_signature(achievement_id, user, hardcore)),
         ])
-        .map_err(net_err)?;
+        // Qualquer status de erro (401 de token revogado, 429, 5xx) leva o
+        // prefixo `HTTP:` — falha de transporte/credencial, nunca "recusa":
+        // só um 200 com `Success:false` recusa o envio em si.
+        .map_err(|e| format!("HTTP: {}", net_err(e)))?;
     let body: serde_json::Value = read_json(resp).map_err(|e| format!("resposta: {e}"))?;
     if body.get("Success").is_some_and(|s| s == false) {
         let err = body
@@ -787,7 +790,8 @@ const MAX_REFUSALS: u32 = 3;
 /// Falha que não diz nada sobre o envio (sem rede, servidor fora, resposta
 /// ilegível) — o pendente fica para a próxima, sem contar recusa.
 fn is_transient_failure(err: &str) -> bool {
-    err.starts_with("rede:")
+    err.starts_with("HTTP")
+        || err.starts_with("rede:")
         || err.starts_with("network:")
         || err.starts_with("resposta:")
         || err.starts_with("HTTP 5")
@@ -1467,6 +1471,9 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
     if let Some(p) = badge_path(name) {
         return Some(p);
     }
+    // O nome vem do servidor: sanitizado já para a URL, não só para o
+    // arquivo do cache.
+    let name = sanitize_badge_name(name)?;
     let resp = agent()
         .get(&format!("{API_BASE}/Badge/{name}.png"))
         .set("User-Agent", USER_AGENT)
@@ -1483,7 +1490,6 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         log::warn!("ra: badge {name} recusado (não é uma imagem de até 512 px)");
         return None;
     }
-    let name = sanitize_badge_name(name)?;
     let dir = crate::dirs::retroachievements_dir()
         .join("ra-cache")
         .join("badges");
@@ -1562,6 +1568,10 @@ mod tests {
         assert!(is_transient_failure("rede: Dns"));
         assert!(is_transient_failure("HTTP 503"));
         assert!(!is_transient_failure("Unknown achievement"));
+        // Token revogado: 401 com JSON — credencial, não recusa do envio.
+        assert!(is_transient_failure(
+            "HTTP: Invalid user/token combination."
+        ));
         let _ = std::fs::remove_file(&path);
     }
 

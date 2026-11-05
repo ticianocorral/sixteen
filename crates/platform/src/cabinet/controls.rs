@@ -37,11 +37,7 @@ pub(super) fn glass_reflection(
             let x = sx + i;
             let y = sy + sh / 4 + esp - i - e;
             if x >= sx && x < sx + sw && y >= sy && y < sy + sh {
-                let a = match e {
-                    0..=3 => base,
-                    4..=18 => base / 2,
-                    _ => base / 4,
-                };
+                let a = reflection_alpha(e, base);
                 if a > 0 {
                     canvas.set_draw_color(Color::RGBA(255, 255, 255, a));
                     let _ = canvas.fill_rect(Rect::new(x, y, 1, 1));
@@ -49,6 +45,67 @@ pub(super) fn glass_reflection(
             }
         }
     }
+}
+
+/// O alpha do reflexo diagonal na faixa `e` (0..26) — a mesma escada de
+/// [`glass_reflection`].
+fn reflection_alpha(e: i32, base: u8) -> u8 {
+    match e {
+        0..=3 => base,
+        4..=18 => base / 2,
+        _ => base / 4,
+    }
+}
+
+/// O vidro morto (`TvPhase::Dead`) já composto em RGBA32 opaco, `w`x`h`:
+/// as linhas do gradiente quase preto e o reflexo diagonal misturado por
+/// cima (`src*a + dst*(1-a)`, arredondado como a GPU faz). Pixel a pixel
+/// o que [`draw_tv_glass_phase`] desenha com ~600 `fill_rect` + milhares
+/// de retângulos 1x1 por quadro — o frame vivo sobe isto UMA vez numa
+/// textura ([`DeadGlass`]) e só copia.
+pub(super) fn dead_glass_rgba(w: u32, h: u32) -> Vec<u8> {
+    let (sw, sh) = (w as i32, h as i32);
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    for row in 0..sh {
+        let t = row as f32 / sh as f32;
+        let v = 5.0 + 3.0 * t;
+        let c = [v as u8, v as u8, (v + 1.0) as u8, 255];
+        let base = (row * sw * 4) as usize;
+        for p in px[base..base + (sw * 4) as usize].as_chunks_mut::<4>().0 {
+            p.copy_from_slice(&c);
+        }
+    }
+    // O reflexo: cada (i, e) cai num pixel distinto (x fixa i, y fixa e),
+    // então nenhum pixel recebe duas misturas — como no desenho direto.
+    let len = (sw / 3).min(sh / 2);
+    let esp = 26i32;
+    for i in 0..len {
+        for e in 0..esp {
+            let (x, y) = (i, sh / 4 + esp - i - e);
+            if x < 0 || x >= sw || y < 0 || y >= sh {
+                continue;
+            }
+            let a = reflection_alpha(e, 5) as u32;
+            if a == 0 {
+                continue;
+            }
+            let o = ((y * sw + x) * 4) as usize;
+            for ch in &mut px[o..o + 3] {
+                let d = *ch as u32;
+                *ch = ((255 * a + d * (255 - a) + 127) / 255) as u8;
+            }
+        }
+    }
+    px
+}
+
+/// O vidro morto pronto numa textura, refeita só quando o tamanho do tubo
+/// muda — é tudo de que ele depende (cores e reflexo são constantes; a
+/// posição entra só no `copy`). Textura estática, não render target:
+/// sobrevive a um reset dos alvos do renderer.
+pub(super) struct DeadGlass {
+    pub size: (u32, u32),
+    pub tex: Texture,
 }
 
 /// O que a fase do tubo manda desenhar NO VIDRO (`tv_phase`), como função
@@ -747,5 +804,58 @@ pub(super) fn draw_rocker_thumb(canvas: &mut WindowCanvas, rect: Rect, lit: bool
             (half * 2) as u32,
             1,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dead_glass_matches_the_drawn_rows_and_reflection() {
+        let (w, h) = (640u32, 480u32);
+        let px = dead_glass_rgba(w, h);
+        assert_eq!(px.len(), (w * h * 4) as usize);
+        assert!(px.as_chunks::<4>().0.iter().all(|p| p[3] == 255), "opaco");
+        let at = |x: u32, y: u32| {
+            let o = ((y * w + x) * 4) as usize;
+            [px[o], px[o + 1], px[o + 2]]
+        };
+        // As linhas: 5 no topo, quase 8 embaixo, o azul +1.
+        assert_eq!(at(w - 1, 0), [5, 5, 6]);
+        assert_eq!(at(w - 1, h - 1), [7, 7, 8]);
+        // O reflexo: começa em (0, h/4 + 26) na faixa clara (alpha 5).
+        let y0 = h / 4 + 26;
+        let row = at(w - 1, y0);
+        let lit = at(0, y0);
+        assert!(lit[0] > row[0], "reflexo mais claro: {lit:?} vs {row:?}");
+        // Mistura arredondada: dst 6, a 5 → (1275 + 6*250 + 127)/255 = 11.
+        let d = row[0] as u32;
+        assert_eq!(lit[0] as u32, (255 * 5 + d * 250 + 127) / 255);
+        // Quantos pixels o desenho direto toca (dentro do tubo, alpha > 0).
+        let len = (w as i32 / 3).min(h as i32 / 2);
+        let mut touched = 0;
+        let mut brighter = 0;
+        for i in 0..len {
+            for e in 0..26 {
+                let y = h as i32 / 4 + 26 - i - e;
+                if y >= 0 && y < h as i32 && reflection_alpha(e, 5) > 0 {
+                    touched += 1;
+                    let base = at(w - 1, y as u32);
+                    if at(i as u32, y as u32) != base {
+                        brighter += 1;
+                    }
+                }
+            }
+        }
+        assert!(touched > 0);
+        assert_eq!(brighter, touched, "cada pixel do reflexo misturado");
+    }
+
+    #[test]
+    fn dead_glass_tiny_and_empty_sizes() {
+        assert!(dead_glass_rgba(0, 0).is_empty());
+        let px = dead_glass_rgba(3, 2);
+        assert_eq!(px.len(), 24);
     }
 }

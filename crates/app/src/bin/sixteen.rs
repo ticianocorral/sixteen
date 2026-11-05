@@ -450,7 +450,7 @@ fn main() -> Result<()> {
                 Err(e) => {
                     log::error!("o jogo não abriu: {e:#}");
                     let body = format!(
-                        "{}\n\n{e:#}",
+                        "{} — {e:#}",
                         sixteen_platform::tr!(
                             "this cartridge could not be started. check that the rom file \
                              is still there and is a valid snes rom.",
@@ -541,6 +541,8 @@ fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
 fn message_screen(plat: &mut Platform, cab: &mut Cabinet, title: &str, body: &str) -> Result<bool> {
     let frame = sixteen_app::runner::UI_FRAME;
     let mut next = std::time::Instant::now();
+    // Um A/B ainda segurado de antes não fecha o aviso antes de ser lido.
+    plat.prime_menu_edges();
     loop {
         // `CaptureKey`: qualquer tecla ou botão do controle volta cru — o
         // aviso fecha com o que estiver na mão (no `Nav` o teclado não chega).

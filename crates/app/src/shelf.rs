@@ -2555,6 +2555,9 @@ struct ShelfRa {
     /// Badges cujo PNG já foi decodificado (deu certo ou não) — um arquivo
     /// corrompido não é redecodificado a cada varredura.
     badge_decoded: HashSet<String>,
+    /// Sobe quando algo que o painel lateral mostra do RA muda sem mexer nas
+    /// outras peças da `PanelKey` (o earned do servidor chegando).
+    rev: u32,
     badge_tried: HashSet<String>,
     /// Próxima varredura do disco atrás de badges que faltam — 4×/s, não a
     /// cada frame (era um stat por badge ausente a 60 Hz).
@@ -2579,6 +2582,7 @@ impl ShelfRa {
             completion_worker: None,
             badge_ids: HashMap::new(),
             badge_decoded: HashSet::new(),
+            rev: 0,
             badge_tried: HashSet::new(),
             badge_scan_next: Instant::now(),
             earned_worker: None,
@@ -2649,6 +2653,10 @@ impl ShelfRa {
                             list.earned = ids;
                         }
                     }
+                    // O "X de Y" do painel também muda: tallys refeitos e o
+                    // painel em cache invalidado (`PanelKey::ra_rev`).
+                    self.tally.clear();
+                    self.rev = self.rev.wrapping_add(1);
                     self.earned_worker = None;
                 }
                 Ok((hash, None)) => {
@@ -2980,6 +2988,7 @@ struct PanelKey {
     /// `Some(Some(unsupported))` = identificado.
     ra_game: Option<Option<bool>>,
     ra_completion: bool,
+    ra_rev: u32,
 }
 
 impl PanelKey {
@@ -3007,6 +3016,7 @@ impl PanelKey {
                 .and_then(|s| ra.games.get(s))
                 .map(|g| g.as_ref().map(|g| g.unsupported)),
             ra_completion: ra.completion.is_some(),
+            ra_rev: ra.rev,
         }
     }
 }

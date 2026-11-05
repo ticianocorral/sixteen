@@ -363,6 +363,7 @@ impl Config {
         // de conteúdo (vai para `.bad` abaixo), não de leitura.
         match std::fs::read(&path) {
             Ok(bytes) => {
+                tighten_permissions(&path);
                 let parsed = String::from_utf8(bytes)
                     .map_err(|_| anyhow::anyhow!("{}: não é UTF-8 válido", path.display()))
                     .and_then(|text| parse_raw(&text, &path))
@@ -631,6 +632,23 @@ impl Config {
 /// Grava o config com permissão 0600 no Unix — ele carrega os tokens do
 /// RetroAchievements — e de forma atômica (tmp + rename): um travamento no
 /// meio não deixa o cfg pela metade.
+/// O cfg guarda o token do RA: legível por outros usuários (0644 de um
+/// editor de texto, ou de uma migração por rename, que preserva o modo),
+/// volta para 0600 já na leitura — não só na próxima gravação.
+fn tighten_permissions(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(path) {
+            if meta.permissions().mode() & 0o077 != 0 {
+                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 /// O TOML do cfg, com um erro que diz só ONDE quebrou (linha/coluna e a
 /// mensagem do parser) — o `Display` do `toml` cita o trecho do arquivo, e
 /// a linha quebrada pode ser a do `ra_token`, que iria parar no log.
@@ -645,10 +663,17 @@ fn parse_raw(text: &str, path: &std::path::Path) -> Result<Raw> {
                 (line, col)
             })
             .unwrap_or((0, 0));
+        // Erro de tipo/valor do serde cita o VALOR ("invalid type: integer
+        // `123…`") — que pode ser um token sem aspas. Só o tipo do erro.
+        let msg = e.message();
+        let msg = if msg.starts_with("invalid type") || msg.starts_with("invalid value") {
+            "valor de tipo inválido"
+        } else {
+            msg
+        };
         anyhow::anyhow!(
-            "parsing {}: linha {line}, coluna {col}: {}",
-            path.display(),
-            e.message()
+            "parsing {}: linha {line}, coluna {col}: {msg}",
+            path.display()
         )
     })
 }
@@ -959,6 +984,11 @@ mod tests {
         let msg = format!("{e:#}");
         assert!(!msg.contains("segredo123"), "{msg}");
         assert!(msg.contains("linha 2"), "{msg}");
+        // Token sem aspas, só números: erro de tipo — o valor não aparece.
+        let e = parse_raw("ra_token = 98765432\n", std::path::Path::new("sixteen.cfg"))
+            .err()
+            .expect("tipo errado");
+        assert!(!format!("{e:#}").contains("98765432"), "{e:#}");
     }
 
     #[test]
@@ -1004,6 +1034,22 @@ mod tests {
         std::fs::write(&path, "isto [não é toml").unwrap();
         assert!(Config::load_at(Some(path.clone()), true).is_err());
         assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn readable_cfg_is_tightened_on_load() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("sixteen-cfg-perm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sixteen.cfg");
+        std::fs::write(&path, "fullscreen = false\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        Config::load_at(Some(path.clone()), false).unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

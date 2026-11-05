@@ -8,7 +8,10 @@ use std::path::Path;
 
 use image::{DynamicImage, ImageReader, ImageResult, Limits};
 
-/// Lado máximo de uma arte/capa/print (8K sobra para qualquer scan real).
+/// Lado máximo de uma arte/capa/print/página de manual: 8K cobre scans de
+/// contracapa em alta resolução (tudo é reduzido para ≤ 2048 na tela); com
+/// o `max_alloc` em RGBA8 o pior caso fica em ~256 MB transitórios, e uma
+/// imagem de 16 bits por canal desse tamanho é recusada.
 pub const ART_MAX_SIDE: u32 = 8192;
 /// Lado máximo de um badge do RA (os de verdade têm 64×64).
 pub const BADGE_MAX_SIDE: u32 = 512;
@@ -17,14 +20,23 @@ fn limits(max_side: u32) -> Limits {
     let mut l = Limits::default();
     l.max_image_width = Some(max_side);
     l.max_image_height = Some(max_side);
-    // RGBA16 no pior caso, mais folga para o decoder.
-    l.max_alloc = Some(u64::from(max_side) * u64::from(max_side) * 8 + (16 << 20));
+    // RGBA8 no lado máximo, mais folga para o decoder. Uma imagem de 16
+    // bits por canal nesse tamanho é recusada — nenhuma arte real precisa.
+    l.max_alloc = Some(u64::from(max_side) * u64::from(max_side) * 4 + (16 << 20));
     l
 }
 
 /// Abre `path` recusando imagens com algum lado acima de `max_side`.
 pub fn open_limited(path: &Path, max_side: u32) -> ImageResult<DynamicImage> {
     let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+    reader.limits(limits(max_side));
+    reader.decode()
+}
+
+/// Decodifica bytes em memória (ex.: a imagem embutida num PDF de manual)
+/// com o mesmo teto de [`open_limited`].
+pub fn decode_limited(bytes: &[u8], max_side: u32) -> ImageResult<DynamicImage> {
+    let mut reader = ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
     reader.limits(limits(max_side));
     reader.decode()
 }
@@ -62,6 +74,8 @@ mod tests {
         std::fs::write(&big, png(600, 10)).unwrap();
         assert!(open_limited(&big, BADGE_MAX_SIDE).is_err());
         assert!(open_limited(&big, ART_MAX_SIDE).is_ok());
+        assert!(decode_limited(&png(600, 10), BADGE_MAX_SIDE).is_err());
+        assert!(decode_limited(&png(64, 64), BADGE_MAX_SIDE).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
