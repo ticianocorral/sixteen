@@ -58,15 +58,35 @@ document.querySelectorAll("[data-seletor-para]").forEach((grupo) => {
   if (!fig) return;
   const img = fig.querySelector("[data-seletor-img]");
   const botoes = grupo.querySelectorAll("button[data-src]");
+  // Todas as variações carregam quando o seletor chega perto da tela, e a
+  // troca só acontece com a imagem nova já decodificada. Trocar o `src` de
+  // um <img loading="lazy"> não recarrega no Safari — por isso nada de
+  // lazy aqui, e o cache em `prontas` garante a troca na hora.
+  const prontas = new Map();
+  const carregar = (src) => {
+    if (!prontas.has(src)) {
+      const i = new Image();
+      i.decoding = "async";
+      i.src = src;
+      prontas.set(src, i.decode ? i.decode().catch(() => {}) : Promise.resolve());
+    }
+    return prontas.get(src);
+  };
+  new IntersectionObserver((entradas, obs) => {
+    if (entradas.some((e) => e.isIntersecting)) {
+      botoes.forEach((b) => carregar(b.dataset.src));
+      obs.disconnect();
+    }
+  }, { rootMargin: "600px 0px" }).observe(grupo);
+  let pedido = 0;
   botoes.forEach((b) => {
-    // pré-carrega no primeiro hover/foco para a troca ser instantânea
-    const pre = () => { const i = new Image(); i.src = b.dataset.src; };
-    b.addEventListener("pointerenter", pre, { once: true });
-    b.addEventListener("focus", pre, { once: true });
     b.addEventListener("click", () => {
       botoes.forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
-      img.src = b.dataset.src;
       atualizarAltSeletor(grupo);
+      const meu = ++pedido;
+      carregar(b.dataset.src).then(() => {
+        if (meu === pedido) img.src = b.dataset.src; // cliques rápidos: vale o último
+      });
     });
   });
 });
