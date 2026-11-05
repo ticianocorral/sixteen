@@ -239,7 +239,7 @@ fn main() -> Result<()> {
     platform.set_pad_map(0, cfg.padmap.clone());
     platform.set_pad_map(1, cfg.padmap2.clone());
     let mut cabinet = platform
-        .create_cabinet("SixteeN", 1024, 768, false)
+        .create_cabinet("SixteeN", 1280, 800, false)
         .map_err(|e| anyhow!(e.to_string()))?;
     if cfg.fullscreen {
         cabinet.toggle_fullscreen();
