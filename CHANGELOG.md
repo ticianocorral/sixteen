@@ -7,6 +7,45 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [1.8.1] - 2026-11-05
+
+### Alterado
+- **Menos bateria no Steam Deck**: telas paradas (tela inicial, estante,
+  ajustes, livro de pausa, Menu do jogo, TV desligada) caem para ~20–30
+  quadros por segundo sem input e voltam a 60 no primeiro botão; janela
+  minimizada pausa o jogo e não desenha; os streams de áudio fecham ou
+  pausam o dispositivo quando não há som, para o PipeWire poder desligar a
+  saída; a neve e o filtro NTSC não são calculados quando não aparecem.
+- O descanso de tela do sistema volta a funcionar fora do jogo.
+- Conectar ou desconectar um controle não conta mais como input.
+
+### Corrigido
+- Jogo que não abre (ROM sumida, ROM ou núcleo ruim) mostra um aviso e
+  volta à tela inicial em vez de fechar o app; sem saída de áudio, o jogo
+  roda mudo.
+- Saves: um save que existe mas não pode ser lido nunca é sobrescrito — a
+  sessão grava num arquivo ao lado e avisa. A checagem de update do núcleo
+  não libera mais a memória do jogo em andamento.
+- Controles: quem desconecta e reconecta durante a partida volta à mesma
+  porta; um terceiro controle não rouba a vaga.
+- RetroAchievements: conquistas desbloqueadas ficam pendentes até o
+  servidor confirmar e são reenviadas no login; um token inválido não
+  apaga mais conquistas da fila.
+- macOS: estouro de pilha na leitura de memória do processo.
+- Update: o AppImage passa a ser trocado de fato (antes nunca aplicava);
+  no Windows o update automático não é oferecido.
+- `sixteen.cfg` quebrado é guardado como `.cfg.bad` e o app abre com os
+  padrões; um `crash.log` é gravado na raiz do app se ele cair.
+
+### Segurança
+- Update só de `github.com/ticianocorral/sixteen/releases`, com o SHA-256
+  publicado conferido no download e de novo antes de aplicar; download em
+  `.part` com gravação atômica; DMG e manual em PDF fora do `/tmp`.
+- Limites de tamanho para ROMs zipadas, o zip do núcleo, imagens (capas,
+  artes, badges, PDF) e respostas da API do RetroAchievements.
+- `sixteen.cfg` (que guarda o token do RA) fica privado (0600) e as
+  mensagens de erro não citam mais o conteúdo dele.
+
 ## [1.8.0] - 2026-11-04
 
 ### Adicionado
