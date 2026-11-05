@@ -297,7 +297,7 @@ const FLASH_DURATION: Duration = Duration::from_millis(900);
 /// (62,5 Hz) — 2,5 quadros por segundo desenhados a mais que a tela de
 /// 60 Hz mostra (energia à toa no Steam Deck), e as animações que enfileiram
 /// `RATE / 60` amostras por quadro empilhavam ~4% de áudio a mais.
-pub(crate) const UI_FRAME: Duration = Duration::from_nanos(16_666_667);
+pub const UI_FRAME: Duration = Duration::from_nanos(16_666_667);
 
 /// Sem input do jogador por este tempo (e sem transição do tubo), as telas
 /// paradas — ociosa, estante, configurações, livro de pausa, console
@@ -320,9 +320,19 @@ pub(crate) fn idle_paced(frame: Duration, plat: &Platform, cab: &Cabinet) -> Dur
     }
 }
 
-/// `pace_frame` com o ritmo ocioso — o fim de quadro das telas de menu.
-pub(crate) fn pace_ui(next: &mut Instant, frame: Duration, plat: &Platform, cab: &Cabinet) {
-    pace_frame(next, idle_paced(frame, plat, cab));
+/// O fim de quadro das telas de menu: ritmo ocioso ([`idle_paced`]) e só
+/// `sleep` — o spin final do [`pace_frame`] é precisão que menu não usa
+/// (CPU acordada à toa). Também conta ao gabinete se a janela está
+/// escondida (o chiado e o som do tubo calam).
+pub fn pace_ui(next: &mut Instant, frame: Duration, plat: &Platform, cab: &mut Cabinet) {
+    cab.set_window_hidden(plat.window_hidden());
+    *next += idle_paced(frame, plat, cab);
+    let now = Instant::now();
+    if *next <= now {
+        *next = now; // atrasou: ressincroniza, sem espiral
+        return;
+    }
+    std::thread::sleep(*next - now);
 }
 
 /// Advance `next` by one frame and wait for it: sleep the bulk of the wait,
@@ -837,13 +847,18 @@ fn launch_genius(
     rom_bytes: &[u8],
     sram_path: &Path,
     last_sram: &mut Option<Vec<u8>>,
+    held_sram: &mut Option<Vec<u8>>,
     title: &str,
     defs: &[sixteen_domain::CheatDef],
     state: &[bool],
     customs: &[crate::genius::Custom],
 ) -> Option<usize> {
-    // A SRAM do jogo vai para o disco antes de a ROM sair do core.
-    flush_sram(sram_path, last_sram, core.sram());
+    // A SRAM do jogo vai para o disco antes de a ROM sair do core — e fica
+    // guardada em memória: se o flush falhou (disco cheio, SD só leitura), a
+    // volta do jogo usa ESTA cópia, não a versão velha do disco.
+    let game_sram = core.sram();
+    flush_sram(sram_path, last_sram, game_sram.clone());
+    *held_sram = game_sram;
     core.unload_game();
     let entries = crate::genius::build_entries(defs, state, customs);
     let ok = core
@@ -855,22 +870,30 @@ fn launch_genius(
         Some(entries.len())
     } else {
         log::warn!("cheat genius: a ROM não carregou, seguindo sem ela");
-        restore_game(core, rom, rom_bytes, sram_path, last_sram);
+        restore_game(core, rom, rom_bytes, sram_path, last_sram, held_sram);
         None
     }
 }
 
-/// Devolve o jogo ao core (depois do Cheat Genius), com a SRAM do disco.
+/// Devolve o jogo ao core (depois do Cheat Genius) com a SRAM que ele tinha
+/// ao sair (`held_sram`, de [`launch_genius`]) — ou, sem ela, a do disco.
+/// `last_sram` (o último flush BEM-sucedido) não muda aqui: se o flush da
+/// ida falhou, o próximo vê a diferença e tenta gravar de novo.
 fn restore_game(
     core: &mut Core,
     rom: &Path,
     rom_bytes: &[u8],
     sram_path: &Path,
     last_sram: &mut Option<Vec<u8>>,
+    held_sram: &mut Option<Vec<u8>>,
 ) {
     core.unload_game();
     if let Err(e) = core.load_game(rom, rom_bytes) {
         log::error!("recarregar o jogo falhou: {e}");
+        return;
+    }
+    if let Some(bytes) = held_sram.take() {
+        core.load_sram(&bytes);
         return;
     }
     match read_sram(sram_path) {
@@ -903,7 +926,9 @@ fn cheat_rows(defs: &[sixteen_domain::CheatDef], state: &[bool]) -> Vec<(String,
 /// Decode scraped art (panel logo, note thumbnail, …) small enough for its
 /// slot, keeping alpha for transparent logos.
 fn decode_art(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>)> {
-    let img = image::open(path)?.thumbnail(max, max).to_rgba8();
+    let img = crate::imgutil::open_limited(path, crate::imgutil::ART_MAX_SIDE)?
+        .thumbnail(max, max)
+        .to_rgba8();
     let (w, h) = img.dimensions();
     Ok((w, h, img.into_raw()))
 }
@@ -1591,16 +1616,38 @@ pub fn run_game(
     // other way around.
     let mut text_slot: u8 = 1;
 
+    let aside = sram_aside_path(&sram_path);
     match read_sram(&sram_path) {
         Ok(Some(bytes)) => {
             let n = core.load_sram(&bytes);
             log::info!("SRAM: loaded {n} bytes from {}", sram_path.display());
+            // O original voltou a ler, mas uma sessão anterior gravou ao lado:
+            // os dois ficam no disco — o jogador decide qual vale.
+            if aside.exists() {
+                log::warn!("SRAM: existe também {}", aside.display());
+                cab.push_osd(
+                    &[
+                        tr!(
+                            "This game has a second save beside the original:",
+                            "Este jogo tem um segundo save ao lado do original:"
+                        ),
+                        "sram-sessao-sem-leitura.srm",
+                    ],
+                    None,
+                    Duration::from_secs(10),
+                );
+            }
         }
         Ok(None) => {}
         Err(e) => {
             // O save existe mas não leu: o jogo roda, mas grava AO LADO —
-            // nunca por cima do `sram.srm` que pode estar bom.
-            let aside = sram_aside_path(&sram_path);
+            // nunca por cima do `sram.srm` que pode estar bom. Se uma sessão
+            // anterior já gravou ao lado, o jogo continua DELE (senão o
+            // primeiro flush desta sessão apagaria aquele progresso).
+            if let Ok(Some(bytes)) = read_sram(&aside) {
+                let n = core.load_sram(&bytes);
+                log::info!("SRAM: loaded {n} bytes from {}", aside.display());
+            }
             log::error!(
                 "SRAM: {} não pôde ser lido ({e}); esta sessão grava em {}",
                 sram_path.display(),
@@ -1882,6 +1929,9 @@ pub fn run_game(
 
     // O último SRAM gravado: o flush periódico só escreve quando mudar.
     let mut last_sram = core.sram();
+    // A SRAM do jogo enquanto o Cheat Genius ocupa o core (ver
+    // `launch_genius`/`restore_game`).
+    let mut genius_sram: Option<Vec<u8>> = None;
     // Which note slot to save into once the next frame is ready — set at
     // click time, consumed after `core.run()` produces a real frame.
     let mut note_request: Option<u8> = None;
@@ -1953,6 +2003,7 @@ pub fn run_game(
             &rom_bytes,
             &sram_path,
             &mut last_sram,
+            &mut genius_sram,
             &title,
             &cheat_defs,
             &cheat_state,
@@ -2365,6 +2416,7 @@ pub fn run_game(
                                 &rom_bytes,
                                 &sram_path,
                                 &mut last_sram,
+                                &mut genius_sram,
                                 &title,
                                 &cheat_defs,
                                 &cheat_state,
@@ -2428,6 +2480,7 @@ pub fn run_game(
                             &rom_bytes,
                             &sram_path,
                             &mut last_sram,
+                            &mut genius_sram,
                             &title,
                             &cheat_defs,
                             &cheat_state,
@@ -2633,7 +2686,22 @@ pub fn run_game(
                                     modal = Modal::None;
                                     cab.clear_modal();
                                 }
-                                Err(e) => log::warn!("slot {i}: save failed: {e}"),
+                                Err(e) => {
+                                    // Disco cheio/SD só leitura: o jogador
+                                    // precisa saber — o modal fecha e o
+                                    // aviso sai sobre o jogo.
+                                    log::warn!("slot {i}: save failed: {e}");
+                                    modal = Modal::None;
+                                    cab.clear_modal();
+                                    cab.push_osd(
+                                        &[tr!(
+                                            "Could not save the state (disk full or read-only?)",
+                                            "Não deu para salvar o estado (disco cheio ou só leitura?)"
+                                        )],
+                                        None,
+                                        Duration::from_secs(5),
+                                    );
+                                }
                             },
                             None => log::warn!("core doesn't support save states"),
                         }
@@ -2649,7 +2717,21 @@ pub fn run_game(
                             }
                             // An empty/rejected slot just stays disabled in the
                             // modal — nothing to load, nothing changes.
-                            Ok(_) => log::warn!("slot {i}: core rejected the state"),
+                            Ok(_) => {
+                                // Estado de outra versão do núcleo, ou
+                                // corrompido: o jogo segue como estava.
+                                log::warn!("slot {i}: core rejected the state");
+                                modal = Modal::None;
+                                cab.clear_modal();
+                                cab.push_osd(
+                                    &[tr!(
+                                        "This state could not be loaded (made by another core version?)",
+                                        "Este estado não carregou (feito com outra versão do núcleo?)"
+                                    )],
+                                    None,
+                                    Duration::from_secs(5),
+                                );
+                            }
                             Err(_) => log::warn!("slot {i}: empty"),
                         }
                     }
@@ -2779,7 +2861,14 @@ pub fn run_game(
             if let Some(sent) = genius_run {
                 if let Some(v) = crate::genius::poll(&mut core, sent) {
                     genius_run = None;
-                    restore_game(&mut core, &spec.rom, &rom_bytes, &sram_path, &mut last_sram);
+                    restore_game(
+                        &mut core,
+                        &spec.rom,
+                        &rom_bytes,
+                        &sram_path,
+                        &mut last_sram,
+                        &mut genius_sram,
+                    );
                     audio.clear();
                     let rows = if v.play {
                         crate::genius::apply_verdict(&v, &mut cheat_state, &mut customs);
@@ -2879,7 +2968,10 @@ pub fn run_game(
                 ntsc.set_picture(crate::ntsc_picture(cab.picture()));
                 ntsc.set_preset(crate::look_preset(cab.screen_look()));
                 // RF NTSC on RGB565 frames; anything else passes straight through.
-                let fref = if frame.format == EmuFormat::Rgb565 {
+                // TV desligada (vidro morto, sem transição): a imagem nem é
+                // desenhada — o quadro cru basta e o blit do NTSC fica de fora.
+                let tv_dark = !cab.tv_on() && !cab.animating();
+                let fref = if frame.format == EmuFormat::Rgb565 && !tv_dark {
                     ntsc_frame(
                         &mut ntsc,
                         &frame.pixels,
@@ -2971,8 +3063,10 @@ pub fn run_game(
     if fault.is_some() {
         restore_after_fault(&mut core, sram_at_insert.as_deref(), &mut last_sram);
     }
-    // Final SRAM flush on the way out (either exit path).
-    flush_sram(&sram_path, &mut last_sram, core.sram());
+    // Final SRAM flush on the way out (either exit path). Saindo com o
+    // Cheat Genius no core, a SRAM do jogo é a guardada na ida.
+    let final_sram = genius_sram.take().or_else(|| core.sram());
+    flush_sram(&sram_path, &mut last_sram, final_sram);
 
     // Fecha o trecho ligado que ainda corria (saiu com o console ligado,
     // ex.: janela fechada) e soma ao total de todos os tempos.

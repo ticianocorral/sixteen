@@ -2053,6 +2053,7 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
     cab.set_shelf_panel(empty_shelf_panel());
     cab.set_close_button(true);
     let refresh_rect = refresh_button_rect(cab.shelf_screen_size().0);
+    let mut next = Instant::now();
     loop {
         let m = plat.poll_menu(MenuMode::Nav);
         if m.quit {
@@ -2117,7 +2118,7 @@ fn empty_roms_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<Pick> {
             );
         };
         cab.frame_shelf(BG, render);
-        std::thread::sleep(frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 
@@ -2551,6 +2552,9 @@ struct ShelfRa {
     completion_worker: Option<Receiver<Result<HashMap<u64, crate::ra::CompletionEntry>, String>>>,
     /// Badges já registrados como textura (nome → id da imagem).
     badge_ids: HashMap<String, u64>,
+    /// Badges cujo PNG já foi decodificado (deu certo ou não) — um arquivo
+    /// corrompido não é redecodificado a cada varredura.
+    badge_decoded: HashSet<String>,
     badge_tried: HashSet<String>,
     /// Próxima varredura do disco atrás de badges que faltam — 4×/s, não a
     /// cada frame (era um stat por badge ausente a 60 Hz).
@@ -2574,6 +2578,7 @@ impl ShelfRa {
             completion_tried: false,
             completion_worker: None,
             badge_ids: HashMap::new(),
+            badge_decoded: HashSet::new(),
             badge_tried: HashSet::new(),
             badge_scan_next: Instant::now(),
             earned_worker: None,
@@ -2669,15 +2674,21 @@ impl ShelfRa {
                         self.badge_scan_next = Instant::now();
                         break;
                     }
-                    if self.badge_ids.contains_key(&a.badge) {
+                    if self.badge_decoded.contains(&a.badge) {
                         continue;
                     }
+                    // Só conta como tentado quando o PNG existe — o que
+                    // ainda está baixando volta na próxima varredura.
                     if let Some(path) = crate::ra::badge_path(&a.badge) {
-                        if let Ok(img) = image::open(&path).map(|i| i.to_rgba8()) {
+                        self.badge_decoded.insert(a.badge.clone());
+                        novos += 1;
+                        if let Ok(img) =
+                            crate::imgutil::open_limited(&path, crate::imgutil::BADGE_MAX_SIDE)
+                                .map(|i| i.to_rgba8())
+                        {
                             let id = badge_image_id(&a.badge);
                             cab.set_image(id, img.width(), img.height(), img.as_raw());
                             self.badge_ids.insert(a.badge.clone(), id);
-                            novos += 1;
                         }
                     }
                 }
@@ -2948,23 +2959,79 @@ impl Default for ShelfManual {
     }
 }
 
+/// Tudo de que o painel lateral depende — o painel só é remontado quando
+/// isto muda (antes era refeito a cada frame: leitura do playtime.txt,
+/// clone das infos, `format!`s...). O que varia com o tempo entra aqui:
+/// artes que terminam de carregar (logo/cartucho/contracapa), a
+/// identificação do RA chegando e o progresso do perfil (que refaz o
+/// tally). Idioma e tema não mudam dentro de uma visita à estante (as
+/// configurações saem do `run`), e o tempo de jogo só muda jogando — e
+/// voltar de um jogo é um `run` novo, com cache novo.
+#[derive(Clone, PartialEq)]
+struct PanelKey {
+    /// `None` = estante sem jogo focado (painel vazio).
+    sha1: Option<String>,
+    favorite: bool,
+    section: PanelSection,
+    scroll: usize,
+    /// Logo, cartucho e contracapa já registrados no cabinet.
+    arts: (bool, bool, bool),
+    /// `None` = RA ainda não respondeu; `Some(None)` = sem set;
+    /// `Some(Some(unsupported))` = identificado.
+    ra_game: Option<Option<bool>>,
+    ra_completion: bool,
+}
+
+impl PanelKey {
+    fn new(
+        cab: &Cabinet,
+        focused: Option<&CatalogEntry>,
+        ra: &ShelfRa,
+        section: PanelSection,
+        scroll: usize,
+    ) -> Self {
+        let sha1 = focused.map(|e| e.rom.sha1.as_str());
+        Self {
+            sha1: sha1.map(str::to_string),
+            favorite: focused.is_some_and(|e| e.rom.favorite),
+            section,
+            scroll,
+            arts: sha1.map_or((false, false, false), |s| {
+                (
+                    cab.has_image(wheel_id(s)),
+                    cab.has_image(cartridge_id(s)),
+                    cab.has_image(backcover_id(s)),
+                )
+            }),
+            ra_game: sha1
+                .and_then(|s| ra.games.get(s))
+                .map(|g| g.as_ref().map(|g| g.unsupported)),
+            ra_completion: ra.completion.is_some(),
+        }
+    }
+}
+
 /// O painel lateral do jogo focado: logo/cartucho/contracapa já
 /// carregados, lançamento e infos da tabela embutida, o "X de Y (Z%)" e a
 /// medalha do RA, o tempo de jogo, IGDB, HowLongToBeat e o preview do
-/// manual (disparado uma vez por jogo).
+/// manual (disparado uma vez por jogo). Só roda quando a [`PanelKey`] muda.
 fn focused_panel_info(
     cab: &mut Cabinet,
     e: &CatalogEntry,
     ra: &mut ShelfRa,
     man: &mut ShelfManual,
+    playtimes: &mut HashMap<String, u64>,
     section: PanelSection,
     scroll: usize,
 ) -> ShelfPanelInfo {
     let wid = wheel_id(&e.rom.sha1);
     let cid = cartridge_id(&e.rom.sha1);
     let bid = backcover_id(&e.rom.sha1);
-    let save_title = crate::runner::rom_title(Path::new(&e.rom.path));
-    let playtime = crate::runner::total_playtime_secs(&crate::dirs::saves_dir(), &save_title);
+    // Tempo de jogo lido do disco uma vez por jogo por visita.
+    let playtime = *playtimes.entry(e.rom.sha1.clone()).or_insert_with(|| {
+        let save_title = crate::runner::rom_title(Path::new(&e.rom.path));
+        crate::runner::total_playtime_secs(&crate::dirs::saves_dir(), &save_title)
+    });
     // The DAT's year, if it had one, moves into its own "release"
     // slot (plan revision) instead of sitting in the generic
     // info list alongside publisher/category/description.
@@ -3183,6 +3250,11 @@ pub fn run(
     let mut furniture_key = None;
     let mut ach = AchView::default();
     let mut man = ShelfManual::default();
+    // O painel lateral em cache: a chave do último montado e o tempo de
+    // jogo por sha1 (um `run` novo — p.ex. ao voltar de um jogo — zera os
+    // dois).
+    let mut panel_key: Option<PanelKey> = None;
+    let mut playtimes: HashMap<String, u64> = HashMap::new();
     cab.set_close_button(true);
 
     // Frames left in the "entering over the static" ease-in (§3.3), if any.
@@ -3714,18 +3786,24 @@ pub fn run(
         // outside the tube): whatever's focused right now, DAT extras and
         // all when the DAT had any ("se o DAT tiver informacoes do jogo,
         // preencher no painel").
-        let shelf_panel = match focused {
-            Some(e) => focused_panel_info(
-                cab,
-                e,
-                &mut ra,
-                &mut man,
-                cur.panel_section,
-                cur.panel_scroll,
-            ),
-            None => empty_panel_info(),
-        };
-        cab.set_shelf_panel(shelf_panel);
+        // Remontado só quando a chave muda (ver `PanelKey`).
+        let key = PanelKey::new(cab, focused, &ra, cur.panel_section, cur.panel_scroll);
+        if panel_key.as_ref() != Some(&key) {
+            let shelf_panel = match focused {
+                Some(e) => focused_panel_info(
+                    cab,
+                    e,
+                    &mut ra,
+                    &mut man,
+                    &mut playtimes,
+                    cur.panel_section,
+                    cur.panel_scroll,
+                ),
+                None => empty_panel_info(),
+            };
+            cab.set_shelf_panel(shelf_panel);
+            panel_key = Some(key);
+        }
 
         // --- draw (into a screen-sized buffer, then warped through the tube) --
         let page_ready = man
@@ -4112,6 +4190,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
     cab.set_shelf_panel(empty_shelf_panel());
     cab.set_close_button(true);
 
+    let mut next = Instant::now();
     loop {
         let (scr_w, scr_h) = cab.shelf_screen_size();
         let vis_rows = ((scr_h as i32 - MARGIN * 2 - HEADER_H) / HISTORY_ROW_H).max(1) as usize;
@@ -4184,7 +4263,7 @@ pub fn run_history(plat: &mut Platform, cab: &mut Cabinet, catalog: &Catalog) ->
             |d: &mut Screen| draw_history_list(d, &ranked, top, vis_rows, Some(sel), scr_w);
         cab.frame_shelf(BG, render);
 
-        std::thread::sleep(frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 
@@ -4547,7 +4626,9 @@ impl ShelfArt {
 /// Decode one art image, thumbnailed to fit `max` px (512 for the shelf
 /// and panel; 2048 for the zoomed view, so the enlargement stays crisp).
 pub(crate) fn decode_art_scaled(path: &Path, max: u32) -> Result<Decoded> {
-    let img = image::open(path)?.thumbnail(max, max).to_rgba8();
+    let img = crate::imgutil::open_limited(path, crate::imgutil::ART_MAX_SIDE)?
+        .thumbnail(max, max)
+        .to_rgba8();
     let (w, h) = img.dimensions();
     Ok((w, h, img.into_raw()))
 }

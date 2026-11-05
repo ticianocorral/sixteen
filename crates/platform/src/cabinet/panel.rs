@@ -66,6 +66,47 @@ fn fit_lines(lines: &[String], max: usize, cols: usize) -> Vec<String> {
     out
 }
 
+/// O cache das linhas da nota fixada: a quebra (`note_lines`) e o corte
+/// com "..." (`fit_lines`) alocam várias Strings, e o painel é redesenhado
+/// todo quadro com a mesma nota. A quebra é refeita só quando o texto ou a
+/// largura em colunas mudam; o corte, só quando a quebra muda ou cabe um
+/// número diferente de linhas. As chaves são o próprio conteúdo (o texto
+/// comparado inteiro, sem alocar), então nada fica velho.
+#[derive(Default)]
+pub(super) struct NoteCache {
+    text: String,
+    cols: usize,
+    lines: Vec<String>,
+    /// Para quantas linhas `shown` foi cortado (`None` = refazer).
+    fit_max: Option<usize>,
+    shown: Vec<String>,
+}
+
+impl NoteCache {
+    /// As linhas de `text` quebradas em `cols` colunas.
+    pub(super) fn lines(&mut self, text: &str, cols: usize) -> &[String] {
+        // O estado inicial (texto vazio, 0 colunas, sem linhas) já é a
+        // quebra correta de "" — qualquer texto de verdade difere dele.
+        if self.cols != cols || self.text != text {
+            self.text.clear();
+            self.text.push_str(text);
+            self.cols = cols;
+            self.lines = note_lines(text, cols);
+            self.fit_max = None;
+        }
+        &self.lines
+    }
+
+    /// As linhas da última quebra cortadas em `max` (ver `fit_lines`).
+    pub(super) fn fitted(&mut self, max: usize) -> &[String] {
+        if self.fit_max != Some(max) {
+            self.shown = fit_lines(&self.lines, max, self.cols);
+            self.fit_max = Some(max);
+        }
+        &self.shown
+    }
+}
+
 /// `s` cut to `max` chars, with "..." when it didn't fit.
 fn ellipsize(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
@@ -472,16 +513,17 @@ pub(super) fn draw_panel(
         let row = GLYPH_H as i32 + 2;
         let card_pad = 8i32;
         let cols = ((inner_w as i32 - card_pad * 2).max(GLYPH_W as i32) as u32 / GLYPH_W) as usize;
-        let lines = text.map(|t| note_lines(t, cols)).unwrap_or_default();
+        let mut note_cache = panel.note_cache.borrow_mut();
+        let n_lines = text.map_or(0, |t| note_cache.lines(t, cols).len());
         // What the paper note keeps for itself before the photo sizes up:
         // all of it if it's short, else at least two lines or a third of
         // the room left, whichever is more — so neither the photo nor
         // the note crowds the other out of a small window.
-        let text_reserve = if lines.is_empty() {
+        let text_reserve = if n_lines == 0 {
             0
         } else {
-            let full = NOTE_GAP + card_pad * 2 + row * lines.len() as i32;
-            let min = NOTE_GAP + card_pad * 2 + row * lines.len().min(2) as i32;
+            let full = NOTE_GAP + card_pad * 2 + row * n_lines as i32;
+            let min = NOTE_GAP + card_pad * 2 + row * n_lines.min(2) as i32;
             full.min(min.max((limit - cy) / 3))
         };
 
@@ -531,11 +573,11 @@ pub(super) fn draw_panel(
             }
         }
 
-        if !lines.is_empty() {
+        if n_lines > 0 {
             let top = cy + if panel.has_note_thumb { NOTE_GAP } else { 0 };
             let max_lines = ((limit - top - card_pad * 2) / row).max(0) as usize;
             if max_lines > 0 {
-                let shown = fit_lines(&lines, max_lines, cols);
+                let shown = note_cache.fitted(max_lines);
                 let card_h = card_pad * 2 + row * shown.len() as i32 - 2;
                 canvas.set_draw_color(Color::RGB(NOTE_PAPER.0, NOTE_PAPER.1, NOTE_PAPER.2));
                 let _ = canvas.fill_rect(Rect::new(x, top, inner_w, card_h as u32));
@@ -543,7 +585,7 @@ pub(super) fn draw_panel(
                 canvas.set_draw_color(Color::RGB(NOTE_GLUE.0, NOTE_GLUE.1, NOTE_GLUE.2));
                 let _ = canvas.fill_rect(Rect::new(x, top, inner_w, 4));
                 let mut ly = top + card_pad;
-                for line in &shown {
+                for line in shown {
                     draw_text_absolute(
                         canvas,
                         font,
@@ -1180,7 +1222,7 @@ pub(super) fn draw_panel_block(
 
 #[cfg(test)]
 mod note_tests {
-    use super::{fit_lines, note_lines};
+    use super::{fit_lines, note_lines, NoteCache};
 
     #[test]
     fn note_wraps_keeps_breaks_and_cuts_with_dots() {
@@ -1190,5 +1232,27 @@ mod note_tests {
         let cut = fit_lines(&lines, 2, 10);
         assert_eq!(cut, ["pegar a", "lampada..."]);
         assert_eq!(fit_lines(&lines, 5, 10), lines);
+    }
+
+    #[test]
+    fn note_cache_matches_uncached_and_follows_key() {
+        let mut c = NoteCache::default();
+        let a = "pegar a lampada\nsenha: abc";
+        assert_eq!(c.lines(a, 10), note_lines(a, 10));
+        assert_eq!(c.fitted(2), fit_lines(&note_lines(a, 10), 2, 10));
+        // Mesma chave: o mesmo buffer, sem refazer.
+        let p = c.lines(a, 10).as_ptr();
+        assert_eq!(c.lines(a, 10).as_ptr(), p);
+        // Outra largura: requebra e o corte acompanha.
+        assert_eq!(c.lines(a, 5), note_lines(a, 5));
+        assert_eq!(c.fitted(2), fit_lines(&note_lines(a, 5), 2, 5));
+        // Outro texto na mesma largura: requebra também.
+        let b = "outra nota bem diferente";
+        assert_eq!(c.lines(b, 5), note_lines(b, 5));
+        assert_eq!(c.fitted(2), fit_lines(&note_lines(b, 5), 2, 5));
+        // Outro limite de linhas: só o corte muda.
+        assert_eq!(c.fitted(9), fit_lines(&note_lines(b, 5), 9, 5));
+        // Texto vazio no estado inicial: nada.
+        assert!(NoteCache::default().lines("", 7).is_empty());
     }
 }

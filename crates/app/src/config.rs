@@ -359,10 +359,13 @@ impl Config {
             return Ok(cfg);
         };
 
-        match std::fs::read_to_string(&path) {
-            Ok(text) => {
-                let parsed = toml::from_str::<Raw>(&text)
-                    .with_context(|| format!("parsing {}", path.display()))
+        // `fs::read` + UTF-8 à parte: um arquivo com bytes inválidos vira erro
+        // de conteúdo (vai para `.bad` abaixo), não de leitura.
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                let parsed = String::from_utf8(bytes)
+                    .map_err(|_| anyhow::anyhow!("{}: não é UTF-8 válido", path.display()))
+                    .and_then(|text| parse_raw(&text, &path))
                     .and_then(|raw| cfg.apply(raw));
                 if let Err(e) = parsed {
                     if required {
@@ -378,6 +381,14 @@ impl Config {
                     );
                     std::fs::rename(&path, &bad)
                         .with_context(|| format!("renomeando {}", path.display()))?;
+                    // O `.bad` leva o token do RA: um cfg editado à mão costuma
+                    // voltar 0644 do editor, e o rename preserva o modo.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ =
+                            std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o600));
+                    }
                     return Self::load_at(Some(path), required);
                 }
             }
@@ -503,10 +514,11 @@ impl Config {
             if key.is_empty() {
                 continue;
             }
-            self.keymap
-                .bind_pad(key, b)
-                .map_err(anyhow::Error::msg)
-                .with_context(|| format!("[keyboard] {action}"))?;
+            // Uma tecla inválida perde só ela — não o arquivo inteiro (que
+            // levaria junto o login do RA e os mapas dos controles).
+            if let Err(e) = self.keymap.bind_pad(key, b) {
+                log::warn!("[keyboard] {action}: {e} — ignorado");
+            }
         }
         for (section, map, table) in [
             ("gamepad", &mut self.padmap, &raw.gamepad),
@@ -522,9 +534,9 @@ impl Config {
                     // outra ação vazia — nada a ligar aqui.
                     continue;
                 }
-                map.bind(button, b)
-                    .map_err(anyhow::Error::msg)
-                    .with_context(|| format!("[{section}] {action}"))?;
+                if let Err(e) = map.bind(button, b) {
+                    log::warn!("[{section}] {action}: {e} — ignorado");
+                }
             }
         }
         Ok(())
@@ -619,6 +631,28 @@ impl Config {
 /// Grava o config com permissão 0600 no Unix — ele carrega os tokens do
 /// RetroAchievements — e de forma atômica (tmp + rename): um travamento no
 /// meio não deixa o cfg pela metade.
+/// O TOML do cfg, com um erro que diz só ONDE quebrou (linha/coluna e a
+/// mensagem do parser) — o `Display` do `toml` cita o trecho do arquivo, e
+/// a linha quebrada pode ser a do `ra_token`, que iria parar no log.
+fn parse_raw(text: &str, path: &std::path::Path) -> Result<Raw> {
+    toml::from_str::<Raw>(text).map_err(|e| {
+        let (line, col) = e
+            .span()
+            .map(|span| {
+                let before = &text[..span.start.min(text.len())];
+                let line = before.matches('\n').count() + 1;
+                let col = before.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
+                (line, col)
+            })
+            .unwrap_or((0, 0));
+        anyhow::anyhow!(
+            "parsing {}: linha {line}, coluna {col}: {}",
+            path.display(),
+            e.message()
+        )
+    })
+}
+
 pub(crate) fn write_config_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
     sixteen_domain::fsutil::write_atomic_private(path, contents)
 }
@@ -908,10 +942,35 @@ mod tests {
     }
 
     #[test]
-    fn unknown_gamepad_button_is_an_error() {
+    fn unknown_gamepad_button_is_skipped_not_fatal() {
         let mut cfg = defaults();
+        let before = cfg.padmap.clone();
         let raw: Raw = toml::from_str("[gamepad]\nb = \"not_a_button\"").unwrap();
-        assert!(cfg.apply(raw).is_err());
+        assert!(cfg.apply(raw).is_ok(), "uma tecla ruim não derruba o cfg");
+        assert_eq!(cfg.padmap, before, "e o mapa fica como estava");
+    }
+
+    #[test]
+    fn toml_errors_do_not_quote_the_file() {
+        let text = "ra_user = \"x\"\nra_token = \"segredo123\" lixo\n";
+        let e = parse_raw(text, std::path::Path::new("sixteen.cfg"))
+            .err()
+            .expect("tinha de falhar");
+        let msg = format!("{e:#}");
+        assert!(!msg.contains("segredo123"), "{msg}");
+        assert!(msg.contains("linha 2"), "{msg}");
+    }
+
+    #[test]
+    fn invalid_utf8_default_cfg_moves_aside() {
+        let dir = std::env::temp_dir().join(format!("sixteen-cfg-utf8-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sixteen.cfg");
+        std::fs::write(&path, [0xff, 0xfe, b'x']).unwrap();
+        assert!(Config::load_at(Some(path.clone()), false).is_ok());
+        assert!(dir.join("sixteen.cfg.bad").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

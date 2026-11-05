@@ -716,6 +716,7 @@ impl Active {
             id: unlock.id,
             hardcore: self.hardcore,
             title: unlock.title.clone(),
+            refusals: 0,
         };
         let token = self.token.clone();
         // A pendência vai para o disco AQUI, antes da thread: se o app
@@ -773,6 +774,44 @@ struct PendingAward {
     /// Só para o log / leitura humana do arquivo.
     #[serde(default)]
     title: String,
+    /// Quantas vezes o servidor RECUSOU este envio (recusa de verdade, não
+    /// falha de rede): depois de [`MAX_REFUSALS`] ele sai da fila, em vez de
+    /// ser reenviado a cada cartucho inserido para sempre.
+    #[serde(default)]
+    refusals: u32,
+}
+
+/// Recusas do servidor até um pendente ser descartado.
+const MAX_REFUSALS: u32 = 3;
+
+/// Falha que não diz nada sobre o envio (sem rede, servidor fora, resposta
+/// ilegível) — o pendente fica para a próxima, sem contar recusa.
+fn is_transient_failure(err: &str) -> bool {
+    err.starts_with("rede:")
+        || err.starts_with("network:")
+        || err.starts_with("resposta:")
+        || err.starts_with("HTTP 5")
+        || err.starts_with("HTTP 429")
+}
+
+/// Conta uma recusa do servidor; na [`MAX_REFUSALS`]ª, tira da fila.
+fn pending_refused(path: &std::path::Path, entry: &PendingAward) -> std::io::Result<()> {
+    mutate_pending(path, |all| {
+        for e in all.iter_mut().filter(|e| e.same_award(entry)) {
+            e.refusals += 1;
+        }
+        all.retain(|e| {
+            let keep = e.refusals < MAX_REFUSALS;
+            if !keep {
+                log::warn!(
+                    "ra: conquista {} recusada {} vezes — descartada",
+                    e.id,
+                    e.refusals
+                );
+            }
+            keep
+        });
+    })
 }
 
 impl PendingAward {
@@ -820,6 +859,7 @@ fn parse_pending_line(line: &str) -> Option<PendingAward> {
         id,
         hardcore,
         title,
+        refusals: 0,
     })
 }
 
@@ -906,6 +946,9 @@ pub fn resubmit_pending(user: &str, token: &str) {
                 Err(e) if is_already_awarded(&e) => {}
                 Err(e) => {
                     log::info!("ra: pendente {} segue pendente ({e})", entry.id);
+                    if !is_transient_failure(&e) {
+                        let _ = pending_refused(&path, entry);
+                    }
                     continue;
                 }
             }
@@ -1435,6 +1478,11 @@ pub fn download_badge(name: &str) -> Option<std::path::PathBuf> {
         .take(2 * 1024 * 1024)
         .read_to_end(&mut bytes)
         .ok()?;
+    // Um badge que declara dimensões absurdas nem entra no cache.
+    if !crate::imgutil::fits(&bytes, crate::imgutil::BADGE_MAX_SIDE) {
+        log::warn!("ra: badge {name} recusado (não é uma imagem de até 512 px)");
+        return None;
+    }
     let name = sanitize_badge_name(name)?;
     let dir = crate::dirs::retroachievements_dir()
         .join("ra-cache")
@@ -1489,6 +1537,7 @@ mod tests {
             id,
             hardcore,
             title: format!("Conquista {id}"),
+            refusals: 0,
         }
     }
 
@@ -1497,6 +1546,23 @@ mod tests {
             std::env::temp_dir().join(format!("sixteen-ra-pending-{nome}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir.join("ra-pending.jsonl")
+    }
+
+    #[test]
+    fn refused_pending_is_dropped_after_max_refusals() {
+        let path = pending_tmp("refused");
+        let a = pending_entry(9, false);
+        pending_add(&path, &a).unwrap();
+        for _ in 1..MAX_REFUSALS {
+            pending_refused(&path, &a).unwrap();
+            assert_eq!(read_pending(&path).len(), 1, "ainda na fila");
+        }
+        pending_refused(&path, &a).unwrap();
+        assert!(read_pending(&path).is_empty(), "recusado demais: sai");
+        assert!(is_transient_failure("rede: Dns"));
+        assert!(is_transient_failure("HTTP 503"));
+        assert!(!is_transient_failure("Unknown achievement"));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -1537,6 +1603,7 @@ mod tests {
             id: 42,
             hardcore: false,
             title: "Legada\twith tab".into(),
+            refusals: 0,
         };
         assert_eq!(read_pending(&path), vec![good.clone(), legacy.clone()]);
 

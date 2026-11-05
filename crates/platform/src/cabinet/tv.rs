@@ -386,10 +386,28 @@ impl TvExtras {
         self.flyback = on;
     }
 
+    /// Esvazia a fila do som do tubo (a janela sumiu).
+    pub(super) fn silence_sound(&mut self) {
+        if let Some(amb) = &self.amb {
+            amb.clear();
+        }
+    }
+
     /// Alimenta o stream do tubo: o flyback e os estalos —
     /// fora do volume da TV (é o aparelho fazendo barulho, não o som do
     /// canal). Sem nada a tocar, não abre nem enfileira nada.
-    pub fn feed_sound(&mut self, audio: &AudioSubsystem, tv_on: bool) {
+    pub fn feed_sound(&mut self, audio: &AudioSubsystem, tv_on: bool, hidden: bool) {
+        // Janela minimizada: os menus caem para 10 Hz e a fila de ~94 ms
+        // esvaziaria entre um quadro e outro (estalos periódicos). Silêncio
+        // — e o que já estava na fila sai junto. Os estalos que vencem
+        // escondidos são descartados (senão tocariam em rajada, um por
+        // quadro, quando a janela voltasse).
+        if hidden {
+            self.silence_sound();
+            let now = Instant::now();
+            self.ticks.retain(|t| *t > now);
+            return;
+        }
         let now = Instant::now();
         let tick_due = tv_on && self.ticks.first().is_some_and(|t| now >= *t);
         if tick_due {
@@ -477,7 +495,7 @@ impl Cabinet {
     pub(super) fn feed_tv_sound(&mut self) {
         let on = self.tv_on();
         self.tvx.tick_lum(on);
-        self.tvx.feed_sound(&self.audio, on);
+        self.tvx.feed_sound(&self.audio, on, self.window_hidden);
     }
 
     /// Deixa pronto o que o vidro desenha neste quadro: a textura do
@@ -551,13 +569,57 @@ pub(super) fn draw_glass(
     }
 }
 
+/// A malha do brilho do vidro, pronta: depende só do retângulo do tubo e
+/// da curvatura (`crt_warp()`) — as cores são constantes, nada por quadro.
+struct SheenMesh {
+    /// (x, y, w, h do tubo, bits do warp): mudou qualquer um, refaz.
+    key: (i32, i32, u32, u32, u32),
+    verts: Vec<Vertex>,
+    idx: Vec<i32>,
+}
+
+thread_local! {
+    /// O cache da malha do brilho. `draw_glass` é função livre (as capturas
+    /// não têm `&mut self`), então o cache mora aqui; tudo roda na thread
+    /// de UI (o canvas do SDL não sai dela).
+    static SHEEN: std::cell::RefCell<Option<SheenMesh>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// A chave do cache do brilho: a posição entra porque os vértices são
+/// absolutos no canvas; o warp entra em bits (o ajuste da curvatura muda
+/// a geometria sem mexer no tamanho).
+fn sheen_key(screen: Rect, warp: f32) -> (i32, i32, u32, u32, u32) {
+    (
+        screen.x(),
+        screen.y(),
+        screen.width(),
+        screen.height(),
+        warp.to_bits(),
+    )
+}
+
 /// O brilho do vidro, sempre presente (a TV ligada ou não): uma mancha
 /// de luz difusa no alto à esquerda, uma faixa diagonal mais fina e um
 /// aro claro rente à borda — tudo sobre a mesma grade curva da imagem,
-/// para o vidro parecer abaulado e não um adesivo plano.
+/// para o vidro parecer abaulado e não um adesivo plano. A malha (625
+/// vértices com exp/powi) fica em cache e só é refeita quando o tubo ou o
+/// warp mudam — antes eram ~35 KB alocados e recalculados todo quadro.
 fn draw_glass_sheen(canvas: &mut WindowCanvas, screen: Rect) {
-    const N: usize = 24;
     let warp = crt_warp();
+    let key = sheen_key(screen, warp);
+    SHEEN.with_borrow_mut(|cache| {
+        if !cache.as_ref().is_some_and(|m| m.key == key) {
+            *cache = Some(build_glass_sheen(screen, warp, key));
+        }
+        let m = cache.as_ref().unwrap();
+        canvas.set_blend_mode(BlendMode::Blend);
+        let _ = canvas.render_geometry(&m.verts, None::<&Texture>, &m.idx[..]);
+    });
+}
+
+fn build_glass_sheen(screen: Rect, warp: f32, key: (i32, i32, u32, u32, u32)) -> SheenMesh {
+    const N: usize = 24;
     let (sx, sy) = (screen.x() as f32, screen.y() as f32);
     let (sw, sh) = (screen.width() as f32, screen.height() as f32);
     let z = sdl3::render::FPoint::new(0.0, 0.0);
@@ -596,8 +658,7 @@ fn draw_glass_sheen(canvas: &mut WindowCanvas, screen: Rect) {
             idx.extend_from_slice(&[a, a + stride, a + 1, a + 1, a + stride, a + stride + 1]);
         }
     }
-    canvas.set_blend_mode(BlendMode::Blend);
-    let _ = canvas.render_geometry(&verts, None::<&Texture>, &idx[..]);
+    SheenMesh { key, verts, idx }
 }
 
 /// O menu de imagem dos anos 90: letras verdes grandes com sombra, o item

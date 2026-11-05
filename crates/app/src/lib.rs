@@ -26,6 +26,7 @@ pub mod dirs;
 pub mod exemplo;
 pub mod genius;
 pub mod idle;
+pub mod imgutil;
 pub mod manual;
 pub mod night_pick;
 pub mod ra;

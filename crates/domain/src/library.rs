@@ -170,6 +170,18 @@ pub fn scan_with(dir: &Path, cache: &mut HashCache) -> std::io::Result<Vec<Scann
             }
             let meta = entry.metadata().ok();
             let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            // Nada aqui é ROM de SNES: um `.bin` de CD (centenas de MB) ou um
+            // zip enorme seria lido inteiro na RAM a cada arranque (o erro não
+            // entra no cache). A maior ROM de SNES tem ~6 MB.
+            const MAX_SCAN_FILE: u64 = 64 * 1024 * 1024;
+            if size > MAX_SCAN_FILE {
+                log::warn!(
+                    "scan: {} tem {} MB — grande demais para uma rom de snes, ignorado",
+                    path.display(),
+                    size / (1024 * 1024)
+                );
+                continue;
+            }
             let modified = meta.as_ref().and_then(|m| m.modified().ok());
             let id = match cache.lookup(&path, size, modified) {
                 Some(id) => id,

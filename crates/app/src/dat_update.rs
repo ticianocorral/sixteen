@@ -88,6 +88,17 @@ fn try_download(dest: &Path, tx: &Sender<CoreUpdateMsg>) -> Result<(), String> {
         });
     }
 
+    // Corpo cortado no meio (conexão caiu) começa igualzinho a um DAT bom:
+    // o tamanho anunciado é o que pega.
+    if let Some(t) = total {
+        if bytes.len() as u64 != t {
+            return Err(tr!(
+                format!("incomplete download ({} of {t} bytes)", bytes.len()),
+                format!("download incompleto ({} de {t} bytes)", bytes.len())
+            ));
+        }
+    }
+
     // Cheap sanity check before touching the real path: it must at least
     // look like one of the two DAT flavours `NoIntroDat::load` accepts —
     // clrmamepro (what this mirror serves) or Logiqx XML (a DAT-o-MATIC
@@ -104,10 +115,9 @@ fn try_download(dest: &Path, tx: &Sender<CoreUpdateMsg>) -> Result<(), String> {
         .to_string());
     }
 
-    let part = dest.with_extension("dat.part");
-    std::fs::write(&part, &bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(&part, dest).map_err(|e| e.to_string())?;
-    Ok(())
+    // Temporário + `sync_all` + rename: uma queda de energia logo depois
+    // não deixa um DAT vazio no lugar do bom.
+    sixteen_domain::fsutil::write_atomic(dest, &bytes).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

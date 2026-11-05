@@ -76,7 +76,10 @@ impl Drop for TraceSpan {
 /// Se `event` é o jogador mexendo em algo — o que acorda as telas paradas
 /// do ritmo ocioso ([`Platform::idle_for`]). Eixos analógicos e sensores
 /// ficam DE FORA: o ruído do stick/giroscópio chega sem parar e manteria a
-/// tela "ativa" para sempre; o stick inclinado de verdade entra pelo
+/// tela "ativa" para sempre; conectar/desconectar também fica de fora (o
+/// clone RetroFlag no macOS cai e volta a cada ~1,5 s e nunca deixaria a
+/// tela descansar) — o primeiro botão apertado já conta. O stick inclinado
+/// de verdade entra pelo
 /// `pad_bits` (que já aplica a deadzone) em [`Platform::note_held_input`].
 fn is_player_input(event: &Event) -> bool {
     matches!(
@@ -95,8 +98,6 @@ fn is_player_input(event: &Event) -> bool {
             | Event::JoyHatMotion { .. }
             | Event::GamepadButtonDown { .. }
             | Event::GamepadButtonUp { .. }
-            | Event::GamepadAdded { .. }
-            | Event::GamepadRemoved { .. }
             | Event::GamepadTouchpadDown { .. }
             | Event::GamepadTouchpadMotion { .. }
             | Event::FingerDown { .. }
@@ -121,6 +122,41 @@ fn window_hidden_change(event: &Event) -> Option<bool> {
         },
         _ => None,
     }
+}
+
+/// A ordem das portas numa partida em curso, a partir dos ids conectados
+/// agora (`present`, na ordem do SDL). Quem está em `order` e saiu deixa a
+/// vaga; cada id novo ocupa a primeira vaga (herdando o "já jogou" de quem
+/// saiu, em `engaged`) e só depois vai para o fim. Devolve os ids presentes
+/// na ordem das portas.
+fn reorder_for_game(
+    order: &mut Vec<JoystickId>,
+    engaged: &mut Vec<JoystickId>,
+    present: &[JoystickId],
+) -> Vec<JoystickId> {
+    let mut fresh: std::collections::VecDeque<JoystickId> = present
+        .iter()
+        .filter(|id| !order.contains(id))
+        .copied()
+        .collect();
+    for slot in order.iter_mut() {
+        if present.contains(slot) {
+            continue;
+        }
+        let Some(new_id) = fresh.pop_front() else {
+            break;
+        };
+        if engaged.contains(slot) {
+            engaged.push(new_id);
+        }
+        *slot = new_id;
+    }
+    order.extend(fresh);
+    order
+        .iter()
+        .filter(|id| present.contains(id))
+        .copied()
+        .collect()
 }
 
 fn left_click_at(event: &Event) -> Option<(i32, i32)> {
@@ -410,6 +446,11 @@ pub struct Platform {
     /// Partida em curso ([`Platform::set_game_session`]): os pads que já
     /// apertaram algo nela — esses não perdem a porta.
     game_engaged: Option<Vec<JoystickId>>,
+    /// Partida em curso: a ordem das portas por id. Quem desconecta deixa a
+    /// vaga marcada aqui; o próximo pad que aparece (o mesmo controle volta
+    /// com id NOVO) ocupa essa vaga — senão P1 e P2 ficavam trocados até o
+    /// fim da partida depois de um Bluetooth que dormiu.
+    game_order: Vec<JoystickId>,
     /// Jogo ligado e correndo (não pausado): a tela não pode apagar.
     playing: bool,
     /// O que foi pedido ao SDL por último (`true` = descanso bloqueado).
@@ -584,6 +625,7 @@ impl Platform {
             last_activity: Instant::now(),
             window_hidden: false,
             game_engaged: None,
+            game_order: Vec::new(),
             playing: false,
             screensaver_blocked: false,
         };
@@ -603,6 +645,10 @@ impl Platform {
         };
         self.seen_ids = ids.clone();
         self.seen_ids.sort_unstable();
+        let ids = match &mut self.game_engaged {
+            Some(engaged) => reorder_for_game(&mut self.game_order, engaged, &ids),
+            None => ids,
+        };
         let mut leftovers = std::mem::take(&mut self.gamepads);
         let mut gamepads = Vec::with_capacity(leftovers.len());
         for id in ids.into_iter().take(input::MAX_PORTS) {
@@ -654,6 +700,9 @@ impl Platform {
         if let Some(i) = self.gamepads.iter().skip(1).position(|(_, p)| pressed(p)) {
             let pad = self.gamepads.remove(i + 1);
             self.gamepads.insert(0, pad);
+            if self.game_engaged.is_some() {
+                self.game_order = self.gamepads.iter().map(|(id, _)| *id).collect();
+            }
         }
     }
 
@@ -1078,6 +1127,11 @@ impl Platform {
     /// largada já conta como "jogou" quando os menus vinham sendo usados no
     /// controle (foi ele quem escolheu o jogo).
     pub fn set_game_session(&mut self, on: bool) {
+        self.game_order = if on {
+            self.gamepads.iter().map(|(id, _)| *id).collect()
+        } else {
+            Vec::new()
+        };
         self.game_engaged = on.then(|| {
             let mut seed = Vec::new();
             if self.last_input_pad {
@@ -1330,7 +1384,43 @@ impl Platform {
 
 #[cfg(test)]
 mod tests {
+    use super::reorder_for_game;
     use super::{konami_feed, konami_nav_step, sanitize_paste, KonamiFeed, KonamiStep, MenuNav};
+    use sdl3::joystick::JoystickId;
+
+    fn ids(v: &[u32]) -> Vec<JoystickId> {
+        v.iter().map(|&n| JoystickId::new(n)).collect()
+    }
+
+    #[test]
+    fn replugged_pad_takes_back_its_port() {
+        // Partida a dois: P1 = 1, P2 = 2, os dois já jogaram.
+        let mut order = ids(&[1, 2]);
+        let mut engaged = ids(&[1, 2]);
+        // P1 cai: P2 é o único presente (temporariamente na porta 0).
+        assert_eq!(
+            reorder_for_game(&mut order, &mut engaged, &ids(&[2])),
+            ids(&[2])
+        );
+        // P1 volta com id novo (7) — e o SDL o lista DEPOIS do P2.
+        let now = reorder_for_game(&mut order, &mut engaged, &ids(&[2, 7]));
+        assert_eq!(now, ids(&[7, 2]), "o controle que voltou é P1 de novo");
+        assert!(
+            engaged.contains(&JoystickId::new(7)),
+            "e herda o 'já jogou'"
+        );
+    }
+
+    #[test]
+    fn new_pad_without_vacancy_goes_last() {
+        let mut order = ids(&[1]);
+        let mut engaged = ids(&[1]);
+        assert_eq!(
+            reorder_for_game(&mut order, &mut engaged, &ids(&[3, 1])),
+            ids(&[1, 3])
+        );
+        assert!(!engaged.contains(&JoystickId::new(3)));
+    }
 
     #[test]
     fn sanitize_paste_drops_control_chars_and_keeps_the_rest() {

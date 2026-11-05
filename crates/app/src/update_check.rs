@@ -130,6 +130,23 @@ pub struct UpdateAsset {
 /// resposta da API adulterada não aponta o update para outro lugar.
 const RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/ticianocorral/sixteen/releases/download/";
 
+/// A URL é de um asset dos releases deste repositório? Além do prefixo,
+/// o resto não pode ter nada que o parser de URL normalize ou desvie
+/// (`..`, escapes `%`, `\`, query/fragmento): `…/download/../../outro/repo`
+/// passaria no `starts_with` e baixaria de outro repositório.
+fn is_release_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix(RELEASE_DOWNLOAD_PREFIX) else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest
+            .split('/')
+            .all(|seg| !seg.is_empty() && seg != "." && seg != "..")
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-+/".contains(c))
+}
+
 /// `"sha256:<64 hex>"` → o hex minúsculo; qualquer outra coisa, `None`.
 fn parse_sha256_digest(digest: &str) -> Option<String> {
     let hex = digest.strip_prefix("sha256:")?;
@@ -151,7 +168,7 @@ fn asset_for_platform(assets: &[GhAsset]) -> Option<UpdateAsset> {
     let a = assets
         .iter()
         .find(|a| a.name.contains(needle) && a.name.ends_with(ext))?;
-    if !a.browser_download_url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
+    if !is_release_url(&a.browser_download_url) {
         log::warn!(
             "update: asset fora do repositório, ignorado: {}",
             a.browser_download_url
@@ -230,7 +247,7 @@ pub fn download_asset(
     tx: &Sender<u32>,
 ) -> Result<PathBuf, String> {
     let url = asset.url.as_str();
-    if !url.starts_with(RELEASE_DOWNLOAD_PREFIX) {
+    if !is_release_url(url) {
         return Err(format!("update: url fora do repositório: {url}"));
     }
     let agent = ureq::AgentBuilder::new()
@@ -266,6 +283,10 @@ pub fn download_asset(
         let _ = std::fs::remove_file(&part);
         return Err(e);
     }
+    // O hash vai junto: o arranque só aplica o que ainda bater com ele
+    // (um pacote de versão antiga, truncado ou trocado na pasta é apagado).
+    sixteen_domain::fsutil::write_atomic(&sha_sidecar(&dest), &asset.sha256)
+        .map_err(|e| e.to_string())?;
     std::fs::rename(&part, &dest).map_err(|e| {
         let _ = std::fs::remove_file(&part);
         e.to_string()
@@ -328,6 +349,43 @@ fn download_into(
     Ok(())
 }
 
+/// `<pacote>.sha256` — o hash publicado, gravado ao lado no download.
+fn sha_sidecar(pkg: &Path) -> PathBuf {
+    let mut name = pkg.file_name().unwrap_or_default().to_os_string();
+    name.push(".sha256");
+    pkg.with_file_name(name)
+}
+
+/// `<pacote>.tentativas` — quantas vezes o apply falhou no arranque.
+fn tries_sidecar(pkg: &Path) -> PathBuf {
+    let mut name = pkg.file_name().unwrap_or_default().to_os_string();
+    name.push(".tentativas");
+    pkg.with_file_name(name)
+}
+
+/// Apaga o pacote e o que anda junto dele.
+fn discard_package(pkg: &Path) {
+    for p in [pkg.to_path_buf(), sha_sidecar(pkg), tries_sidecar(pkg)] {
+        let _ = std::fs::remove_file(p);
+    }
+}
+
+/// O pacote ainda é exatamente o que foi baixado e conferido?
+fn package_matches_sidecar(pkg: &Path) -> bool {
+    use sha2::{Digest, Sha256};
+    let Ok(expected) = std::fs::read_to_string(sha_sidecar(pkg)) else {
+        return false;
+    };
+    let Ok(mut f) = std::fs::File::open(pkg) else {
+        return false;
+    };
+    let mut hasher = Sha256::new();
+    if std::io::copy(&mut f, &mut hasher).is_err() {
+        return false;
+    }
+    hex::encode(hasher.finalize()) == expected.trim()
+}
+
 /// Aplica um arquivo já baixado em `saves/update/` — no arranque (o loop de
 /// [`apply_pending_update`]) e, desde a 1.1.4, na própria tela de update
 /// logo após o download ("clicou, atualizou"). Sucesso remove o arquivo;
@@ -341,7 +399,7 @@ pub fn apply_update_file(path: &Path) -> Result<(), String> {
     match outcome {
         Ok(()) => {
             log::info!("update: {name} aplicado — reinicie para valer");
-            let _ = std::fs::remove_file(path);
+            discard_package(path);
             Ok(())
         }
         Err(e) => {
@@ -370,6 +428,12 @@ pub fn apply_pending_update() {
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
+        // Download que não terminou (app fechado no meio): centenas de MB
+        // que nada mais vai usar.
+        if name.ends_with(".part") {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
         // Só o formato desta plataforma é candidato a update; qualquer outro
         // arquivo na pasta de updates é ignorado em silêncio.
         let relevante = if cfg!(target_os = "macos") {
@@ -382,7 +446,29 @@ pub fn apply_pending_update() {
         if !relevante {
             continue;
         }
-        let _ = apply_update_file(&path);
+        if !package_matches_sidecar(&path) {
+            log::warn!("update: {name} sem hash conferido — descartado");
+            discard_package(&path);
+            continue;
+        }
+        if apply_update_file(&path).is_ok() {
+            discard_package(&path);
+            continue;
+        }
+        // Falhou: tenta nos próximos arranques, mas não para sempre (uma
+        // cópia de centenas de MB a cada abertura).
+        const MAX_TRIES: u32 = 3;
+        let tries = std::fs::read_to_string(tries_sidecar(&path))
+            .ok()
+            .and_then(|t| t.trim().parse::<u32>().ok())
+            .unwrap_or(0)
+            + 1;
+        if tries >= MAX_TRIES {
+            log::warn!("update: {name} falhou {tries} vezes — desistindo");
+            discard_package(&path);
+        } else {
+            let _ = std::fs::write(tries_sidecar(&path), tries.to_string());
+        }
     }
 }
 
@@ -462,16 +548,19 @@ fn apply_linux_appimage(appimage: &Path) -> Result<(), String> {
         None => std::env::current_exe().map_err(|e| e.to_string())?,
     };
     let tmp = exe.with_extension("new");
-    std::fs::copy(appimage, &tmp).map_err(|e| e.to_string())?;
-    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
-        .map_err(|e| e.to_string())?;
-    // No disco antes do rename: uma queda de energia (bateria do Deck)
-    // logo depois não pode deixar o executável vazio.
-    std::fs::File::open(&tmp)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &exe).map_err(|e| e.to_string())?;
-    Ok(())
+    let result = (|| {
+        std::fs::copy(appimage, &tmp)?;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+        // No disco antes do rename: uma queda de energia (bateria do Deck)
+        // logo depois não pode deixar o executável vazio.
+        std::fs::File::open(&tmp)?.sync_all()?;
+        std::fs::rename(&tmp, &exe)
+    })();
+    if result.is_err() {
+        // Nada de uma cópia de centenas de MB largada ao lado do AppImage.
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result.map_err(|e| e.to_string())
 }
 
 /// O despacho por plataforma é por `#[cfg]` (não `cfg!()`): as funções de
@@ -542,6 +631,11 @@ pub fn relaunch() -> Result<(), String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
+        // AppImage: `current_exe()` é o binário do squashfs ANTIGO, que é
+        // desmontado quando este processo sai — relança o arquivo trocado.
+        let exe = std::env::var_os("APPIMAGE")
+            .map(PathBuf::from)
+            .unwrap_or(exe);
         Command::new(exe)
             .spawn()
             .map(|_| ())
@@ -653,6 +747,40 @@ mod tests {
         assert!(download_into(body, &part, body.len() as u64, &right, &tx).is_ok());
         assert!(download_into(body, &part, body.len() as u64, &"0".repeat(64), &tx).is_err());
         assert!(download_into(body, &part, body.len() as u64 + 1, &right, &tx).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn release_url_rejects_traversal_and_escapes() {
+        let ok = format!("{RELEASE_DOWNLOAD_PREFIX}v1.8.0/SixteeN-1.8.0-macos.dmg");
+        assert!(is_release_url(&ok));
+        for bad in [
+            format!("{RELEASE_DOWNLOAD_PREFIX}../../../../outro/repo/releases/download/v1/x.dmg"),
+            format!("{RELEASE_DOWNLOAD_PREFIX}v1/%2e%2e/x.dmg"),
+            format!("{RELEASE_DOWNLOAD_PREFIX}v1\\..\\x.dmg"),
+            format!("{RELEASE_DOWNLOAD_PREFIX}v1/x.dmg?y=1"),
+            RELEASE_DOWNLOAD_PREFIX.to_string(),
+            "https://example.com/x.dmg".to_string(),
+        ] {
+            assert!(!is_release_url(&bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn package_needs_matching_sidecar() {
+        let dir = std::env::temp_dir().join(format!("sixteen-pkg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pkg = dir.join("SixteeN-9-macos.dmg");
+        std::fs::write(&pkg, b"pacote").unwrap();
+        assert!(!package_matches_sidecar(&pkg), "sem .sha256");
+        use sha2::{Digest, Sha256};
+        std::fs::write(sha_sidecar(&pkg), hex::encode(Sha256::digest(b"pacote"))).unwrap();
+        assert!(package_matches_sidecar(&pkg));
+        std::fs::write(&pkg, b"trocado").unwrap();
+        assert!(!package_matches_sidecar(&pkg));
+        discard_package(&pkg);
+        assert!(!pkg.exists() && !sha_sidecar(&pkg).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

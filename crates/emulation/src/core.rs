@@ -169,6 +169,12 @@ pub struct Core {
     needs_fullpath: bool,
     valid_extensions: Vec<String>,
     loaded: bool,
+    /// `retro_init` rodou neste `Core`. Um `Core::load` só para ler a
+    /// versão (nameplate, checagem de update em outra thread) NÃO pode
+    /// chamar `retro_deinit` no drop: o `dlopen` devolve o mesmo handle e
+    /// os mesmos globais do núcleo de um jogo em andamento — o deinit
+    /// liberaria a ROM/RAM que o `retro_run` está usando.
+    inited: bool,
     #[allow(dead_code)]
     lib: Library,
 }
@@ -273,6 +279,7 @@ impl Core {
             needs_fullpath: info.need_fullpath,
             valid_extensions,
             loaded: false,
+            inited: false,
             lib,
         })
     }
@@ -323,6 +330,7 @@ impl Core {
 
     /// Register callbacks and call `retro_init`. Idempotent-unsafe: call once.
     pub fn init(&mut self) {
+        self.inited = true;
         self.enter(|api| unsafe {
             (api.retro_set_environment)(environment_cb);
             (api.retro_set_video_refresh)(video_refresh_cb);
@@ -596,7 +604,9 @@ impl Drop for Core {
         if self.loaded {
             self.enter(|api| unsafe { (api.retro_unload_game)() });
         }
-        self.enter(|api| unsafe { (api.retro_deinit)() });
+        if self.inited {
+            self.enter(|api| unsafe { (api.retro_deinit)() });
+        }
     }
 }
 

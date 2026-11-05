@@ -870,7 +870,19 @@ pub fn run(
                 update_status = tr!("downloading...".to_string(), "baixando...".to_string());
             }
             let busy = update_rx.is_some() || apply_rx.is_some();
-            let status = update_status.clone();
+            // Sem pacote verificável para esta plataforma (sem hash publicado
+            // ou de fora do repositório): o botão dorme e o status diz onde
+            // baixar, em vez de um "atualizar" que não faz nada.
+            let available = asset_url.is_some();
+            let status = if !available && update_status.is_empty() && !update_applied {
+                tr!(
+                    "no verified package for this system — download it from the github releases page",
+                    "sem pacote verificado para este sistema — baixe na página de releases do github"
+                )
+                .to_string()
+            } else {
+                update_status.clone()
+            };
             let render = |d: &mut Screen| {
                 update_rects = draw_update_view(
                     d,
@@ -880,6 +892,7 @@ pub fn run(
                     busy,
                     update_pct,
                     update_applied,
+                    available,
                 );
             };
             cab.frame_idle_2d(SETUP_BG, render);
@@ -1108,6 +1121,7 @@ fn in_update_rect(x: i32, y: i32, r: UpdateBtn) -> bool {
 /// mostrar o changelog e o botão de atualizar" — e, desde a 1.1.4, o apply
 /// acontece logo após o download e o botão vira "reiniciar agora") —
 /// título, changelog do release, status e os botões. Devolve os rects.
+#[allow(clippy::too_many_arguments)]
 fn draw_update_view(
     d: &mut Screen,
     tag: &str,
@@ -1116,6 +1130,7 @@ fn draw_update_view(
     busy: bool,
     _pct: Option<u32>,
     applied: bool,
+    available: bool,
 ) -> (UpdateBtn, UpdateBtn) {
     let (w, h) = d.size();
     let (w, h) = (w as i32, h as i32);
@@ -1152,10 +1167,11 @@ fn draw_update_view(
     // Enquanto baixa/aplica o botão dorme (dim, sem hit) — o status ocupa
     // o lugar. Aplicado, ele acorda verde como "reiniciar agora" (o clique
     // relança pelo que está no disco e encerra a sessão).
-    let can_update = !busy && !applied && !status.contains(tr!("downloaded", "baixado"));
+    let can_update =
+        available && !busy && !applied && !status.contains(tr!("downloaded", "baixado"));
     let label = if applied {
         tr!("restart now", "reiniciar agora")
-    } else if can_update {
+    } else if can_update || !available {
         tr!("update", "atualizar")
     } else {
         tr!("updated", "atualizado")
@@ -1400,7 +1416,9 @@ pub fn capture_preview(
 /// renders the page synchronously instead of through the worker.
 pub fn capture_console_manual_preview(cab: &mut Cabinet, page: usize, path: &Path) -> Result<()> {
     let man = ConsoleManual::open().ok_or_else(|| anyhow::anyhow!("couldn't write the PDF"))?;
-    let pdf = std::env::temp_dir().join(format!("sixteen-{}.pdf", man.key));
+    let pdf = crate::dirs::app_root()
+        .join("cache")
+        .join(format!("{}.pdf", man.key));
     let pages = crate::manual::page_count(&pdf)?;
     if let Some(img) = crate::manual::render_page(&pdf, page, 2048)? {
         cab.set_image(

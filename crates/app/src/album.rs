@@ -737,6 +737,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, notes_dir: &Path) -> Result<P
     cab.set_shelf_panel(empty_panel());
     cab.set_close_button(true);
     let frame = crate::runner::UI_FRAME;
+    let mut next = std::time::Instant::now();
 
     loop {
         let (w, h) = cab.shelf_screen_size();
@@ -808,7 +809,7 @@ pub fn run(plat: &mut Platform, cab: &mut Cabinet, notes_dir: &Path) -> Result<P
 
         let failed = &loader.failed;
         cab.frame_shelf(bg(), |d: &mut Screen| render(d, &st, &lay, failed));
-        std::thread::sleep(frame);
+        crate::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 

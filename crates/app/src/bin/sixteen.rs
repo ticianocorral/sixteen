@@ -539,13 +539,29 @@ fn no_core_screen(plat: &mut Platform, cab: &mut Cabinet) -> Result<bool> {
 /// Uma tela de aviso (título + texto) até o jogador confirmar ou voltar —
 /// teclado, mouse ou controle. Devolve `true` se o app inteiro deve sair.
 fn message_screen(plat: &mut Platform, cab: &mut Cabinet, title: &str, body: &str) -> Result<bool> {
-    let frame = std::time::Duration::from_nanos(16_666_667);
+    let frame = sixteen_app::runner::UI_FRAME;
+    let mut next = std::time::Instant::now();
     loop {
-        let m = plat.poll_menu(MenuMode::Nav);
+        // `CaptureKey`: qualquer tecla ou botão do controle volta cru — o
+        // aviso fecha com o que estiver na mão (no `Nav` o teclado não chega).
+        let m = plat.poll_menu(MenuMode::CaptureKey);
         if m.quit {
             return Ok(true);
         }
-        if m.click.is_some()
+        if let Some((x, y)) = m.click {
+            let (ox, oy) = cab.window_to_output(x, y);
+            if cab.hit_close_button(ox, oy) {
+                return Ok(true);
+            }
+            if cab.hit_minimize_button(ox, oy) {
+                cab.minimize();
+            } else {
+                return Ok(false);
+            }
+        }
+        if m.captured_key.is_some()
+            || m.captured_pad.is_some()
+            || m.capture_cancelled
             || m.nav
                 .iter()
                 .any(|n| matches!(n, MenuNav::Confirm | MenuNav::Back))
@@ -564,9 +580,7 @@ fn message_screen(plat: &mut Platform, cab: &mut Cabinet, title: &str, body: &st
             );
         };
         cab.frame_2d((18, 18, 20), render);
-        // Tela parada: meio quadro depois de um tempo sem input.
-        let idle = plat.idle_for() >= std::time::Duration::from_secs(2);
-        std::thread::sleep(if idle { frame * 2 } else { frame });
+        sixteen_app::runner::pace_ui(&mut next, frame, plat, cab);
     }
 }
 

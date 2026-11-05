@@ -729,7 +729,30 @@ fn start_core_download(status: &mut CoreStatus, worker: &mut Option<Receiver<Cor
 
 /// How long since the installed core was written, in the coarse terms
 /// `draw_sistema`'s row wants — `None` if there's no core installed at all.
+///
+/// O desenho chama a cada quadro: o `stat()` do arquivo fica em cache por
+/// alguns segundos (o rótulo só muda quando um download termina, e aí a
+/// linha mostra "atualizado!" antes de voltar a ele).
 fn core_installed_label() -> Option<String> {
+    use std::cell::RefCell;
+    use std::time::Instant;
+    thread_local! {
+        static CACHE: RefCell<Option<(Instant, Option<String>)>> = const { RefCell::new(None) };
+    }
+    CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some((at, label)) = c.as_ref() {
+            if at.elapsed() < std::time::Duration::from_secs(5) {
+                return label.clone();
+            }
+        }
+        let label = core_installed_label_uncached();
+        *c = Some((Instant::now(), label.clone()));
+        label
+    })
+}
+
+fn core_installed_label_uncached() -> Option<String> {
     let path = crate::dirs::core_dir().join(core_update::core_file_name());
     let modified = std::fs::metadata(&path).ok()?.modified().ok()?;
     let days = modified.elapsed().unwrap_or_default().as_secs() / 86_400;

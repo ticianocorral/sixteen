@@ -407,6 +407,9 @@ pub struct Cabinet {
     /// XORSHIFT state for the hiss samples — same generator the power
     /// bursts use, so the texture of the noise matches.
     hiss_rng: u32,
+    /// A janela está minimizada/escondida (`set_window_hidden`, o app avisa
+    /// todo quadro): o chiado e os sons do tubo calam e esvaziam a fila.
+    window_hidden: bool,
     /// O estado da TV (plan revision: "ao abrir o app a tv estiver desligada
     /// e fazer um botao de power") — desligada, aquecendo (o warm-up do
     /// tubo: ponto -> linha -> raster abrindo), ligada, ou colapsando (o
@@ -946,6 +949,10 @@ struct PanelInfo {
     /// "mostrar apenas uma nota e/ou uma imagem"). The panel wraps it and
     /// cuts it with "..." only where the column actually runs out.
     text_note: Option<String>,
+    /// As linhas já quebradas da nota de texto (`NoteCache`), para o painel
+    /// não realocar as Strings todo quadro. `RefCell` porque o desenho do
+    /// painel só recebe `&PanelInfo`.
+    note_cache: std::cell::RefCell<NoteCache>,
     /// Insert/eject progress for the panel's cartridge slot (plan revision)
     /// — `None` is the resting seated state every normal frame draws;
     /// `Some((t, ejecting))` while `runner`'s animation drives it, drawn by
@@ -1320,6 +1327,7 @@ impl Cabinet {
             static_hiss: false,
             hiss: None,
             hiss_rng: 0x2545_f491,
+            window_hidden: false,
             tv_power: None, // abre com a TV ligada, como o PolyStnX
             volume: 8,
             volume_osd_until: None,
@@ -1661,6 +1669,7 @@ impl Cabinet {
             has_note_thumb: false,
             note_caption: String::new(),
             text_note: None,
+            note_cache: Default::default(),
             // Seated in the slot until `runner`'s insert animation says
             // otherwise (it runs right after this).
             cartridge_motion: None,
@@ -2772,6 +2781,20 @@ impl Cabinet {
         }
     }
 
+    /// A janela foi minimizada/escondida (ou voltou). O app chama todo
+    /// quadro com o estado da plataforma. Escondida, o chiado do estático
+    /// e os sons do tubo (flyback e estalos) não enfileiram nada e as filas
+    /// pendentes são esvaziadas na hora.
+    pub fn set_window_hidden(&mut self, hidden: bool) {
+        if hidden && !self.window_hidden {
+            if let Some(h) = &self.hiss {
+                h.clear();
+            }
+            self.tvx.silence_sound();
+        }
+        self.window_hidden = hidden;
+    }
+
     /// Queue a one-shot sound (mono `samples` at `rate`) on the cabinet's
     /// persistent foley stream — the stream outlives the call, so the queued
     /// audio actually plays (a stream dropped immediately after `queue`
@@ -2805,6 +2828,15 @@ impl Cabinet {
     /// stream lazily on the first hissing frame.
     fn queue_static_hiss(&mut self, level: f32) {
         const RATE: u32 = 22_050;
+        // Minimizada, nada de chiado: os menus andam a 10 Hz e a fila de
+        // ~94 ms secaria entre os quadros em estalos periódicos — e o
+        // silêncio ainda poupa bateria. O que estava na fila é cortado.
+        if self.window_hidden {
+            if let Some(h) = &self.hiss {
+                h.clear();
+            }
+            return;
+        }
         if self.hiss.is_none() {
             match AudioOut::new(&self.audio, RATE) {
                 Ok(a) => self.hiss = Some(a),
@@ -3160,11 +3192,14 @@ impl Cabinet {
         // é desenhado por cima); em transição, o normal (a máscara do vidro
         // faz o resto); ligada, o nível de sempre.
         let phase = self.tv_phase();
-        let drawn_level = if matches!(phase, TvPhase::Dead) {
-            0.0
-        } else {
-            level
-        };
+        // Desligada, o vidro morto (`draw_tv_glass_phase`, `TvPhase::Dead`)
+        // pinta o retângulo inteiro do tubo com linhas opacas, e a malha CRT
+        // só encolhe para dentro dele — a neve ficaria 100% escondida. Então
+        // nem gera/sobe a textura nem desenha a malha; o `noise_stamp` é
+        // zerado para que o primeiro frame do Warming regenere na hora (o
+        // `toggle_tv_power` também zera, isto é só o cinto de segurança).
+        let dead = matches!(phase, TvPhase::Dead);
+        let drawn_level = if dead { 0.0 } else { level };
         let (real_w, real_h) = self.canvas.output_size().unwrap_or((1280, 720));
         let canvas_rect = cabinet_canvas_rect(real_w, real_h);
         self.canvas_rect = canvas_rect;
@@ -3174,7 +3209,11 @@ impl Cabinet {
         self.screen = screen_area(cab_w, wh);
         self.ensure_bezel(cab_w, wh, self.screen);
         self.ensure_mesh(self.screen);
-        self.update_noise_tex(drawn_level);
+        if dead {
+            self.noise_stamp = None;
+        } else {
+            self.update_noise_tex(drawn_level);
+        }
 
         // The mesh is cached like the gameplay path's — rebuilding 1,089
         // vertices every frame for a screen that only changes on
@@ -3184,11 +3223,13 @@ impl Cabinet {
             .set_draw_color(Color::RGB(RECESS.0, RECESS.1, RECESS.2));
         self.canvas.clear();
         self.canvas.set_viewport(Some(canvas_rect));
-        let nt = self.noise_tex.take().unwrap();
-        let _ = self
-            .canvas
-            .render_geometry(&mesh.verts, Some(&nt.tex), &mesh.indices[..]);
-        self.noise_tex = Some(nt);
+        if !dead {
+            let nt = self.noise_tex.take().unwrap();
+            let _ = self
+                .canvas
+                .render_geometry(&mesh.verts, Some(&nt.tex), &mesh.indices[..]);
+            self.noise_tex = Some(nt);
+        }
         // A máscara da fase (raster abrindo/colapsando/vidro morto), por
         // cima da neve — a mesma passada do gameplay.
         self.draw_tv_phase_glass(&phase);
@@ -3500,7 +3541,15 @@ impl Cabinet {
         shelf_alpha: f32,
     ) {
         self.paint_shelf(bg, draw);
-        self.update_noise_tex(static_level);
+        // Estante já opaca (o repouso, alpha 1.0): o buffer dela é limpo com
+        // `bg` opaco e cobre o tubo inteiro, então a neve por baixo não
+        // apareceria — nada de gerar 320x240 de ruído a ~30 Hz, subir 307 KB
+        // e desenhar a malha cheia à toa. Durante o fade (alpha < 1) segue
+        // tudo igual.
+        let snow = shelf_alpha < 1.0;
+        if snow {
+            self.update_noise_tex(static_level);
+        }
         let canvas_rect = self.canvas_rect;
         let panel = panel_rect(canvas_rect.width(), canvas_rect.height());
 
@@ -3513,13 +3562,15 @@ impl Cabinet {
         self.canvas.clear();
         self.canvas.set_viewport(Some(canvas_rect));
 
-        let nt = self.noise_tex.take().unwrap();
-        let _ = self.canvas.render_geometry(
-            &mesh_static.verts,
-            Some(&nt.tex),
-            &mesh_static.indices[..],
-        );
-        self.noise_tex = Some(nt);
+        if snow {
+            let nt = self.noise_tex.take().unwrap();
+            let _ = self.canvas.render_geometry(
+                &mesh_static.verts,
+                Some(&nt.tex),
+                &mesh_static.indices[..],
+            );
+            self.noise_tex = Some(nt);
+        }
 
         let st = self.screen_tex.take().unwrap();
         let _ =
