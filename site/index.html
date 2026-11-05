@@ -1,21 +1,33 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en" data-lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SixteeN — manual do proprietário</title>
-  <meta name="description" content="SixteeN: um frontend de console para o emulador snes9x — a sala inteira ao redor do emulador de referência do Super Nintendo, para macOS, Windows e Linux, com estante de jogos, manual em PDF e RetroAchievements.">
+  <title>SixteeN — owner's manual</title>
+  <meta name="description" content="SixteeN: a whole Super Nintendo console on your screen — CRT TV, cartridge slot, POWER switch and a shelf for your games — around the snes9x emulator. macOS, Windows, Linux and Steam Deck.">
   <meta property="og:title" content="SixteeN">
-  <meta property="og:description" content="Um console inteiro na sua TV — gabinete, tubo CRT e cartucho de verdade.">
-  <meta property="og:image" content="assets/screenshot.jpg">
+  <meta property="og:description" content="A whole console on your screen — CRT tube, real cartridge, POWER switch — not just a window with the game.">
+  <meta property="og:image" content="assets/hero.jpg">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
+  <script>
+    // Idioma antes do primeiro paint: escolha salva > idioma do navegador.
+    (function () {
+      var l = null;
+      try { l = localStorage.getItem("sixteen-lang"); } catch (e) {}
+      if (l !== "en" && l !== "pt") {
+        l = /^pt/i.test(navigator.language || "") ? "pt" : "en";
+      }
+      document.documentElement.dataset.lang = l;
+      document.documentElement.lang = l === "pt" ? "pt-BR" : "en";
+    })();
+  </script>
 </head>
 <body>
-  <a class="pular" href="#conteudo">Pular para o conteúdo</a>
+  <a class="pular" href="#conteudo"><span data-l="en">Skip to content</span><span data-l="pt">Pular para o conteúdo</span></a>
 
   <div class="espiral" aria-hidden="true">
     <span></span><span></span><span></span><span></span><span></span><span></span>
@@ -23,9 +35,13 @@
   </div>
 
   <header class="cabecalho">
-    <p class="cabecalho-ref">SNX-1000 · MANUAL DO PROPRIETÁRIO</p>
-    <p class="cabecalho-ref">REV. 1.2.0</p>
+    <p class="cabecalho-ref">SNX-1000 · <span data-l="en">OWNER'S MANUAL</span><span data-l="pt">MANUAL DO PROPRIETÁRIO</span></p>
+    <p class="cabecalho-ref">REV. <span data-release>1.8.1</span></p>
     <a class="cabecalho-link" href="https://github.com/ticianocorral/sixteen">github.com/ticianocorral/sixteen</a>
+    <div class="idioma" role="group" aria-label="Language / Idioma">
+      <button type="button" data-set-lang="en" lang="en">EN</button>
+      <button type="button" data-set-lang="pt" lang="pt-BR">PT</button>
+    </div>
   </header>
 
   <main id="conteudo">
@@ -42,50 +58,60 @@
         <div class="capa-grid">
           <div class="capa-texto">
             <h1 class="capa-titulo">
-              <span class="capa-titulo-l1">manual do</span>
-              <span class="capa-titulo-l2">proprietário</span>
+              <span data-l="en"><span class="capa-titulo-l1">owner's</span><span class="capa-titulo-l2">manual</span></span>
+              <span data-l="pt"><span class="capa-titulo-l1">manual do</span><span class="capa-titulo-l2">proprietário</span></span>
             </h1>
-            <p class="capa-lema">
-              Um <strong>console inteiro na sua TV</strong> — gabinete, tubo
-              CRT e cartucho de verdade — em vez de só uma janela com o jogo.
-              E não é um emulador novo: <strong>quem emula é o
-              snes9x</strong>; o SixteeN é o console ao redor dele.
+            <p class="capa-lema" data-l="en">
+              A <strong>whole Super Nintendo console on your screen</strong> —
+              CRT tube, cartridge slot, POWER switch and a shelf for your
+              games — instead of just a window with the game. Built around
+              <strong>snes9x</strong>, the reference SNES emulator.
+            </p>
+            <p class="capa-lema" data-l="pt">
+              Um <strong>console de Super Nintendo inteiro na sua tela</strong>
+              — tubo CRT, slot de cartucho, chave POWER e uma estante para os
+              seus jogos — em vez de só uma janela com o jogo. Construído ao
+              redor do <strong>snes9x</strong>, o emulador de referência.
             </p>
             <div class="capa-acoes">
               <a class="botao" href="https://github.com/ticianocorral/sixteen/releases/latest">
-                Baixar a última release
+                <span data-l="en">Download the latest release</span><span data-l="pt">Baixar a última release</span>
               </a>
               <p class="capa-formatos">
                 <a href="https://github.com/ticianocorral/sixteen/releases/latest">macOS · dmg</a>
                 <a href="https://github.com/ticianocorral/sixteen/releases/latest">Windows · zip</a>
-                <a href="https://github.com/ticianocorral/sixteen/releases/latest">Linux · AppImage</a>
+                <a href="https://github.com/ticianocorral/sixteen/releases/latest">Linux · AppImage / Flatpak</a>
               </p>
             </div>
             <p class="capa-selo">
-              <span class="carimbo" title="última release publicada">v<span data-release>1.2.0</span></span>
-              <span class="capa-selo-txt">SDL3 embutido · macOS / Windows / Linux / Steam Deck</span>
+              <span class="carimbo" title="latest release">v<span data-release>1.8.1</span></span>
+              <span class="capa-selo-txt"><span data-l="en">free · offline · gamepad-first</span><span data-l="pt">grátis · offline · feito para o controle</span><br>macOS / Windows / Linux / Steam Deck</span>
             </p>
           </div>
           <figure class="figura capa-figura">
-            <img src="assets/screenshot.jpg" width="1280" height="800" loading="eager"
-                 alt="Mighty Morphin Power Rangers rodando no tubo CRT, com o painel lateral: logotipo do jogo, cartucho no slot e chaves Power e Reset roxas">
-            <figcaption><span>Fig. 1</span> o console ligado: tubo, painel e cartucho no slot</figcaption>
+            <img src="assets/hero.jpg" width="1280" height="800" loading="eager"
+                 data-alt-en="Contra III running on the CRT tube, with the console panel beside it: the game logo, the cartridge in the slot and the purple POWER and RESET switches"
+                 data-alt-pt="Contra III rodando no tubo CRT, com o painel do console ao lado: logo do jogo, cartucho no slot e as chaves POWER e RESET roxas"
+                 alt="Contra III running on the CRT tube, with the console panel beside it: the game logo, the cartridge in the slot and the purple POWER and RESET switches">
+            <figcaption><span>Fig. 1</span><b data-l="en">the console on: tube, panel and the cartridge in the slot</b><b data-l="pt">o console ligado: tubo, painel e o cartucho no slot</b></figcaption>
           </figure>
         </div>
       </div>
     </section>
 
     <!-- ===== Sumário ===== -->
-    <section class="sumario" aria-label="Sumário">
+    <section class="sumario" aria-label="Contents">
       <div class="pagina">
         <ol class="sumario-lista">
-          <li><a href="#console"><span>O console</span><i></i><span>§1</span></a></li>
-          <li><a href="#ligar"><span>Como ligar</span><i></i><span>§2</span></a></li>
-          <li><a href="#estante"><span>A estante de jogos</span><i></i><span>§3</span></a></li>
-          <li><a href="#cartucho"><span>O cartucho</span><i></i><span>§4</span></a></li>
-          <li><a href="#conquistas"><span>Conquistas na TV</span><i></i><span>§5</span></a></li>
-          <li><a href="#especificacoes"><span>Especificações</span><i></i><span>§6</span></a></li>
-          <li><a href="#avisos"><span>Avisos &amp; licenças</span><i></i><span>A</span></a></li>
+          <li><a href="#console"><span><span data-l="en">The console</span><span data-l="pt">O console</span></span><i></i><span>§1</span></a></li>
+          <li><a href="#tv"><span><span data-l="en">Pick your TV</span><span data-l="pt">Escolha a sua TV</span></span><i></i><span>§2</span></a></li>
+          <li><a href="#sopro"><span><span data-l="en">Blow the cartridge</span><span data-l="pt">Sopre o cartucho</span></span><i></i><span>§3</span></a></li>
+          <li><a href="#estante"><span><span data-l="en">The game shelf</span><span data-l="pt">A estante de jogos</span></span><i></i><span>§4</span></a></li>
+          <li><a href="#controle"><span><span data-l="en">100% gamepad &amp; Steam Deck</span><span data-l="pt">100% no controle &amp; Steam Deck</span></span><i></i><span>§5</span></a></li>
+          <li><a href="#extras"><span><span data-l="en">Achievements, cheats &amp; notes</span><span data-l="pt">Conquistas, cheats &amp; anotações</span></span><i></i><span>§6</span></a></li>
+          <li><a href="#ligar"><span><span data-l="en">Getting started</span><span data-l="pt">Como ligar</span></span><i></i><span>§7</span></a></li>
+          <li><a href="#especificacoes"><span><span data-l="en">Specifications</span><span data-l="pt">Especificações</span></span><i></i><span>§8</span></a></li>
+          <li><a href="#avisos"><span><span data-l="en">Notices &amp; licenses</span><span data-l="pt">Avisos &amp; licenças</span></span><i></i><span>A</span></a></li>
         </ol>
       </div>
     </section>
@@ -95,120 +121,519 @@
       <div class="pagina">
         <header class="secao-head">
           <span class="secao-num" aria-hidden="true">1</span>
-          <h2>O console</h2>
+          <h2><span data-l="en">The console</span><span data-l="pt">O console</span></h2>
         </header>
         <div class="secao-grid">
           <div class="secao-texto">
-            <p>
-              A maioria dos emuladores te dá uma janela. O SixteeN te dá o
-              <strong>aparelho</strong>: a tela acorda em estática no Canal 3,
-              você escolhe o jogo na estante, o cartucho desce e encaixa no
-              slot com um clique — e o console só liga quando você aperta o
-              <strong>Power</strong>, igual ao hardware.
+            <p data-l="en">
+              Most frontends give you a grid of games and a window. SixteeN
+              gives you back the <strong>object</strong>: the screen wakes up
+              on channel 3 static, you pick a game on the shelf, the
+              <strong>cartridge slides into the slot</strong> with a click —
+              and the console only turns on when you press
+              <strong>POWER</strong>, like the hardware. EJECT only works with
+              the power off.
             </p>
-            <p>
-              O tubo usa o filtro NTSC RF do blargg com scanlines, curvatura e
-              vinheta; a imagem abre em tela cheia na resolução nativa do seu
-              monitor — laptop, TV ou Steam Deck. Tudo se opera com
-              <strong>mouse e gamepad</strong>; a única exceção é escrever uma
-              anotação, que precisa de teclado por natureza.
+            <p data-l="pt">
+              A maioria dos frontends te dá uma grade de jogos e uma janela. O
+              SixteeN te devolve o <strong>objeto</strong>: a tela acorda em
+              estática no Canal 3, você escolhe o jogo na estante, o
+              <strong>cartucho desce e encaixa no slot</strong> com um clique
+              — e o console só liga quando você aperta
+              <strong>POWER</strong>, igual ao hardware. O EJETAR só funciona
+              com o console desligado.
             </p>
-            <p>
-              Importante: <strong>o SixteeN não é um emulador novo</strong>.
-              Quem roda os jogos é o <strong>snes9x</strong> (port libretro),
-              baixado e atualizado pelo próprio app — o SixteeN é o
-              frontend de console ao redor: vídeo, áudio, estante,
-              cartucho, manual e conquistas.
+            <p data-l="en">
+              And it is <strong>not a new emulator</strong>: snes9x (the
+              libretro core) runs the games, downloaded and kept up to date by
+              the app. SixteeN is everything around it — the TV, the console,
+              the shelf, the sound of the room.
             </p>
-            <p>
-              E é portátil de verdade, zero nuvem: sem banco de dados e sem
-              raspagem online — tudo em pastas ao lado do app, que você
-              carrega onde quiser.
+            <p data-l="pt">
+              E <strong>não é um emulador novo</strong>: quem roda os jogos é o
+              snes9x (o core libretro), baixado e atualizado pelo próprio app.
+              O SixteeN é tudo ao redor dele — a TV, o console, a estante, o
+              som da sala.
             </p>
           </div>
           <aside class="lateral">
-            <h3>nesta caixa</h3>
-            <ul>
-              <li>gabinete desenhado em pixel art, com chaves Power e Reset de verdade</li>
-              <li>tubo CRT com filtro NTSC RF, estática de Canal 3 e hiss opcional</li>
-              <li>slot de cartucho com encaixe e destravamento animados</li>
-              <li>nameplate com a versão do app e a do núcleo snes9x em uso</li>
+            <h3><span data-l="en">in this box</span><span data-l="pt">nesta caixa</span></h3>
+            <ul data-l="en">
+              <li>a console with POWER, RESET, EJECT and a power LED</li>
+              <li>an animated cartridge slot, with the click of the latch</li>
+              <li>a curved CRT tube with seven screen looks</li>
+              <li>a shelf of real boxes, in five pieces of furniture</li>
+              <li>no account, no scraping, no telemetry</li>
+            </ul>
+            <ul data-l="pt">
+              <li>um console com POWER, RESET, EJETAR e LED de força</li>
+              <li>slot de cartucho animado, com o clique da trava</li>
+              <li>tubo CRT curvo com sete visuais de tela</li>
+              <li>estante de caixas de verdade, em cinco móveis</li>
+              <li>sem conta, sem raspagem, sem telemetria</li>
+            </ul>
+          </aside>
+        </div>
+        <div class="galeria-2">
+          <figure class="figura">
+            <img src="assets/home.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="The home screen: the TV on channel 3 static, the SixteeN logo and a Game shelf button"
+                 data-alt-pt="A tela inicial: a TV em estática no Canal 3, a logo do SixteeN e o botão da estante"
+                 alt="The home screen: the TV on channel 3 static, the SixteeN logo and a Game shelf button">
+            <figcaption><span>Fig. 2</span><b data-l="en">no cartridge: the TV insists on channel 3</b><b data-l="pt">sem cartucho, a TV insiste no Canal 3</b></figcaption>
+          </figure>
+          <figure class="figura">
+            <img src="assets/cartucho.gif" width="1280" height="800" loading="lazy"
+                 data-alt-en="The cartridge going into and out of the console slot"
+                 data-alt-pt="O cartucho entrando e saindo do slot do console"
+                 alt="The cartridge going into and out of the console slot">
+            <figcaption><span>Fig. 3</span><b data-l="en">the cartridge slides down, seats and unlatches</b><b data-l="pt">o cartucho desce, assenta e destrava</b></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== §2 TV ===== -->
+    <section class="secao secao-alt" id="tv">
+      <div class="pagina">
+        <header class="secao-head">
+          <span class="secao-num" aria-hidden="true">2</span>
+          <h2><span data-l="en">Pick your TV</span><span data-l="pt">Escolha a sua TV</span></h2>
+        </header>
+        <div class="seletor" role="group" aria-label="Screen look" data-seletor-para="tv">
+          <button type="button" aria-pressed="true" data-src="assets/look-rf.jpg" data-nome="RF antenna"><span data-l="en">RF antenna</span><span data-l="pt">Antena (RF)</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/look-composite.jpg" data-nome="Composite"><span data-l="en">Composite</span><span data-l="pt">Composto</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/look-svideo.jpg" data-nome="S-Video">S-Video</button>
+          <button type="button" aria-pressed="false" data-src="assets/look-pvm.jpg" data-nome="RGB / PVM">RGB / PVM</button>
+          <button type="button" aria-pressed="false" data-src="assets/look-trinitron.jpg" data-nome="Trinitron">Trinitron</button>
+          <button type="button" aria-pressed="false" data-src="assets/look-lcd.jpg" data-nome="Crisp LCD"><span data-l="en">Crisp LCD</span><span data-l="pt">LCD nítido</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/look-mono.jpg" data-nome="Black &amp; white"><span data-l="en">Black &amp; white</span><span data-l="pt">Preto e branco</span></button>
+        </div>
+        <figure class="figura seletor-figura" data-seletor="tv">
+          <img src="assets/look-rf.jpg" width="720" height="480" loading="lazy" data-seletor-img
+               alt="Contra III — RF antenna look">
+          <figcaption><span>Fig. 4</span><b data-l="en">the same frame of Contra III in each look — tap to switch</b><b data-l="pt">o mesmo quadro de Contra III em cada visual — toque para trocar</b></figcaption>
+        </figure>
+        <div class="secao-grid">
+          <div class="secao-texto">
+            <p data-l="en">
+              The picture goes through Blargg's <strong>NTSC filter</strong>
+              onto a curved tube with its own glass, glare and vignette. Each
+              look pairs a signal (RF, composite, S-Video, RGB) with its
+              scanlines, aperture grille or LCD pixel grid — and you can mix
+              them: the RF antenna signal with the scanlines of a PVM, say.
+            </p>
+            <p data-l="pt">
+              A imagem passa pelo <strong>filtro NTSC</strong> do Blargg e cai
+              num tubo curvo com vidro, reflexo e vinheta próprios. Cada visual
+              junta um sinal (RF, composto, S-Video, RGB) com as suas
+              scanlines, grade de aberturas ou grade de pixels de LCD — e dá
+              para misturar: o sinal da antena com as scanlines de um PVM, por
+              exemplo.
+            </p>
+            <p data-l="en">
+              The TV's own <strong>MENU</strong> button adjusts brightness,
+              contrast, color and sharpness in green 90s on-screen text,
+              applied inside the real filter — not on top of it.
+            </p>
+            <p data-l="pt">
+              A tecla <strong>MENU</strong> da própria TV ajusta brilho,
+              contraste, cor e nitidez em letras verdes de TV dos anos 90,
+              aplicados dentro do filtro de verdade — não por cima dele.
+            </p>
+          </div>
+          <aside class="lateral">
+            <h3><span data-l="en">small details</span><span data-l="pt">detalhes pequenos</span></h3>
+            <ul data-l="en">
+              <li><strong>channel 4</strong> is really the neighboring channel: weak signal, ghosting, rolling — and still playable</li>
+              <li>a faint <strong>burn-in</strong> of the HUD after hours on one game</li>
+              <li>the <strong>room light follows the time of day</strong> on the glass</li>
+              <li>static hiss and the flyback whine, all optional</li>
+            </ul>
+            <ul data-l="pt">
+              <li>o <strong>canal 4</strong> é o canal vizinho de verdade: sinal fraco, fantasma, imagem rolando — e dá para jogar</li>
+              <li><strong>burn-in</strong> leve do HUD depois de horas no mesmo jogo</li>
+              <li>a <strong>luz do quarto segue a hora do dia</strong> no vidro</li>
+              <li>chiado da estática e o zumbido do flyback, tudo opcional</li>
             </ul>
           </aside>
         </div>
       </div>
     </section>
 
-    <!-- ===== §2 Como ligar ===== -->
-    <section class="secao secao-alt" id="ligar">
+    <!-- ===== §3 Sopro ===== -->
+    <section class="secao" id="sopro">
       <div class="pagina">
         <header class="secao-head">
-          <span class="secao-num" aria-hidden="true">2</span>
-          <h2>Como ligar</h2>
+          <span class="secao-num" aria-hidden="true">3</span>
+          <h2><span data-l="en">Blow the cartridge</span><span data-l="pt">Sopre o cartucho</span></h2>
         </header>
-        <figure class="figura">
-          <img src="assets/inicial.jpg" width="1280" height="800" loading="lazy"
-               alt="A tela inicial do SixteeN: o tubo em estática no Canal 3, sem cartucho no slot, com o painel lateral do console desligado">
-          <figcaption><span>Fig. 2</span> a tela inicial: sem cartucho, a TV insiste no Canal 3</figcaption>
+        <div class="galeria-2">
+          <figure class="figura">
+            <img src="assets/glitch.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="A bad boot: the screen full of scrambled tiles built from the ROM's own bytes"
+                 data-alt-pt="Um encaixe ruim: a tela cheia de tiles embaralhados feitos dos bytes da própria ROM"
+                 alt="A bad boot: the screen full of scrambled tiles built from the ROM's own bytes">
+            <figcaption><span>Fig. 5</span><b data-l="en">a bad contact: garbage tiles from the ROM itself</b><b data-l="pt">mau contato: lixo de tiles da própria ROM</b></figcaption>
+          </figure>
+          <figure class="figura">
+            <img src="assets/blow.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="The cartridge in 3D in front of the TV, with its board and contacts showing, and breath and contacts meters"
+                 data-alt-pt="O cartucho em 3D na frente da TV, com a placa e os contatos à vista, e as barras de fôlego e de contatos"
+                 alt="The cartridge in 3D in front of the TV, with its board and contacts showing, and breath and contacts meters">
+            <figcaption><span>Fig. 6</span><b data-l="en">eject, blow on the contacts, insert again</b><b data-l="pt">ejete, sopre os contatos, encaixe de novo</b></figcaption>
+          </figure>
+        </div>
+        <div class="secao-texto secao-texto-largo">
+          <p data-l="en">
+            Turn on <strong>bad contact</strong> (off by default; "rare" or
+            "90s") and sometimes POWER fails the way it used to: a black
+            screen with a hum, garbage tiles, a frozen title with the music
+            looping, or the game running with scrambled graphics — a stuck
+            data pin really corrupting video memory — until it crashes.
+          </p>
+          <p data-l="pt">
+            Ligue o <strong>mau contato</strong> (desligado por padrão;
+            "raro" ou "anos 90") e às vezes o POWER falha do jeito de antes:
+            tela preta com zumbido, lixo de tiles, a abertura travada com a
+            música em loop, ou o jogo rodando com os gráficos embaralhados —
+            um pino de dados grudado corrompendo a memória de vídeo de verdade
+            — até travar.
+          </p>
+          <p data-l="en">
+            Eject it and the cartridge comes to the front of the TV, in 3D:
+            hold the button to <strong>blow the dust off</strong> (blow too
+            much and the pins fog up). On a Steam Deck or ROG Ally you can
+            <strong>blow into the real microphone</strong>. Your save is never
+            touched.
+          </p>
+          <p data-l="pt">
+            Ejete e o cartucho vem para a frente da TV, em 3D: segure o botão
+            para <strong>soprar a poeira</strong> (soprar demais embaça os
+            pinos). No Steam Deck ou no ROG Ally dá para
+            <strong>soprar no microfone de verdade</strong>. O save nunca é
+            tocado.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== §4 A estante ===== -->
+    <section class="secao secao-alt" id="estante">
+      <div class="pagina">
+        <header class="secao-head">
+          <span class="secao-num" aria-hidden="true">4</span>
+          <h2><span data-l="en">The game shelf</span><span data-l="pt">A estante de jogos</span></h2>
+        </header>
+        <div class="seletor" role="group" aria-label="Shelf furniture" data-seletor-para="estante">
+          <button type="button" aria-pressed="true" data-src="assets/shelf-wood.jpg" data-nome="wood"><span data-l="en">Wood</span><span data-l="pt">Madeira</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/shelf-metal.jpg" data-nome="rental-store metal rack"><span data-l="en">Rental-store rack</span><span data-l="pt">Expositor de locadora</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/shelf-hifi.jpg" data-nome="black hi-fi rack"><span data-l="en">Hi-fi rack</span><span data-l="pt">Rack de som</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/shelf-memphis.jpg" data-nome="90s bedroom"><span data-l="en">90s bedroom</span><span data-l="pt">Quarto anos 90</span></button>
+          <button type="button" aria-pressed="false" data-src="assets/shelf-arcade.jpg" data-nome="arcade"><span data-l="en">Arcade</span><span data-l="pt">Fliperama</span></button>
+        </div>
+        <figure class="figura seletor-figura" data-seletor="estante">
+          <img src="assets/shelf-wood.jpg" width="1280" height="800" loading="lazy" data-seletor-img
+               alt="The game shelf — wood">
+          <figcaption><span>Fig. 7</span><b data-l="en">the author's real library, on five pieces of furniture — tap to switch</b><b data-l="pt">a biblioteca real do autor, em cinco móveis — toque para trocar</b></figcaption>
         </figure>
+        <div class="secao-grid">
+          <div class="secao-texto">
+            <p data-l="en">
+              Your games stand on a shelf with their boxes. The side panel
+              shows the year, publisher, region, cartridge size, your play
+              time, the <strong>IGDB rating</strong> and
+              <strong>HowLongToBeat</strong> times — plus the back cover, the
+              cartridge and the <strong>manual (PDF) paged inside the
+              TV</strong>.
+            </p>
+            <p data-l="pt">
+              Os seus jogos ficam de pé na estante, com as caixas. O painel
+              lateral mostra ano, editora, região, tamanho do cartucho, o seu
+              tempo de jogo, a <strong>nota da IGDB</strong> e os tempos do
+              <strong>HowLongToBeat</strong> — e ainda a contracapa, o
+              cartucho e o <strong>manual (PDF) folheado dentro da
+              TV</strong>.
+            </p>
+            <p data-l="en">
+              Search, favorites, "recently played", a history with time per
+              session, and <strong>tonight's pick</strong>, which suggests the
+              game you haven't touched in a while. A game with no art becomes a
+              grey cartridge with a <strong>hand-written label</strong>.
+            </p>
+            <p data-l="pt">
+              Busca, favoritos, "jogados recentemente", histórico com o tempo
+              de cada sessão e a <strong>sugestão da noite</strong>, que
+              sorteia o jogo que você não abre há tempo. Jogo sem arte vira um
+              cartucho cinza com <strong>etiqueta escrita à mão</strong>.
+            </p>
+          </div>
+          <aside class="lateral">
+            <h3><span data-l="en">offline by design</span><span data-l="pt">offline de propósito</span></h3>
+            <p data-l="en">
+              Year, publisher, ratings and HowLongToBeat times for
+              <strong>4,268 SNES games</strong> are built into the app — no
+              scraping, no account, no network. Box art comes from your own
+              image files. A local
+              <a href="https://datomatic.no-intro.org/">No-Intro</a> DAT is
+              optional, and one button renames your ROMs to the No-Intro
+              standard, moving saves and art along.
+            </p>
+            <p data-l="pt">
+              Ano, editora, notas e tempos do HowLongToBeat de
+              <strong>4.268 jogos de SNES</strong> vêm embutidos no app — sem
+              raspagem, sem conta, sem rede. As capas vêm de imagens suas. Um
+              DAT local do
+              <a href="https://datomatic.no-intro.org/">No-Intro</a> é
+              opcional, e um botão renomeia as ROMs para o padrão No-Intro,
+              levando saves e artes junto.
+            </p>
+          </aside>
+        </div>
+        <figure class="figura figura-media">
+          <img src="assets/tonights-pick.jpg" width="1280" height="800" loading="lazy"
+               data-alt-en="The tonight's pick card over the shelf: Castlevania - Dracula X, 1995, never played"
+               data-alt-pt="O cartão da sugestão da noite sobre a estante: Castlevania - Dracula X, 1995, nunca jogado"
+               alt="The tonight's pick card over the shelf: Castlevania - Dracula X, 1995, never played">
+          <figcaption><span>Fig. 8</span><b data-l="en">tonight's pick: A plays, X draws another</b><b data-l="pt">sugestão da noite: A joga, X sorteia outro</b></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===== §5 Controle ===== -->
+    <section class="secao" id="controle">
+      <div class="pagina">
+        <header class="secao-head">
+          <span class="secao-num" aria-hidden="true">5</span>
+          <h2><span data-l="en">100% gamepad &amp; Steam Deck</span><span data-l="pt">100% no controle &amp; Steam Deck</span></h2>
+        </header>
+        <div class="galeria-2">
+          <figure class="figura">
+            <img src="assets/controls.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="The controls screen: a Super Nintendo controller drawn on the TV, next to the list of mapped buttons"
+                 data-alt-pt="A tela de controles: um controle de Super Nintendo desenhado na TV, ao lado da lista de botões mapeados"
+                 alt="The controls screen: a Super Nintendo controller drawn on the TV, next to the list of mapped buttons">
+            <figcaption><span>Fig. 9</span><b data-l="en">the pad lights up what you press</b><b data-l="pt">o controle acende o que você aperta</b></figcaption>
+          </figure>
+          <figure class="figura">
+            <img src="assets/keyboard.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="The on-screen keyboard typing a masked password on the TV"
+                 data-alt-pt="O teclado na tela digitando uma senha mascarada na TV"
+                 alt="The on-screen keyboard typing a masked password on the TV">
+            <figcaption><span>Fig. 10</span><b data-l="en">an on-screen keyboard wherever you need to type</b><b data-l="pt">teclado na tela onde precisar digitar</b></figcaption>
+          </figure>
+        </div>
+        <div class="secao-grid">
+          <div class="secao-texto">
+            <p data-l="en">
+              Everything works with a controller — shelf, settings,
+              achievements login, screenshot captions. In game, hold
+              <strong>Select + Start</strong> for the game menu: save and load
+              state, screenshot, notes, achievements, reset, eject. The left
+              stick works as the D-pad, and players 1 and 2 each get their own
+              mapping, with Xbox, PlayStation or Nintendo button names.
+            </p>
+            <p data-l="pt">
+              Tudo funciona no controle — estante, configurações, login das
+              conquistas, legenda dos prints. No jogo, segure
+              <strong>Select + Start</strong> para o menu do jogo: salvar e
+              carregar estado, print, anotações, conquistas, reset, ejetar. O
+              analógico esquerdo funciona como direcional, e os jogadores 1 e 2
+              têm mapas próprios, com os nomes dos botões de Xbox, PlayStation
+              ou Nintendo.
+            </p>
+          </div>
+          <aside class="lateral">
+            <h3><span data-l="en">on the steam deck</span><span data-l="pt">no steam deck</span></h3>
+            <ul data-l="en">
+              <li>native 1280×800, full screen</li>
+              <li>still screens drop to 20–30 fps</li>
+              <li>a minimized window draws nothing</li>
+              <li>silent audio closes, so the output can power down</li>
+            </ul>
+            <ul data-l="pt">
+              <li>1280×800 nativo, em tela cheia</li>
+              <li>telas paradas caem para 20–30 fps</li>
+              <li>janela minimizada não desenha nada</li>
+              <li>áudio em silêncio fecha, e a saída pode desligar</li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== §6 Extras ===== -->
+    <section class="secao secao-alt" id="extras">
+      <div class="pagina">
+        <header class="secao-head">
+          <span class="secao-num" aria-hidden="true">6</span>
+          <h2><span data-l="en">Achievements, cheats &amp; notes</span><span data-l="pt">Conquistas, cheats &amp; anotações</span></h2>
+        </header>
+        <div class="galeria-2">
+          <figure class="figura">
+            <img src="assets/ra-notificacao.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="An achievement unlocked notification with badge, name and points on the TV's chin"
+                 data-alt-pt="Notificação de conquista desbloqueada com badge, nome e pontos no queixo da TV"
+                 alt="An achievement unlocked notification with badge, name and points on the TV's chin">
+            <figcaption><span>Fig. 11</span><b data-l="en">unlocks show up on the TV's chin</b><b data-l="pt">os desbloqueios aparecem no queixo da TV</b></figcaption>
+          </figure>
+          <figure class="figura">
+            <img src="assets/dracula.jpg" width="1280" height="800" loading="lazy"
+                 data-alt-en="Castlevania - Dracula X title screen on the CRT tube, with the game logo and cartridge on the console panel"
+                 data-alt-pt="Tela de título de Castlevania - Dracula X no tubo CRT, com a logo e o cartucho do jogo no painel do console"
+                 alt="Castlevania - Dracula X title screen on the CRT tube, with the game logo and cartridge on the console panel">
+            <figcaption><span>Fig. 12</span><b data-l="en">every game wears its own logo and cartridge</b><b data-l="pt">cada jogo veste a sua logo e o seu cartucho</b></figcaption>
+          </figure>
+        </div>
+        <dl class="lista-recursos">
+          <div>
+            <dt><a href="https://retroachievements.org">RetroAchievements</a></dt>
+            <dd data-l="en">Hardcore or softcore, the game identified by its ROM hash, progress "X of Y" on the shelf and a medal for games you've beaten.</dd>
+            <dd data-l="pt">Hardcore ou softcore, o jogo identificado pelo hash da ROM, progresso "X de Y" na estante e medalha para os jogos zerados.</dd>
+          </div>
+          <div>
+            <dt>Cheat Genius</dt>
+            <dd data-l="en">A 90s-accessory-style cheat screen that boots before the game, with each game's cheat list and a code pad for your own Game Genie and RAM codes.</dd>
+            <dd data-l="pt">Uma tela de cheats no clima dos acessórios dos anos 90, que liga antes do jogo, com a lista de cheats de cada jogo e um teclado para os seus códigos de Game Genie e de RAM.</dd>
+          </div>
+          <div>
+            <dt><span data-l="en">Notes book</span><span data-l="pt">Livro de anotações</span></dt>
+            <dd data-l="en">Pausing opens a two-page book: free-text notes and 15 screenshot slots per game, which you can name and pin to the console panel.</dd>
+            <dd data-l="pt">Pausar abre um livro de duas páginas: anotações livres e 15 slots de print por jogo, que dá para nomear e fixar no painel do console.</dd>
+          </div>
+          <div>
+            <dt><span data-l="en">Screenshot album</span><span data-l="pt">Álbum de prints</span></dt>
+            <dd data-l="en">Every screenshot of every game in one place, right from the shelf.</dd>
+            <dd data-l="pt">Todos os prints de todos os jogos num lugar só, direto da estante.</dd>
+          </div>
+          <div>
+            <dt><span data-l="en">Console manual</span><span data-l="pt">Manual do console</span></dt>
+            <dd data-l="en">SixteeN's own 10-page manual opens inside the TV, in English or Portuguese.</dd>
+            <dd data-l="pt">O manual do próprio SixteeN, de 10 páginas, abre dentro da TV, em português ou inglês.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ===== §7 Como ligar ===== -->
+    <section class="secao" id="ligar">
+      <div class="pagina">
+        <header class="secao-head">
+          <span class="secao-num" aria-hidden="true">7</span>
+          <h2><span data-l="en">Getting started</span><span data-l="pt">Como ligar</span></h2>
+        </header>
         <ol class="passos">
           <li class="passo">
-            <p class="passo-num">passo 1</p>
-            <h3>Baixe o app</h3>
-            <p>
+            <p class="passo-num"><span data-l="en">step 1</span><span data-l="pt">passo 1</span></p>
+            <h3><span data-l="en">Download the app</span><span data-l="pt">Baixe o app</span></h3>
+            <p data-l="en">
+              <a href="https://github.com/ticianocorral/sixteen/releases/latest">Latest release</a>:
+              <strong>DMG</strong> for macOS, <strong>zip</strong> for Windows,
+              <strong>AppImage</strong> or <strong>Flatpak</strong> for Linux
+              and the Steam Deck — SDL3 included, nothing else to install.
+            </p>
+            <p data-l="pt">
               <a href="https://github.com/ticianocorral/sixteen/releases/latest">Última release</a>:
               <strong>DMG</strong> para macOS, <strong>zip</strong> para
-              Windows e <strong>AppImage</strong> para Linux — todos com a
-              SDL3 embutida, sem instalar dependência nenhuma.
+              Windows, <strong>AppImage</strong> ou <strong>Flatpak</strong>
+              para Linux e Steam Deck — com a SDL3 junto, sem instalar mais
+              nada.
             </p>
           </li>
           <li class="passo">
-            <p class="passo-num">passo 2</p>
-            <h3>Coloque seus jogos</h3>
-            <p>
-              Arraste suas ROMs <code>.sfc</code>/<code>.smc</code> para a
-              pasta <code>roms/</code> ao lado do app. Um botão na
-              estante as renomeia para o padrão canônico
-              <a href="https://datomatic.no-intro.org/">No-Intro</a> se você
-              tiver o DAT.
+            <p class="passo-num"><span data-l="en">step 2</span><span data-l="pt">passo 2</span></p>
+            <h3><span data-l="en">Install the core</span><span data-l="pt">Instale o núcleo</span></h3>
+            <p data-l="en">
+              With no core installed, the home screen offers to
+              <strong>download the snes9x core</strong> from the libretro
+              buildbot, checked with SHA-256 — and keeps it up to date.
+            </p>
+            <p data-l="pt">
+              Sem núcleo instalado, a tela inicial oferece
+              <strong>baixar o núcleo snes9x</strong> do buildbot da libretro,
+              conferido por SHA-256 — e o mantém atualizado.
             </p>
           </li>
           <li class="passo">
-            <p class="passo-num">passo 3</p>
-            <h3>Instale o núcleo</h3>
-            <p>
-              Na tela inicial, o botão <strong>“Baixar núcleo snes9x”</strong>
-              traz o núcleo do buildbot da libretro e o mantém atualizado — a
-              seta verde só acende quando existe commit novo de verdade.
+            <p class="passo-num"><span data-l="en">step 3</span><span data-l="pt">passo 3</span></p>
+            <h3><span data-l="en">Add your games</span><span data-l="pt">Coloque seus jogos</span></h3>
+            <p data-l="en">
+              Put your <code>.sfc</code>, <code>.smc</code> or
+              <code>.zip</code> ROMs in the <code>roms/</code> folder, and the
+              art (optional) in <code>assets/</code>, with the same name as the
+              ROM.
+            </p>
+            <p data-l="pt">
+              Coloque as ROMs <code>.sfc</code>, <code>.smc</code> ou
+              <code>.zip</code> na pasta <code>roms/</code>, e as artes
+              (opcionais) em <code>assets/</code>, com o mesmo nome da ROM.
             </p>
           </li>
         </ol>
+
         <table class="tabela">
-          <caption>Requisitos</caption>
+          <caption><span data-l="en">Data folder</span><span data-l="pt">Pasta de dados</span></caption>
           <tbody>
-            <tr><th>macOS</th><td>Apple silicon (arm64), macOS 12+</td></tr>
+            <tr><th>macOS</th><td><code>~/Library/Application Support/SixteeN</code></td></tr>
+            <tr><th>Linux / Deck</th><td><code>~/.local/share/SixteeN</code> · Flatpak: <code>~/.var/app/dev.ticianocorral.sixteen/data/SixteeN</code></td></tr>
+            <tr><th>Windows</th><td><span data-l="en">next to the <code>.exe</code></span><span data-l="pt">ao lado do <code>.exe</code></span></td></tr>
+          </tbody>
+        </table>
+
+        <div class="aviso aviso-espaco">
+          <p class="aviso-titulo"><span data-l="en">first launch</span><span data-l="pt">primeira abertura</span></p>
+          <p data-l="en">
+            The builds aren't signed by Apple or Microsoft, so the system asks
+            you to confirm once. <strong>macOS:</strong> open the app, then
+            go to <em>System Settings → Privacy &amp; Security</em> and click
+            <strong>Open Anyway</strong>. <strong>Windows:</strong> on the
+            SmartScreen warning, click <em>More info</em> →
+            <strong>Run anyway</strong>.
+          </p>
+          <p data-l="pt">
+            Os pacotes não são assinados pela Apple nem pela Microsoft, então o
+            sistema pede uma confirmação na primeira vez. <strong>macOS:</strong>
+            abra o app, vá em <em>Ajustes do Sistema → Privacidade e
+            Segurança</em> e clique em <strong>Abrir Mesmo Assim</strong>.
+            <strong>Windows:</strong> no aviso do SmartScreen, clique em
+            <em>Mais informações</em> → <strong>Executar assim mesmo</strong>.
+          </p>
+        </div>
+
+        <table class="tabela">
+          <caption><span data-l="en">Requirements</span><span data-l="pt">Requisitos</span></caption>
+          <tbody>
+            <tr><th>macOS</th><td><span data-l="en">Apple silicon (arm64), macOS 12+</span><span data-l="pt">Apple silicon (arm64), macOS 12+</span></td></tr>
             <tr><th>Windows</th><td>x86_64, Windows 10+</td></tr>
-            <tr><th>Linux</th><td>x86_64 — AppImage autônomo; Steam Deck testado</td></tr>
-            <tr><th>controles</th><td>mouse + gamepad; teclado só para anotações</td></tr>
+            <tr><th>Linux</th><td><span data-l="en">x86_64 — AppImage or Flatpak; Steam Deck tested</span><span data-l="pt">x86_64 — AppImage ou Flatpak; testado no Steam Deck</span></td></tr>
+            <tr><th><span data-l="en">input</span><span data-l="pt">controles</span></th><td><span data-l="en">gamepad or mouse; keyboard optional</span><span data-l="pt">controle ou mouse; teclado opcional</span></td></tr>
           </tbody>
         </table>
 
         <div class="secao-texto secao-texto-largo">
-          <h3>onde achar as artes dos jogos</h3>
-          <p>
-            O app não distribui capas, logos nem manuais: elas vêm de imagens
+          <h3><span data-l="en">where to find game art</span><span data-l="pt">onde achar as artes dos jogos</span></h3>
+          <p data-l="en">
+            The app ships no box art, logos or manuals: they come from your own
+            images, in <code>assets/cover</code>, <code>assets/backcover</code>,
+            <code>assets/logo</code>, <code>assets/cartridge</code> and
+            <code>assets/manual</code>, with the <strong>same name as the ROM
+            file</strong>. Some community packs (a few need a free account; the
+            material belongs to each pack's authors):
+          </p>
+          <p data-l="pt">
+            O app não distribui capas, logos nem manuais: eles vêm de imagens
             suas, nas pastas <code>assets/cover</code>,
             <code>assets/backcover</code>, <code>assets/logo</code>,
-            <code>assets/cartridge</code> e <code>assets/manual</code>,
-            com o <strong>mesmo nome do arquivo da ROM</strong>. Sugestões de
-            acervos feitos pela comunidade (alguns pedem cadastro gratuito; o
-            material pertence aos autores de cada pacote):
+            <code>assets/cartridge</code> e <code>assets/manual</code>, com o
+            <strong>mesmo nome do arquivo da ROM</strong>. Alguns acervos da
+            comunidade (alguns pedem cadastro gratuito; o material pertence
+            aos autores de cada pacote):
           </p>
         </div>
         <table class="tabela tabela-larga">
-          <caption>Artes de SNES — sugestões de download</caption>
+          <caption><span data-l="en">SNES art — suggested downloads</span><span data-l="pt">Artes de SNES — sugestões de download</span></caption>
           <tbody>
-            <tr><th>cartucho</th><td>
+            <tr><th><span data-l="en">cartridge</span><span data-l="pt">cartucho</span></th><td>
               <a href="https://forums.launchbox-app.com/files/file/3679-super-nintendo-entertainment-system-2d-carts-arcdragon-v10/">2D Carts — arcdragon</a> ·
               <a href="https://emumovies.com/files/file/5243-abeezys-super-nintendo-entertainment-system-carts/">Carts — Abeezy (EmuMovies)</a> ·
               <a href="https://forums.launchbox-app.com/files/file/4414-abeezys-super-nintendo-entertainment-system-carts/">Carts — Abeezy (LaunchBox)</a>
@@ -216,14 +641,14 @@
             <tr><th>logos</th><td>
               <a href="https://emumovies.com/files/file/4552-super-nintendo-entertainment-system-logos-pack-1877/">SNES Logos Pack (EmuMovies)</a>
             </td></tr>
-            <tr><th>capas</th><td>
+            <tr><th><span data-l="en">box</span><span data-l="pt">capas</span></th><td>
               <a href="https://emumovies.com/files/file/5246-snes-complete-accurate-usa-retail-box-art-collection/">Complete Accurate USA Retail Box Art (EmuMovies)</a> ·
               <a href="https://forums.launchbox-app.com/files/file/4311-super-nintendo-3d-box/">Super Nintendo 3D Box (LaunchBox)</a>
             </td></tr>
-            <tr><th>contracapa</th><td>
+            <tr><th><span data-l="en">back cover</span><span data-l="pt">contracapa</span></th><td>
               <a href="https://emumovies.com/files/file/615-super-nintendo-entertainment-system-boxes-back-pack-1825/">SNES Boxes Back Pack (EmuMovies)</a>
             </td></tr>
-            <tr><th>manuais</th><td>
+            <tr><th><span data-l="en">manuals</span><span data-l="pt">manuais</span></th><td>
               <a href="https://emumovies.com/files/file/617-super-nintendo-game-manuals-pack/">SNES Game Manuals Pack (EmuMovies)</a>
             </td></tr>
           </tbody>
@@ -231,120 +656,22 @@
       </div>
     </section>
 
-    <!-- ===== §3 A estante ===== -->
-    <section class="secao" id="estante">
-      <div class="pagina">
-        <header class="secao-head">
-          <span class="secao-num" aria-hidden="true">3</span>
-          <h2>A estante de jogos</h2>
-        </header>
-        <figure class="figura">
-          <img src="assets/estante.jpg" width="1280" height="800" loading="lazy"
-               alt="A estante de jogos real: grade com as capas da biblioteca, o tile de Mighty Morphin Power Rangers selecionado com o botão de play, e o painel do jogo com logo, abas e informações">
-          <figcaption><span>Fig. 3</span> a estante de verdade: capas da biblioteca, play no hover e o painel do jogo</figcaption>
-        </figure>
-        <div class="secao-grid">
-          <div class="secao-texto">
-            <p>
-              A estante é a prateleira da sala: busca instantânea, faixa de
-              favoritos, “jogados recentemente” e histórico — com
-              <strong>tempo de jogo por jogo</strong>, contando só com o
-              console ligado, e por sessão.
-            </p>
-            <p>
-              No painel do jogo, abas de informação, capa traseira e
-              <strong>manual em PDF dentro da TV</strong>, com páginas
-              viradas no próprio painel. Cheats curados em checklist e 15
-              slots de captura de tela nomeáveis moram no livro de
-              anotações, que abre com o console pausado.
-            </p>
-          </div>
-          <aside class="lateral">
-            <h3>sem dat nenhum</h3>
-            <p>
-              Ano e editora “de fábrica” vêm de uma tabela embutida derivada
-              do <a href="https://www.tosecdev.org/">TOSEC</a>; um DAT local do
-              <a href="https://datomatic.no-intro.org/">No-Intro</a> tem
-              prioridade quando concorda — e um botão renomeia as ROMs para o
-              padrão canônico.
-            </p>
-          </aside>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== §4 O cartucho ===== -->
-    <section class="secao secao-alt" id="cartucho">
-      <div class="pagina">
-        <header class="secao-head">
-          <span class="secao-num" aria-hidden="true">4</span>
-          <h2>O cartucho</h2>
-        </header>
-        <figure class="figura">
-          <img src="assets/cartucho.gif" width="1280" height="800" loading="lazy"
-               alt="Cartucho entrando e saindo do slot do console, com animação de encaixe">
-          <figcaption><span>Fig. 4</span> o cartucho desce, assenta e destrava com clique de verdade</figcaption>
-        </figure>
-        <div class="secao-texto secao-texto-largo">
-          <p>
-            Escolher um jogo <strong>insere o cartucho de verdade</strong>:
-            animação de descida, clique de encaixe, clique de destravamento —
-            e ejetar só com o console desligado, como no original. Sem
-            cartucho no slot, a TV insiste em Canal 3.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== §5 Conquistas ===== -->
-    <section class="secao" id="conquistas">
-      <div class="pagina">
-        <header class="secao-head">
-          <span class="secao-num" aria-hidden="true">5</span>
-          <h2>Conquistas na TV</h2>
-        </header>
-        <div class="galeria-2">
-          <figure class="figura">
-            <img src="assets/ra-notificacao.jpg" width="1280" height="800" loading="lazy"
-                 alt="Notificação de conquista desbloqueada com badge, nome e pontos no queixo da TV, com Mighty Morphin Power Rangers no tubo">
-            <figcaption><span>Fig. 5</span> “CONQUISTA DESBLOQUEADA” no queixo da TV — badge e pontos</figcaption>
-          </figure>
-          <figure class="figura">
-            <img src="assets/ra-badge.jpg" width="1280" height="800" loading="lazy"
-                 alt="Badge fixo RA ATIVADO no queixo da TV, indicando o modo hardcore, com Mighty Morphin Power Rangers no tubo">
-            <figcaption><span>Fig. 6</span> sem desbloqueio na fila, o badge RA ATIVADO fica no lugar</figcaption>
-          </figure>
-        </div>
-        <div class="secao-texto secao-texto-largo">
-          <p>
-            Integração completa com o
-            <a href="https://retroachievements.org">RetroAchievements</a>:
-            login nas configurações, identificação do jogo pelo hash da ROM e
-            avaliação das condições em tempo real contra a RAM do núcleo —
-            hardcore ou softcore, badge fixo no queixo da TV, progresso
-            “X de Y (Z%)” no painel da estante, lista dentro da TV e medalha
-            de quem zerou: dourada para 100%, prateada para quem chegou ao
-            fim.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== §6 Especificações ===== -->
+    <!-- ===== §8 Especificações ===== -->
     <section class="secao secao-alt" id="especificacoes">
       <div class="pagina">
         <header class="secao-head">
-          <span class="secao-num" aria-hidden="true">6</span>
-          <h2>Especificações</h2>
+          <span class="secao-num" aria-hidden="true">8</span>
+          <h2><span data-l="en">Specifications</span><span data-l="pt">Especificações</span></h2>
         </header>
         <table class="tabela tabela-larga">
           <tbody>
-            <tr><th>emulação</th><td><a href="https://www.snes9x.com/">snes9x</a> (port libretro) — baixado e atualizado pelo app; o SixteeN é um frontend de console ao redor, <strong>não um emulador novo</strong></td></tr>
-            <tr><th>vídeo</th><td>filtro NTSC RF do blargg, scanlines, tela cheia na resolução nativa do monitor</td></tr>
-            <tr><th>áudio</th><td>48 kHz estéreo, com hiss de tubo opcional</td></tr>
-            <tr><th>código</th><td><a href="https://www.rust-lang.org/">Rust</a> sobre <a href="https://wiki.libsdl.org/SDL3/README/README">SDL3</a>, em quatro camadas de crates: apresentação, domínio, emulação, plataforma</td></tr>
-            <tr><th>pacotes</th><td>DMG / zip / AppImage com SDL3 embutida, gerados a cada release</td></tr>
-            <tr><th>dados</th><td>100% locais — sem banco de dados, sem nuvem, sem telemetria</td></tr>
+            <tr><th><span data-l="en">emulation</span><span data-l="pt">emulação</span></th><td><span data-l="en"><a href="https://www.snes9x.com/">snes9x</a> (libretro core) — downloaded and updated by the app; SixteeN is the console around it, <strong>not a new emulator</strong></span><span data-l="pt"><a href="https://www.snes9x.com/">snes9x</a> (core libretro) — baixado e atualizado pelo app; o SixteeN é o console ao redor, <strong>não um emulador novo</strong></span></td></tr>
+            <tr><th><span data-l="en">video</span><span data-l="pt">vídeo</span></th><td><span data-l="en">Blargg's NTSC filter, 7 screen looks, scanlines and masks, full screen at the display's native resolution</span><span data-l="pt">filtro NTSC do Blargg, 7 visuais de tela, scanlines e máscaras, tela cheia na resolução nativa do monitor</span></td></tr>
+            <tr><th><span data-l="en">audio</span><span data-l="pt">áudio</span></th><td><span data-l="en">48 kHz stereo; TV speaker or "3-in-1" sound, optional hiss and flyback whine</span><span data-l="pt">48 kHz estéreo; som da TV ou do "3 em 1", chiado e zumbido do flyback opcionais</span></td></tr>
+            <tr><th><span data-l="en">code</span><span data-l="pt">código</span></th><td><span data-l="en"><a href="https://www.rust-lang.org/">Rust</a> on <a href="https://wiki.libsdl.org/SDL3/FrontPage">SDL3</a>, in four layers of crates: presentation, domain, emulation, platform</span><span data-l="pt"><a href="https://www.rust-lang.org/">Rust</a> sobre <a href="https://wiki.libsdl.org/SDL3/FrontPage">SDL3</a>, em quatro camadas de crates: apresentação, domínio, emulação, plataforma</span></td></tr>
+            <tr><th><span data-l="en">packages</span><span data-l="pt">pacotes</span></th><td><span data-l="en">DMG / zip / AppImage / Flatpak with SDL3 bundled, built for every release</span><span data-l="pt">DMG / zip / AppImage / Flatpak com SDL3 embutida, gerados a cada release</span></td></tr>
+            <tr><th><span data-l="en">data</span><span data-l="pt">dados</span></th><td><span data-l="en">100% local — no database server, no cloud, no telemetry</span><span data-l="pt">100% locais — sem servidor de banco de dados, sem nuvem, sem telemetria</span></td></tr>
+            <tr><th><span data-l="en">languages</span><span data-l="pt">idiomas</span></th><td><span data-l="en">English and Brazilian Portuguese</span><span data-l="pt">inglês e português do Brasil</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -355,48 +682,73 @@
       <div class="pagina">
         <header class="secao-head">
           <span class="secao-num secao-num-alt" aria-hidden="true">A</span>
-          <h2>Avisos &amp; licenças</h2>
+          <h2><span data-l="en">Notices &amp; licenses</span><span data-l="pt">Avisos &amp; licenças</span></h2>
         </header>
         <div class="aviso">
-          <p class="aviso-titulo">aviso importante</p>
-          <p>
-            As telas vêm do console do autor em uso real — mas
-            <strong>nenhuma ROM ou núcleo é distribuído</strong> com o app:
-            suas ROMs são suas, e o núcleo snes9x é baixado direto do
-            buildbot oficial da libretro.
+          <p class="aviso-titulo"><span data-l="en">important notice</span><span data-l="pt">aviso importante</span></p>
+          <p data-l="en">
+            <strong>No ROM or core ships with the app</strong>: your games are
+            yours, and the snes9x core is downloaded straight from the official
+            libretro buildbot.
+          </p>
+          <p data-l="pt">
+            <strong>Nenhuma ROM ou núcleo vem com o app</strong>: os seus jogos
+            são seus, e o núcleo snes9x é baixado direto do buildbot oficial da
+            libretro.
           </p>
         </div>
-        <div class="secao-grid">
+        <div class="secao-grid secao-grid-igual">
           <div class="secao-texto">
-            <h3>sobre as telas</h3>
-            <p>
+            <h3><span data-l="en">about the screens</span><span data-l="pt">sobre as telas</span></h3>
+            <p data-l="en">
+              Every image is a <strong>real capture of the app</strong>, taken
+              with the author's own library — Contra III, Castlevania: Dracula
+              X, Aladdin and friends. The achievement notification comes from an
+              earlier version, with Mighty Morphin Power Rangers. Box art and
+              commercial games belong to their owners. To try it without a ROM of
+              your own, the open-source homebrew Platformer Example (by
+              <a href="https://github.com/NovaSquirrel/snes-platformer-example">NovaSquirrel</a>)
+              comes as an
+              <a href="https://raw.githubusercontent.com/ticianocorral/sixteen/main/exemplo-platformer-example.zip">example
+              pack</a> you can install from dev mode (Konami code on the home
+              screen).
+            </p>
+            <p data-l="pt">
               Todas as imagens são <strong>prints de verdade do app</strong>,
-              capturados do console em funcionamento com a biblioteca real do
-              autor — os dois Mighty Morphin Power Rangers no tubo e na
-              estante.
-              As capas e os jogos comerciais pertencem aos seus donos e
-              <strong>nenhuma ROM é distribuída</strong>; o texto da
-              notificação de conquista é ilustrativo (o badge e o aviso na TV
-              são os do app). Para começar do zero sem ROM própria, o
-              homebrew open source Platformer Example (de
+              feitos com a biblioteca do autor — Contra III, Castlevania:
+              Dracula X, Aladdin e companhia. A notificação de conquista é de
+              uma versão anterior, com Mighty Morphin Power Rangers. As capas e
+              os jogos comerciais pertencem aos seus donos. Para testar sem ROM
+              própria, o homebrew open source Platformer Example (de
               <a href="https://github.com/NovaSquirrel/snes-platformer-example">NovaSquirrel</a>)
               vem como
               <a href="https://raw.githubusercontent.com/ticianocorral/sixteen/main/exemplo-platformer-example.zip">pacote
-              de exemplo</a> pronto para instalar pelo modo dev (código
-              Konami na tela inicial).
+              de exemplo</a>, instalável pelo modo dev (código Konami na tela
+              inicial).
             </p>
           </div>
           <div class="secao-texto">
-            <h3>licenças</h3>
-            <p>
-              SixteeN é um projeto pessoal, sem fins comerciais,
-              sob licença <a href="https://github.com/ticianocorral/sixteen/blob/main/LICENSE">MIT</a>.
+            <h3><span data-l="en">licenses</span><span data-l="pt">licenças</span></h3>
+            <p data-l="en">
+              SixteeN is a personal, non-commercial project under the
+              <a href="https://github.com/ticianocorral/sixteen/blob/main/LICENSE">MIT</a>
+              license. snes9x has its own non-commercial license — which is
+              why the core never ships in the package. Third parties are listed
+              in
+              <a href="https://github.com/ticianocorral/sixteen/blob/main/THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES.md</a>.
+              RetroAchievements is a
+              <a href="https://retroachievements.org">third-party service</a>
+              and needs its own account.
+            </p>
+            <p data-l="pt">
+              SixteeN é um projeto pessoal, sem fins comerciais, sob licença
+              <a href="https://github.com/ticianocorral/sixteen/blob/main/LICENSE">MIT</a>.
               O snes9x tem licença própria não comercial — é por isso que o
               núcleo nunca vem no pacote. Terceiros listados em
               <a href="https://github.com/ticianocorral/sixteen/blob/main/THIRD-PARTY-NOTICES.md">THIRD-PARTY-NOTICES.md</a>.
-              RetroAchievements é um serviço de
-              <a href="https://retroachievements.org">terceiros</a> e precisa
-              de conta própria.
+              RetroAchievements é um
+              <a href="https://retroachievements.org">serviço de terceiros</a>
+              e precisa de conta própria.
             </p>
           </div>
         </div>
@@ -407,23 +759,25 @@
     <footer class="contracapa">
       <div class="pagina">
         <p class="contracapa-marca">SixteeN</p>
-        <p class="contracapa-lema">um console inteiro na sua TV</p>
+        <p class="contracapa-lema"><span data-l="en">a whole console on your screen</span><span data-l="pt">um console inteiro na sua tela</span></p>
         <ul class="contracapa-links">
-          <li><a href="https://github.com/ticianocorral/sixteen">código</a></li>
+          <li><a href="https://github.com/ticianocorral/sixteen"><span data-l="en">code</span><span data-l="pt">código</span></a></li>
           <li><a href="https://github.com/ticianocorral/sixteen/releases">releases</a></li>
           <li><a href="https://github.com/ticianocorral/sixteen/blob/main/CHANGELOG.md">changelog</a></li>
-          <li><a href="https://github.com/ticianocorral/sixteen/blob/main/THIRD-PARTY-NOTICES.md">licenças</a></li>
+          <li><a href="https://github.com/ticianocorral/sixteen/blob/main/THIRD-PARTY-NOTICES.md"><span data-l="en">licenses</span><span data-l="pt">licenças</span></a></li>
         </ul>
         <p class="contracapa-fim">
-          © <span id="ano">2026</span> Ticiano Corral · projeto pessoal, sem
-          fins comerciais · “impresso” no Brasil
+          © <span id="ano">2026</span> Ticiano Corral ·
+          <span data-l="en">personal, non-commercial project · “printed” in Brazil</span><span data-l="pt">projeto pessoal, sem fins comerciais · “impresso” no Brasil</span>
         </p>
-        <p class="konami" id="konami">psst… digite o código Konami: ↑↑↓↓←→←→BA</p>
+        <p class="konami" id="konami">
+          <span data-l="en">psst… type the Konami code: ↑↑↓↓←→←→BA</span><span data-l="pt">psst… digite o código Konami: ↑↑↓↓←→←→BA</span>
+        </p>
       </div>
     </footer>
 
   </main>
 
-  <script src="js/main.js"></script>
+  <script src="js/main.js?v=6"></script>
 </body>
 </html>
