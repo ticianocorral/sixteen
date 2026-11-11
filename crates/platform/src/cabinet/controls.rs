@@ -203,8 +203,12 @@ pub(super) fn draw_tv_glass_phase(canvas: &mut WindowCanvas, screen: Rect, phase
 struct ChinRow {
     key_h: i32,
     pw: i32,
+    /// O raio do botão giratório do canal.
+    knob_r: i32,
+    /// A largura do grupo do canal: o botão e os "3"/"4" que saem dele.
+    knob_w: i32,
+    /// O rótulo "CH" à esquerda do seletor, como o "VOL" do volume.
     ch_lw: i32,
-    ch_key_w: i32,
     menu_w: i32,
     vol_w: i32,
     /// Da borda esquerda do POWER até a borda esquerda do VOL.
@@ -216,16 +220,18 @@ impl ChinRow {
         let key_h = (chin_h as f32 * 0.34).round() as i32;
         let pw = ((key_h + 12) as f32 * 0.58).round() as i32;
         let key_w = (GLYPH_W as i32 * 3).max(38);
-        let ch_lw = GLYPH_W as i32 * 2;
-        let ch_key_w = GLYPH_W as i32 * 3 + 12;
+        let knob_r = ((chin_h as f32 * 0.29).round() as i32).max(10);
+        let knob_w = 2 * knob_r + GLYPH_W as i32 + 4;
         let menu_w = GLYPH_W as i32 * 4 + 14;
         let vol_w = GLYPH_W as i32 * 3 + 8 + 6 + key_w * 2;
-        let width = 14 + menu_w + 18 + ch_key_w + 8 + ch_lw + 18 + vol_w;
+        let ch_lw = GLYPH_W as i32 * 2;
+        let width = 14 + menu_w + 18 + ch_lw + 6 + knob_w + 18 + vol_w;
         ChinRow {
             key_h,
             pw,
+            knob_r,
+            knob_w,
             ch_lw,
-            ch_key_w,
             menu_w,
             vol_w,
             width,
@@ -262,8 +268,9 @@ pub(super) fn draw_tv_chin_controls(
     font: &mut Texture,
     screen: Rect,
     out_h: u32,
-    on: bool,
+    look: ChinLook,
 ) -> TvChinControls {
+    let on = look.on;
     // O queixo é a faixa entre o fim do vidro e o fim do canvas.
     let chin_top = screen.bottom();
     let chin_h = out_h as i32 - chin_top;
@@ -281,10 +288,11 @@ pub(super) fn draw_tv_chin_controls(
     let group_gap = 18; // entre grupos
     let cy = chin_top + chin_h / 2;
     // Revision: as copys precisam continuar legíveis COM a TV ligada —
-    // quase-branco no ligado, o médio no desligado. Os -/+ das teclas são
-    // pretos (tinta de tecla de verdade sobre o alumínio).
+    // quase-branco no ligado, o médio no desligado. As teclas de VOL e
+    // MENU são do plástico escuro do seletor de canal, com a gravação
+    // prateada; o alumínio fica só no POWER e na barra do seletor.
     let ink = if on { PRATA_HI } else { PRATA_INK_DIM };
-    let key_ink = PRATA_INK;
+    let key_ink = ink;
 
     // POWER: retângulo vertical MENOR com o símbolo ⏻ caprichado (aro
     // grosso de 3 lados + traço com ponta redonda), LED verde do ladinho.
@@ -293,14 +301,15 @@ pub(super) fn draw_tv_chin_controls(
     let pcx = screen.right() - pw / 2 - 26;
     let pcy = cy;
     let prect = Rect::new(pcx - pw / 2, pcy - ph / 2, pw as u32, ph as u32);
-    draw_silver_key(canvas, prect, on);
+    // o POWER também é do plástico escuro, com o símbolo em prata
+    draw_dark_key(canvas, prect, on);
     // o símbolo: aro grosso (2px) com um vão de ~80° no topo, e o traço
     // descendo até o centro do aro — pontinhas arredondadas (um pixel a
     // mais de cada lado na base do traço).
     let r_out = pw as f32 * 0.30;
     let r_in = r_out - 2.5;
     let pc_y = pcy + 2;
-    let sym = if on { (24, 26, 32) } else { (56, 58, 66) };
+    let sym = if on { PRATA_HI } else { PRATA_INK_DIM };
     canvas.set_draw_color(Color::RGB(sym.0, sym.1, sym.2));
     let gap = std::f32::consts::PI / 5.0; // meio-vão em radianos
     let steps = 40;
@@ -334,7 +343,7 @@ pub(super) fn draw_tv_chin_controls(
         g.menu_w as u32,
         key_h as u32,
     );
-    draw_silver_key(canvas, menu, on);
+    draw_dark_key(canvas, menu, on);
     draw_text_absolute(
         canvas,
         font,
@@ -345,36 +354,31 @@ pub(super) fn draw_tv_chin_controls(
         usize::MAX,
     );
     let ch_right = menu.x() - group_gap;
-    let (ch_label, ch_lw, ch_key_w) = ("CH", g.ch_lw, g.ch_key_w);
 
-    // O botão único do canal: rótulo "CH" + a tecla "3-4" — um clique
-    // alterna entre os dois canais que a TV tem.
-    let ch_left = ch_right - ch_lw - 8 - ch_key_w;
+    // O seletor de canal giratório: o "3" e o "4" impressos fixos no
+    // plástico, um de cada lado do topo, e o botão com a barra prateada
+    // apontando o canal — um clique em qualquer ponto alterna.
+    let ch_left = ch_right - g.knob_w - 6 - g.ch_lw;
     draw_text_absolute(
         canvas,
         font,
         ch_left,
         cy - GLYPH_H as i32 / 2,
         TextStyle::new(1, ink),
-        ch_label,
+        "CH",
         usize::MAX,
     );
+    let kcx = ch_right - g.knob_w / 2;
+    // um pouco abaixo do meio: os números moram acima do botão
+    let kcy = cy + (chin_h as f32 * 0.07).round() as i32;
+    let ch = draw_channel_knob(canvas, font, kcx, kcy, g.knob_r, look.knob, on);
+    // a área de clique não sobe para o vidro
+    let ch_top = ch.y().max(chin_top);
     let ch = Rect::new(
-        ch_left + ch_lw + 8,
-        cy - key_h / 2,
-        ch_key_w as u32,
-        key_h as u32,
-    );
-    draw_silver_key(canvas, ch, on);
-    let tw = GLYPH_W as i32 * 3;
-    draw_text_absolute(
-        canvas,
-        font,
-        ch.x() + (ch.width() as i32 - tw) / 2,
-        ch.y() + (ch.height() as i32 - GLYPH_H as i32) / 2,
-        TextStyle::new(1, key_ink),
-        "3-4",
-        usize::MAX,
+        ch.x(),
+        ch_top,
+        ch.width(),
+        (ch.bottom() - ch_top).max(1) as u32,
     );
 
     // O par do volume, com o rótulo inline — - e + em preto.
@@ -398,7 +402,7 @@ pub(super) fn draw_tv_chin_controls(
                 key_h as u32,
             );
             for (r, glyph) in [(down, "-"), (up, "+")] {
-                draw_silver_key(canvas, r, on);
+                draw_dark_key(canvas, r, on);
                 let tw = GLYPH_W as i32 * glyph.chars().count() as i32;
                 draw_text_absolute(
                     canvas,
@@ -423,34 +427,210 @@ pub(super) fn draw_tv_chin_controls(
     }
 }
 
-/// A tecla redonda pequena (TV/VIDEO da foto): o mesmo alumínio das teclas
-/// O dial de POWER do queixo (plan revision: "botão de power ... mais
-/// retro") — o knob de tubo: assento afundado no plástico, carcaça
-/// serrilhada (a pegada de dedos), torus gravado com dômo (a luz quebra
-/// no topo, a sombra assenta embaixo) e o ponteiro gravado — em pé quando
-/// Uma tecla de alumínio moldada do queixo (plan revision: os botões de
-/// volume "mais retro") — o bisel é o que faz a tecla: 1px de assento
-/// escuro em volta, a luz quebrando nos dois primeiros degraus da face e
-/// a sombra mordendo os dois de baixo. O rótulo gravado é do caller.
-pub(super) fn draw_silver_key(canvas: &mut WindowCanvas, rect: Rect, on: bool) {
+/// O que o queixo precisa saber do estado da TV para se desenhar.
+#[derive(Clone, Copy)]
+pub(super) struct ChinLook {
+    pub on: bool,
+    /// Onde o botão do canal está: 0 = canal 3, 1 = canal 4 (no meio do
+    /// giro, um pouco além — o tranco do detent).
+    pub knob: f32,
+}
+
+/// Quanto o ponteiro do seletor sai do topo para cada lado (40°).
+const KNOB_SWING: f32 = 40.0 * std::f32::consts::PI / 180.0;
+
+/// O seletor de canal do queixo (plan revision: "seletor de canal
+/// giratório"): assento afundado, saia de plástico escuro serrilhada, a
+/// barra prateada de pegada com o ponteiro gravado na ponta, e o "3"/"4"
+/// fixos acima — o canal da vez aceso. Tudo em `fill_rect` por linha, sem
+/// textura: o queixo é redesenhado em toda tela. Devolve a área de clique
+/// (o botão e os números).
+fn draw_channel_knob(
+    canvas: &mut WindowCanvas,
+    font: &mut Texture,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    knob: f32,
+    on: bool,
+) -> Rect {
+    let (cxf, cyf, rf) = (cx as f32, cy as f32, r as f32);
+    let rgb = |c: (u8, u8, u8)| Color::RGB(c.0, c.1, c.2);
+
+    // "3" e "4" fixos, com um tracinho de marca entre o número e o botão.
+    let lit = if on { PRATA_HI } else { PRATA_INK_DIM };
+    let unlit = if on { (112, 114, 122) } else { (78, 80, 88) };
+    let current = if knob < 0.5 { 3 } else { 4 };
+    for (n, a) in [(3, -KNOB_SWING), (4, KNOB_SWING)] {
+        let ink = if n == current { lit } else { unlit };
+        let (sx, sy) = (a.sin(), -a.cos());
+        canvas.set_draw_color(rgb(ink));
+        for d in [1.5f32, 3.0] {
+            let (x, y) = (cxf + sx * (rf + d), cyf + sy * (rf + d));
+            let _ = canvas.fill_rect(Rect::new(x.round() as i32, y.round() as i32, 2, 2));
+        }
+        let lr = rf + 5.0 + GLYPH_W as f32 / 2.0;
+        let (lx, ly) = (cxf + sx * lr, cyf + sy * lr);
+        draw_text_absolute(
+            canvas,
+            font,
+            (lx - GLYPH_W as f32 / 2.0).round() as i32,
+            (ly - GLYPH_H as f32 / 2.0).round() as i32,
+            TextStyle::new(1, ink),
+            if n == 3 { "3" } else { "4" },
+            usize::MAX,
+        );
+    }
+
+    // O assento afundado: um disco escuro um pouco maior e mais baixo.
+    fill_disc(canvas, cx, cy + 1, r + 2, |_| (10, 10, 12));
+    // A saia: plástico escuro com a luz vindo de cima.
+    let (top, bot) = if on {
+        ((96, 97, 104), (24, 24, 28))
+    } else {
+        ((62, 63, 70), (18, 18, 21))
+    };
+    fill_disc(canvas, cx, cy, r, |t| lerp_rgb(top, bot, t));
+
+    let angle = (knob - 0.5) * 2.0 * KNOB_SWING;
+    // O serrilhado da borda gira com o botão.
+    canvas.set_draw_color(rgb(if on { (120, 122, 130) } else { (76, 78, 86) }));
+    for i in 0..36 {
+        let a = angle + i as f32 * std::f32::consts::TAU / 36.0;
+        let (x, y) = (cxf + a.sin() * (rf - 2.0), cyf - a.cos() * (rf - 2.0));
+        let _ = canvas.fill_rect(Rect::new(x.round() as i32, y.round() as i32, 1, 1));
+    }
+
+    // A barra de pegada: eixo `d` (para o ponteiro), largura em `p`.
+    let d = (angle.sin(), -angle.cos());
+    let p = (angle.cos(), angle.sin());
+    let half_l = rf - 4.0;
+    let half_w = (rf * 0.2).max(3.5);
+    let at = |u: f32, v: f32, off: (f32, f32)| {
+        (
+            cxf + off.0 + u * p.0 + v * d.0,
+            cyf + off.1 + u * p.1 + v * d.1,
+        )
+    };
+    let bar = |u0: f32, u1: f32, v0: f32, v1: f32, c: f32, off: (f32, f32)| {
+        [
+            at(u0 + c, v0, off),
+            at(u1 - c, v0, off),
+            at(u1, v0 + c, off),
+            at(u1, v1 - c, off),
+            at(u1 - c, v1, off),
+            at(u0 + c, v1, off),
+            at(u0, v1 - c, off),
+            at(u0, v0 + c, off),
+        ]
+    };
+    let (hw, hl) = (half_w, half_l);
+    // a sombra, o corpo, o lábio iluminado e o lado na sombra
+    fill_convex(
+        canvas,
+        &bar(-hw, hw, -hl, hl, 2.0, (1.0, 2.0)),
+        (10, 10, 12),
+    );
+    let body = if on { PRATA } else { PRATA_DIM };
+    let hi = if on { PRATA_HI } else { (132, 134, 142) };
+    let lo = if on { (100, 102, 110) } else { (70, 72, 80) };
+    fill_convex(canvas, &bar(-hw, hw, -hl, hl, 2.0, (0.0, 0.0)), body);
+    fill_convex(
+        canvas,
+        &bar(-hw + 1.0, -hw + 3.0, -hl + 2.0, hl - 2.0, 0.0, (0.0, 0.0)),
+        hi,
+    );
+    fill_convex(
+        canvas,
+        &bar(hw - 2.5, hw - 0.5, -hl + 2.0, hl - 2.0, 0.0, (0.0, 0.0)),
+        lo,
+    );
+    // o ponteiro gravado na ponta de cima
+    fill_convex(
+        canvas,
+        &bar(-1.0, 1.0, hl - 8.0, hl - 2.0, 0.0, (0.0, 0.0)),
+        PRATA_INK,
+    );
+
+    let lab = r + 5 + GLYPH_W as i32;
+    Rect::new(
+        cx - r - 6,
+        cy - lab - GLYPH_H as i32 / 2,
+        (2 * r + 12) as u32,
+        (lab + GLYPH_H as i32 / 2 + r + 2) as u32,
+    )
+}
+
+fn lerp_rgb(a: (u8, u8, u8), b: (u8, u8, u8), t: f32) -> (u8, u8, u8) {
+    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    (l(a.0, b.0), l(a.1, b.1), l(a.2, b.2))
+}
+
+/// Um disco cheio, uma linha por vez; `shade(t)` dá a cor da linha
+/// (t = 0 no topo, 1 na base).
+fn fill_disc(
+    canvas: &mut WindowCanvas,
+    cx: i32,
+    cy: i32,
+    r: i32,
+    shade: impl Fn(f32) -> (u8, u8, u8),
+) {
+    for dy in -r..=r {
+        let hw = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        let c = shade((dy + r) as f32 / (2 * r) as f32);
+        canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
+        let _ = canvas.fill_rect(Rect::new(cx - hw, cy + dy, (2 * hw + 1) as u32, 1));
+    }
+}
+
+/// Preenche um polígono convexo (pontos em ordem), uma linha por vez.
+fn fill_convex(canvas: &mut WindowCanvas, pts: &[(f32, f32)], c: (u8, u8, u8)) {
+    let (y0, y1) = pts
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.1), b.max(p.1)));
+    canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
+    for y in y0.floor() as i32..y1.ceil() as i32 {
+        let yc = y as f32 + 0.5;
+        let (mut xl, mut xr) = (f32::MAX, f32::MIN);
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            if (a.1 <= yc && yc < b.1) || (b.1 <= yc && yc < a.1) {
+                let x = a.0 + (yc - a.1) / (b.1 - a.1) * (b.0 - a.0);
+                xl = xl.min(x);
+                xr = xr.max(x);
+            }
+        }
+        if xl <= xr {
+            let (l, rr) = (xl.round() as i32, xr.round() as i32);
+            let _ = canvas.fill_rect(Rect::new(l, y, (rr - l).max(1) as u32, 1));
+        }
+    }
+}
+
+/// Uma tecla de plástico escuro do queixo — o mesmo plástico da saia do
+/// seletor de canal: 1px de assento quase preto em volta, a face caindo
+/// do cinza de cima para o quase preto de baixo, um fio de luz no lábio
+/// de cima e o de baixo afundado. O rótulo (prateado) é do caller.
+pub(super) fn draw_dark_key(canvas: &mut WindowCanvas, rect: Rect, on: bool) {
     let w = rect.width() as i32;
     let h = rect.height() as i32;
     let (x, y) = (rect.x(), rect.y());
-    // o assento: 1px escuro em volta da face inteira
-    canvas.set_draw_color(Color::RGB(22, 22, 26));
+    canvas.set_draw_color(Color::RGB(10, 10, 12));
     let _ = canvas.fill_rect(rect);
-    // a face em scanlines, com o bisel nos lábios de cima e de baixo
-    let body = if on { PRATA } else { PRATA_DIM };
-    let lip_dark = if on { (86, 88, 96) } else { (56, 58, 66) };
+    let (top, bot, lip) = if on {
+        ((88, 89, 96), (30, 30, 34), (128, 130, 138))
+    } else {
+        ((60, 61, 68), (20, 20, 23), (84, 86, 94))
+    };
     for row in 1..h - 1 {
         let inset = 1 + corner_inset(row - 1, h - 2, 2);
         let t = row - 1; // 0..h-2 dentro da face
-        let c = if t < 2 {
-            PRATA_HI
-        } else if t >= h - 4 {
-            lip_dark
+        let c = if t == 0 {
+            lip
+        } else if t >= h - 3 {
+            (16, 16, 19)
         } else {
-            body
+            lerp_rgb(top, bot, t as f32 / (h - 2) as f32)
         };
         canvas.set_draw_color(Color::RGB(c.0, c.1, c.2));
         let _ = canvas.fill_rect(Rect::new(x + inset, y + row, (w - 2 * inset) as u32, 1));
@@ -571,7 +751,7 @@ pub(super) fn draw_button(
 /// layout identical to `draw_button`; returns `rect` for hit-testing.
 pub(super) fn draw_eject_button(
     canvas: &mut WindowCanvas,
-    font: &mut Texture,
+    _font: &mut Texture,
     rect: Rect,
     text: &str,
     lit: bool,
@@ -579,21 +759,16 @@ pub(super) fn draw_eject_button(
     let pal = if lit { &EJECT_LIT } else { &EJECT_DIM };
     draw_flat_key(canvas, rect, pal);
 
-    let side_pad = 6i32;
-    let max_chars = (((rect.width() as i32 - side_pad * 2) / GLYPH_W as i32).max(1)) as usize;
-    let shown = clip_label(text, max_chars);
-    let text_w = (GLYPH_W as i32) * shown.chars().count() as i32;
-    let tx = rect.x() + (rect.width() as i32 - text_w).max(4) / 2;
-    let ty = rect.y() + (rect.height() as i32 - GLYPH_H as i32) / 2;
-    draw_text_absolute(
-        canvas,
-        font,
-        tx,
-        ty,
-        TextStyle::new(1, pal.text),
-        &shown,
-        usize::MAX,
-    );
+    // Printed in the same vector SNES-style face as the Power/Reset keys
+    // (see `snes_font`), shrunk to fit the key's width.
+    let mut lh = (rect.height() * 50 / 100).max(6);
+    while lh > 6 && snes_font::label_width(text, lh) as i32 > rect.width() as i32 - 12 {
+        lh -= 1;
+    }
+    let lw = snes_font::label_width(text, lh) as i32;
+    let tx = rect.x() + (rect.width() as i32 - lw) / 2;
+    let ty = rect.y() + (rect.height() as i32 - lh as i32) / 2;
+    snes_font::draw_label(canvas, tx, ty, lh, pal.text, text);
     rect
 }
 
@@ -638,33 +813,53 @@ pub(super) fn draw_led_color(
     on: (u8, u8, u8),
     on_hi: (u8, u8, u8),
 ) {
-    let (r, g, b) = if lit { on } else { LED_OFF };
-    canvas.set_draw_color(Color::RGB(r, g, b));
-    // Four rows, widening then narrowing (roughly 60/90/90/60% of `size`) —
-    // a softer step than a plain narrow/wide/narrow, so it reads as a round
-    // dot instead of a plus sign at this small a scale.
-    let step = (size / 4).max(1);
-    let widths = [size * 3 / 5, size * 9 / 10, size * 9 / 10, size * 3 / 5];
-    for (i, w) in widths.into_iter().enumerate() {
-        let w = w.max(2);
-        let h = if i == widths.len() - 1 {
-            (size - step * i as i32).max(1)
-        } else {
-            step
-        };
-        let _ = canvas.fill_rect(Rect::new(
-            center_x - w / 2,
-            top + step * i as i32,
-            w as u32,
-            h as u32,
-        ));
+    // A real anti-aliased disc: per-pixel coverage at the rim, a soft
+    // radial falloff toward the edge and — lit only — a small smooth
+    // highlight, instead of the old stacked-rect approximation.
+    let base = if lit { on } else { LED_OFF };
+    let r = size as f32 * 0.47;
+    let (cx, cy) = (center_x as f32, top as f32 + size as f32 / 2.0);
+    let n = size / 2 + 2;
+    let prev = canvas.blend_mode();
+    canvas.set_blend_mode(BlendMode::Blend);
+    for iy in -n..=n {
+        for ix in -n..=n {
+            let (px, py) = (center_x + ix, top + size / 2 + iy);
+            // Pixel centre relative to the disc's centre.
+            let dx = px as f32 + 0.5 - cx;
+            let dy = py as f32 + 0.5 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+            let cover = (r + 0.5 - dist).clamp(0.0, 1.0);
+            if cover <= 0.0 {
+                continue;
+            }
+            let d = (dist / r).min(1.0);
+            let shade = 1.0 - 0.38 * d * d;
+            let mut col = [
+                base.0 as f32 * shade,
+                base.1 as f32 * shade,
+                base.2 as f32 * shade,
+            ];
+            if lit {
+                let hx = dx + r * 0.32;
+                let hy = dy + r * 0.38;
+                let hd = (hx * hx + hy * hy).sqrt() / (r * 0.42);
+                let w = (1.0 - hd).clamp(0.0, 1.0);
+                let w = w * w * (3.0 - 2.0 * w);
+                col[0] += (on_hi.0 as f32 - col[0]) * w;
+                col[1] += (on_hi.1 as f32 - col[1]) * w;
+                col[2] += (on_hi.2 as f32 - col[2]) * w;
+            }
+            canvas.set_draw_color(Color::RGBA(
+                col[0] as u8,
+                col[1] as u8,
+                col[2] as u8,
+                (cover * 255.0) as u8,
+            ));
+            let _ = canvas.fill_rect(Rect::new(px, py, 1, 1));
+        }
     }
-    if lit {
-        canvas.set_draw_color(Color::RGB(on_hi.0, on_hi.1, on_hi.2));
-        let hi = (size / 4).max(1) as u32;
-        let hi_x = center_x - (size * 3 / 10);
-        let _ = canvas.fill_rect(Rect::new(hi_x, top + step, hi, hi));
-    }
+    canvas.set_blend_mode(prev);
 }
 
 /// One Power/Reset rocker switch, styled after the reference photo of the
@@ -680,7 +875,7 @@ pub(super) fn draw_led_color(
 /// not just the thumb.
 pub(super) fn draw_rocker(
     canvas: &mut WindowCanvas,
-    font: &mut Texture,
+    _font: &mut Texture,
     track: Rect,
     label: &str,
     up: bool,
@@ -729,26 +924,29 @@ pub(super) fn draw_rocker(
     );
     draw_rocker_thumb(canvas, thumb, lit);
 
-    // The label is printed on the key itself — inside the debossed oval,
-    // which shares the thumb's centre.
-    let text_w = (GLYPH_W as i32) * label.chars().count() as i32;
-    let tx = thumb.x() + (thumb.width() as i32 - text_w).max(0) / 2;
-    let ty = thumb.y() + (thumb.height() as i32 - GLYPH_H as i32) / 2;
-    draw_text_absolute(
+    // The label is printed on the key itself — inside the debossed oval, in
+    // vector glyphs shaped like the SNES silkscreen (bold condensed italic;
+    // see `snes_font`), shrunk if it would overflow the oval.
+    let oval_w = (thumb.width() as i32 - 2) * 8 / 10;
+    let oval_h = (thumb.height() as i32 - 2) * 66 / 100;
+    let mut lh = ((oval_h * 80 / 100).max(6)) as u32;
+    while lh > 6 && snes_font::label_width(label, lh) as i32 > oval_w * 88 / 100 {
+        lh -= 1;
+    }
+    let lw = snes_font::label_width(label, lh) as i32;
+    let tx = thumb.x() + (thumb.width() as i32 - lw) / 2;
+    let ty = thumb.y() + (thumb.height() as i32 - lh as i32) / 2;
+    snes_font::draw_label(
         canvas,
-        font,
         tx,
         ty,
-        TextStyle::new(
-            1,
-            if lit {
-                ROCKER_LIT.text
-            } else {
-                ROCKER_DIM.text
-            },
-        ),
+        lh,
+        if lit {
+            ROCKER_LIT.text
+        } else {
+            ROCKER_DIM.text
+        },
         label,
-        usize::MAX,
     );
     track
 }
@@ -776,7 +974,7 @@ pub(super) fn draw_rocker_thumb(canvas: &mut WindowCanvas, rect: Rect, lit: bool
     // The shallow oval pressed into the face — most of the key's width, a
     // bit over half its height, dead centre. Its top ~third sits in shadow
     // and its bottom edge catches the light, the floor between them.
-    let oval_h = (body_h * 55 / 100).max(3);
+    let oval_h = (body_h * 66 / 100).max(3);
     let oval_w = (body_w * 8 / 10).max(3);
     let oval_left = rect.x() + 1 + body_w / 2 - oval_w / 2;
     let oval_top = rect.y() + 1 + body_h / 2 - oval_h / 2;

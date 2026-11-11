@@ -392,7 +392,7 @@ pub(super) fn draw_panel(
                 canvas,
                 font,
                 reset_track,
-                "RESET",
+                "RESET▲",
                 panel.reset_pressed,
                 panel.powered,
             ),

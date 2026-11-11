@@ -33,6 +33,7 @@ mod panel;
 mod panel_art;
 mod pause;
 mod rf;
+mod snes_font;
 mod text;
 mod tv;
 
@@ -485,6 +486,9 @@ pub struct Cabinet {
     /// O canal em que a TV está — só 3 ou 4, como TV de tubo de verdade
     /// com o console no 3. CH-/CH+ do queixo alternam.
     tv_channel: u8,
+    /// O giro do seletor de canal do queixo: de onde partiu (0 = canal 3,
+    /// 1 = canal 4) e quando — `None` parado no canal.
+    knob_turn: Option<(f32, Instant)>,
     /// Where the cabinet actually drew last frame, in real window/output
     /// pixels — native for displays in the 16:10..16:9 band, else a centered
     /// 16:9 letterbox/pillarbox (plan: don't distort on an ultrawide).
@@ -1354,6 +1358,7 @@ impl Cabinet {
             looks: LookState::default(),
             ch3_until: None,
             tv_channel: 3,
+            knob_turn: None,
             canvas_rect,
             nameplate: BRAND.to_string(),
             nameplate_updates: (false, false),
@@ -2066,7 +2071,7 @@ impl Cabinet {
         let now = Instant::now();
         timed_overlay_at(&TimedOverlays {
             now,
-            animating: self.animating(),
+            animating: self.animating() || self.knob_moving(now),
             tv_menu: self.tvx.menu_visible(),
             volume_osd: self.volume_osd_until,
             ch3: self.ch3_until,
@@ -2338,8 +2343,9 @@ impl Cabinet {
         // físicos do queixo — o mesmo desenho do estático, os rects
         // registrados a cada frame para o hit-test do caller.
         self.draw_volume_osd(screen);
-        let tv_on = self.tv_on();
-        let chin = draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, tv_on);
+        let chin_look = self.chin_look();
+        let chin =
+            draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, chin_look);
         self.tv_power_buttons = Some(chin);
         // Fechar/minimizar on every screen, gameplay included (plan
         // revision: "mostrar o fechar e minimizar em todas as telas").
@@ -2425,6 +2431,7 @@ impl Cabinet {
         // TV desligada, vidro morto onde estaria a imagem do jogo.
         let phase = self.tv_phase_snapshot();
         let tv_on = self.tv_on();
+        let chin_look = self.chin_look();
         let glass = self.tvx.glass_view(tv_on);
         // O flash do canal (plan revision: ligar a TV/console): o que a
         // janela real mostraria neste instante do começo do sinal.
@@ -2461,7 +2468,7 @@ impl Cabinet {
             // Os controles do queixo também no BMP de gameplay — o que a
             // janela real mostra (plan revision: "tem que estar sempre
             // na tela"), a captura mostra.
-            chin = draw_tv_chin_controls(c, font, screen, out_h, tv_on);
+            chin = draw_tv_chin_controls(c, font, screen, out_h, chin_look);
             match &osd {
                 ChinOsd::Notify { lines, badge } => {
                     draw_chin_osd(c, font, images, screen, out_h, nameplate, lines, *badge);
@@ -2725,7 +2732,7 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let st = self.screen_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
-        let tv_on = self.tv_on();
+        let chin_look = self.chin_look();
         self.ensure_brand_logo(); // a marca do queixo na captura
         let images = &self.images;
         let font = &mut self.font;
@@ -2753,7 +2760,7 @@ impl Cabinet {
             draw_brand_logo(c, images, screen, canvas_rect.height());
             // Os controles do queixo no BMP — a captura bate com a janela
             // real, que os desenha em toda a moldura.
-            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), tv_on);
+            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), chin_look);
             close_button = draw_close_button(c, font);
             minimize_button = draw_minimize_button(c, font);
             c.set_viewport(None);
@@ -2794,7 +2801,7 @@ impl Cabinet {
             .map_err(|e| PlatformError::Sdl(e.to_string()))?;
         let st = self.screen_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
-        let tv_on = self.tv_on();
+        let chin_look = self.chin_look();
         self.ensure_brand_logo(); // a marca do queixo na captura
         let font = &mut self.font;
         let images = &self.images;
@@ -2822,7 +2829,7 @@ impl Cabinet {
             );
             // Os controles do queixo no BMP — a captura bate com a janela
             // real, que os desenha em toda a moldura.
-            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), tv_on);
+            chin = draw_tv_chin_controls(c, font, screen, canvas_rect.height(), chin_look);
             let btns = draw_shelf_panel(c, font, images, shelf_panel, panel);
             if let Some(PadFocus::Shelf(want)) = focus {
                 if let Some((_, r)) = btns.iter().find(|(b, _)| *b == want) {
@@ -3051,8 +3058,37 @@ impl Cabinet {
     /// do console) e 4, acendendo o banner verde por 3s (o mesmo prazo
     /// do ligar).
     pub fn toggle_channel(&mut self) {
+        // o giro parte de onde o botão está agora (clique no meio de um giro)
+        let from = self.knob_pos();
         self.tv_channel = if self.tv_channel == 3 { 4 } else { 3 };
+        self.knob_turn = Some((from, Instant::now()));
         self.ch3_until = Some(Instant::now() + TV_CH3_FLASH);
+        // o clunk é do aparelho: toca com a TV ligada ou desligada
+        self.tvx.clunk();
+    }
+
+    /// Onde o seletor de canal está agora: 0 = canal 3, 1 = canal 4, no
+    /// meio do giro o caminho com o tranco do detent.
+    fn knob_pos(&self) -> f32 {
+        let to = if self.tv_channel == 4 { 1.0 } else { 0.0 };
+        match self.knob_turn {
+            Some((from, at)) => knob_ease(from, to, at.elapsed().as_secs_f32() / KNOB_TURN_SECS),
+            None => to,
+        }
+    }
+
+    /// O seletor ainda girando (o quadro não é estático).
+    fn knob_moving(&self, now: Instant) -> bool {
+        self.knob_turn
+            .is_some_and(|(_, at)| now.duration_since(at).as_secs_f32() < KNOB_TURN_SECS)
+    }
+
+    /// O que o queixo desenha do estado da TV.
+    fn chin_look(&self) -> ChinLook {
+        ChinLook {
+            on: self.tv_on(),
+            knob: self.knob_pos(),
+        }
     }
 
     /// Um clique num controle do queixo da TV — o mesmo em toda tela.
@@ -3196,8 +3232,8 @@ impl Cabinet {
     /// coordenadas de output/canvas para o hit-test do caller —
     /// o conjunto `TvChinControls`.
     fn draw_tv_chin(&mut self, screen: Rect, out_h: u32) -> TvChinControls {
-        let on = self.tv_on();
-        draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, on)
+        let look = self.chin_look();
+        draw_tv_chin_controls(&mut self.canvas, &mut self.font, screen, out_h, look)
     }
 
     /// O OSD das barrinhas de volume (plan revision: "mostrando no CRT as
@@ -3516,6 +3552,7 @@ impl Cabinet {
         let nt = self.noise_tex.take().unwrap();
         let bezel = self.bezel.take().unwrap();
         let tv_on = self.tv_on();
+        let chin_look = self.chin_look();
         self.prepare_glass();
         let glass = self.tvx.glass_view(tv_on);
         let panel_info = self.panel.as_ref();
@@ -3553,7 +3590,7 @@ impl Cabinet {
             // Os controles do queixo (POWER/VOL) — o frame vivo os desenha
             // sempre; a captura, que existe para bater com o que a janela
             // real mostra, não podia deixar os botões de fora.
-            chin = draw_tv_chin_controls(c, font, screen, wh, tv_on);
+            chin = draw_tv_chin_controls(c, font, screen, wh, chin_look);
             draw_brand(c, font, screen, wh, nameplate, nameplate_updates);
             draw_brand_logo(c, images, screen, wh);
             if tv_on {
@@ -3944,13 +3981,13 @@ impl Cabinet {
         // (plan revision: "tem que estar sempre na tela" — o queixo não
         // é só do gameplay; shelf/settings/update deslizam pelo mesmo
         // plástico). Mesma função livre do frame vivo.
-        let tv_on = self.tv_on();
+        let chin_look = self.chin_look();
         let chin = draw_tv_chin_controls(
             &mut self.canvas,
             &mut self.font,
             self.screen,
             self.canvas_rect.height(),
-            tv_on,
+            chin_look,
         );
         self.tv_power_buttons = Some(chin);
         self.close_button = draw_close_button(&mut self.canvas, &mut self.font);
@@ -4736,6 +4773,19 @@ struct TimedOverlays {
 }
 
 /// Algo com prazo ainda vivo: o quadro muda com o tempo.
+/// Quanto dura o giro do seletor de canal, de um detent ao outro.
+const KNOB_TURN_SECS: f32 = 0.16;
+
+/// O caminho do seletor de `from` a `to` em `t` (0..1 do giro): sai
+/// rápido, passa um pouco do ponto e assenta — o tranco do detent.
+fn knob_ease(from: f32, to: f32, t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let s = 1.4;
+    let u = t - 1.0;
+    let e = 1.0 + (s + 1.0) * u * u * u + s * u * u;
+    from + (to - from) * e
+}
+
 fn timed_overlay_at(o: &TimedOverlays) -> bool {
     let live = |t: Option<Instant>| t.is_some_and(|t| o.now < t);
     o.animating
@@ -4748,6 +4798,20 @@ fn timed_overlay_at(o: &TimedOverlays) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn channel_knob_turns_overshoots_and_settles() {
+        use super::knob_ease;
+        assert!(knob_ease(0.0, 1.0, 0.0).abs() < 1e-6);
+        assert!((knob_ease(0.0, 1.0, 1.0) - 1.0).abs() < 1e-6);
+        // o tranco do detent: passa um pouco do 4 antes de assentar
+        let peak = (1..100)
+            .map(|i| knob_ease(0.0, 1.0, i as f32 / 100.0))
+            .fold(0.0f32, f32::max);
+        assert!(peak > 1.0 && peak < 1.15, "{peak}");
+        // e volta do 4 para o 3 pelo mesmo caminho
+        assert!((knob_ease(1.0, 0.0, 2.0)).abs() < 1e-6);
+    }
+
     #[test]
     fn perf_line_omits_unavailable_segments_and_stays_ascii() {
         use super::perf_line;

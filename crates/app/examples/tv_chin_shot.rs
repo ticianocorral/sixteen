@@ -101,9 +101,11 @@ fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("wrote {}", out.join("chin-game-settled.bmp").display());
 
-    // (5) Canal 4 (a tecla CH do queixo): a interferência por cima da
-    // imagem — estático picado + a barra de hum, o banner "CH  4" aceso.
+    // (5) Canal 4 (o seletor giratório do queixo): a interferência por
+    // cima da imagem — estático picado + a barra de hum, o banner "CH  4"
+    // aceso. Espera o giro do botão assentar no 4.
     cab.toggle_channel();
+    std::thread::sleep(Duration::from_millis(250));
     cab.capture_bmp(&frame, 4.0 / 3.0, &out.join("chin-game-ch4.bmp"))
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("wrote {}", out.join("chin-game-ch4.bmp").display());
