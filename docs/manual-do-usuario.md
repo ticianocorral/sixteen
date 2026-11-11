@@ -155,7 +155,8 @@ verde **CH 3**) e o painel sem cartucho. Nela você encontra:
   ou os botões **< página**/**página >** folheiam; **voltar** fecha.
 - **"Configurações"** — no pé do painel.
 - Os **controles da TV** no queixo: **POWER** liga e desliga o tubo,
-  **VOL –/+** muda o volume e **CH 3-4** troca o canal. O console sai no
+  **VOL –/+** muda o volume e o **seletor de canal** — o botão giratório
+  com o 3 e o 4 impressos — troca o canal com um clique. O console sai no
   canal 3; no **canal 4** a TV pega só a borda do sinal, como no canal
   vizinho do modulador de verdade — imagem fraca e com neve, cor sumindo,
   a imagem rolando de vez em quando e o som abafado. Dá para jogar assim,

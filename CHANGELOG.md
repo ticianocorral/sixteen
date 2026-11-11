@@ -7,6 +7,25 @@ versionamento segue [SemVer](https://semver.org/lang/pt-BR/). Enquanto a versão
 for `0.x`, a API das crates e a interface de linha de comando podem mudar sem
 aviso — só o incremento de _minor_ marca um conjunto de mudanças.
 
+## [Não lançado]
+
+## [1.9.0] - 2026-11-11
+
+### Alterado
+
+- Painel: as chaves POWER e RESET ganharam rótulos em glifos vetoriais no
+  estilo da serigrafia do SNES (sans condensada, negrito e inclinada), e o
+  RESET agora leva a setinha ▲ como no console. O EJETAR/EJECT usa a mesma
+  fonte, e o LED de power virou um disco suave (antialiasing, degradê e
+  brilho) em vez de retângulos empilhados. Os rótulos são rasterizados uma
+  vez por tamanho e guardados em cache.
+- TV: a tecla "CH 3-4" do queixo virou um seletor de canal giratório, com
+  o 3 e o 4 impressos no plástico, a barra prateada apontando o canal e o
+  "clunk" mecânico ao girar. Um clique em qualquer ponto do botão alterna.
+- TV: as teclas VOL –/+, MENU e POWER passaram a ser do mesmo plástico
+  escuro do seletor, com a gravação prateada; o alumínio ficou só na barra
+  do seletor. O seletor ganhou o rótulo "CH", como o "VOL" do volume.
+
 ## [1.8.1] - 2026-11-05
 
 ### Alterado

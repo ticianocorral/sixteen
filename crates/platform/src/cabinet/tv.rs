@@ -168,6 +168,14 @@ impl Burn {
     }
 }
 
+/// Um passo do xorshift32: 0..1.
+fn xorshift(rng: &mut u32) -> f32 {
+    *rng ^= *rng << 13;
+    *rng ^= *rng >> 17;
+    *rng ^= *rng << 5;
+    (*rng >> 8) as f32 / (1u32 << 24) as f32
+}
+
 /// O estado da TV e do quarto, dentro do [`Cabinet`].
 pub(super) struct TvExtras {
     pub picture: Picture,
@@ -188,6 +196,9 @@ pub(super) struct TvExtras {
     ticks: Vec<Instant>,
     /// O estalo tocando: (envelope, fase, passo).
     tick: Option<(f32, f32, f32)>,
+    /// O clunk do seletor de canal tocando: (envelope do baque, fase,
+    /// envelope do estalo).
+    clunk: Option<(f32, f32, f32)>,
     /// O brilho médio da imagem, suavizado (0..1), e o alvo dele.
     pub lum: f32,
     lum_target: f32,
@@ -212,6 +223,7 @@ impl TvExtras {
             amb_phase: 0.0,
             ticks: Vec::new(),
             tick: None,
+            clunk: None,
             lum: 0.2,
             lum_target: 0.2,
             lum_sampled: Instant::now(),
@@ -222,10 +234,7 @@ impl TvExtras {
     }
 
     fn rand(&mut self) -> f32 {
-        self.amb_rng ^= self.amb_rng << 13;
-        self.amb_rng ^= self.amb_rng >> 17;
-        self.amb_rng ^= self.amb_rng << 5;
-        (self.amb_rng >> 8) as f32 / (1u32 << 24) as f32
+        xorshift(&mut self.amb_rng)
     }
 
     /// Os estalos do vidro esquentando: uns dez nos primeiros minutos,
@@ -238,6 +247,13 @@ impl TvExtras {
             t += 1.5 + (k * k) as f32 * 0.7 + self.rand() * 4.0;
             self.ticks.push(now + Duration::from_secs_f32(t));
         }
+    }
+
+    /// O seletor de canal mudou de posição: o clunk mecânico (um estalo
+    /// curto de plástico e um baque grave por baixo). É do aparelho, não
+    /// do canal — toca fora do volume, com a TV ligada ou não.
+    pub fn clunk(&mut self) {
+        self.clunk = Some((1.0, 0.0, 1.0));
     }
 
     // --- Menu OSD ------------------------------------------------------
@@ -423,7 +439,7 @@ impl TvExtras {
             self.tick = Some((amp, 0.0, std::f32::consts::TAU * freq / AMB_RATE as f32));
         }
         let whine = self.flyback && tv_on;
-        if !whine && self.tick.is_none() {
+        if !whine && self.tick.is_none() && self.clunk.is_none() {
             // Nada a tocar: com a fila já tocada até o fim, fecha o stream
             // (aberto, ele segura o dispositivo do SDL e o sink do PipeWire
             // acordados — codec e amplificador ligados no Deck mesmo nos
@@ -440,6 +456,7 @@ impl TvExtras {
                     log::warn!("som do tubo: {e}");
                     self.flyback = false;
                     self.tick = None;
+                    self.clunk = None;
                     return;
                 }
             }
@@ -467,6 +484,20 @@ impl TvExtras {
                 *env *= 0.9955;
                 if *env < 0.003 {
                     self.tick = None;
+                }
+            }
+            if self.clunk.is_some() {
+                let nz = xorshift(&mut self.amb_rng) * 2.0 - 1.0;
+                if let Some((thump, ph, click)) = &mut self.clunk {
+                    // o baque desce de ~140 Hz para ~60 Hz enquanto morre
+                    let f = 60.0 + 80.0 * *thump;
+                    *ph += std::f32::consts::TAU * f * dt;
+                    v += ph.sin() * *thump * 7000.0 + nz * *click * 6000.0;
+                    *thump *= 0.9988;
+                    *click *= 0.993;
+                    if *thump < 0.004 {
+                        self.clunk = None;
+                    }
                 }
             }
             let s = v.clamp(-30000.0, 30000.0) as i16;
